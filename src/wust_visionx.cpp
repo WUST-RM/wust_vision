@@ -12,7 +12,7 @@ WustVision::WustVision()
   init();
 }
 WustVision::~WustVision() {
-  WUST_INFO("vision_main") << "Shutting down WustVision...";
+  WUST_INFO(vision_logger) << "Shutting down WustVision...";
 
   
   is_inited_ = false;
@@ -30,7 +30,7 @@ WustVision::~WustVision() {
 
   thread_pool_.reset();
 
-  WUST_INFO("vision_main") << "WustVision shutdown complete.";
+  WUST_INFO(vision_logger) << "WustVision shutdown complete.";
 }
 void  WustVision::init()
 { 
@@ -53,11 +53,11 @@ void  WustVision::init()
     };
 
   if (model_path.empty()) {
-    WUST_ERROR("vision_main")<< "Model path is empty." ;
+    WUST_ERROR(vision_logger)<< "Model path is empty." ;
     return;
   }
 
-  WUST_INFO("vision_main") <<"Model path: "<<model_path.c_str();
+  WUST_INFO(vision_logger) <<"Model path: "<<model_path.c_str();
     
   
   const std::string camera_info_path = "/home/hy/wust_vision/config/camera_info.yaml";
@@ -74,7 +74,7 @@ void  WustVision::init()
       std::placeholders::_2, std::placeholders::_3));
   thread_pool_ = std::make_unique<ThreadPool>(std::thread::hardware_concurrency(), 100);
   if (!camera_.initializeCamera()) {
-    WUST_ERROR("vision_main") << "Camera initialization failed." ;
+    WUST_ERROR(vision_logger) << "Camera initialization failed." ;
     return ;
     }
     camera_.setParameters(165,3500,7.0,"Bits_8","BayerRG8");
@@ -100,7 +100,7 @@ void WustVision::stop() {
         thread_pool_->waitUntilEmpty(); 
     }
 
-  WUST_INFO("vision_main") << "WustVision shutdown complete.";
+  WUST_INFO(vision_logger) << "WustVision shutdown complete.";
 }
 void WustVision::DetectCallback(
   const std::vector<ArmorObject>& objs, int64_t timestamp_nanosec, const cv::Mat& src_img)
@@ -108,11 +108,11 @@ void WustVision::DetectCallback(
   std::lock_guard<std::mutex> lock(callback_mutex_);
   detect_finish_count_++;
   if(objs.size()>=6){
-  WUST_WARN("vision_main")<<"Detected "<<objs.size()<<" objects"<<"too much";
+  WUST_WARN(vision_logger)<<"Detected "<<objs.size()<<" objects"<<"too much";
   infer_running_count_--;
   return;}
   if (measure_tool_ == nullptr) {
-  WUST_WARN("vision_main")<<"NO camera info";
+  WUST_WARN(vision_logger)<<"NO camera info";
   return;
 } 
   for (auto & obj : objs) {
@@ -127,20 +127,20 @@ void WustVision::DetectCallback(
   std::string armor_type;
 
   if (!measure_tool_->calcArmorTarget(obj, target_position, target_rvec, armor_type)) {
-      //WUST_WARN("vision_main") << "Calculate target position failed";
+      //WUST_WARN(vision_logger) << "Calculate target position failed";
       continue;
   }
 
   
   if (!cv::checkRange(cv::Mat(target_position))) {
-  //WUST_WARN("vision_main") << "Invalid target position (NaN)";
+  //WUST_WARN(vision_logger) << "Invalid target position (NaN)";
   continue;
   }
 
 
  
   if (target_rvec.empty() || target_rvec.total() != 3 || target_rvec.rows * target_rvec.cols != 3 || !cv::checkRange(target_rvec)) {
-      //WUST_WARN("vision_main") << "Invalid rotation vector (empty or NaN): " << target_rvec;
+      //WUST_WARN(vision_logger) << "Invalid rotation vector (empty or NaN): " << target_rvec;
       continue;
   }
 
@@ -157,15 +157,15 @@ void WustVision::DetectCallback(
 
       if (!std::isfinite(tf_quaternion.x) || !std::isfinite(tf_quaternion.y) ||
       !std::isfinite(tf_quaternion.z) || !std::isfinite(tf_quaternion.w)) {
-      WUST_WARN("vision_main") << "Quaternion contains NaN or Inf";
+      WUST_WARN(vision_logger) << "Quaternion contains NaN or Inf";
       continue;
       }
 
 
-      //WUST_INFO("vision_main") << "Position: " << target_position << " Quaternion: " << tf_quaternion;
+      //WUST_INFO(vision_logger) << "Position: " << target_position << " Quaternion: " << tf_quaternion;
 
   } catch (const cv::Exception& e) {
-      WUST_ERROR("vision_main") << "cv::Rodrigues failed: " << e.what();
+      WUST_ERROR(vision_logger) << "cv::Rodrigues failed: " << e.what();
       continue;
   }
 }
@@ -187,7 +187,7 @@ void WustVision::processImage(const ImageFrame& frame) {
 
   img_recv_count_++;
       if (infer_running_count_.load() >= 4) {
-     WUST_WARN("vision_main")<<"Infer running too much ("<<infer_running_count_.load()<<"), dropping frame";
+     WUST_WARN(vision_logger)<<"Infer running too much ("<<infer_running_count_.load()<<"), dropping frame";
      return;    
       }
 
@@ -217,7 +217,7 @@ void WustVision::imageConsumer(ThreadSafeQueue<ImageFrame>& queue, ThreadPool& p
 
  
       if (!queue.wait_and_pop(frame) && queue.is_shutdown()) {
-          WUST_INFO("vision_main") << "Queue is shutdown, exiting consumer thread.";
+          WUST_INFO(vision_logger) << "Queue is shutdown, exiting consumer thread.";
           break;
       }
 
@@ -242,7 +242,7 @@ void WustVision::printStats()
 
   auto elapsed = duration_cast<duration<double>>(now - last_stat_time_steady_);
   if (elapsed.count() >= 1.0) {
-   WUST_INFO("test")<< "Received: " << img_recv_count_ << ", Detected: " << detect_finish_count_ << ", FPS: " << detect_finish_count_ / elapsed.count();
+   WUST_INFO(vision_logger)<< "Received: " << img_recv_count_ << ", Detected: " << detect_finish_count_ << ", FPS: " << detect_finish_count_ / elapsed.count();
 
     img_recv_count_ = 0;
     detect_finish_count_ = 0;

@@ -34,4 +34,5 @@ public:
     std::mutex callback_mutex_;
     std::unique_ptr<MonoMeasureTool> measure_tool_;
     int detect_color_;
+    std::string vision_logger="openvino_vision";
 };

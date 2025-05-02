@@ -7,12 +7,15 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_executable(${PROJECT_NAME}
   src/driver/hik.cpp
-  src/wust_visionx.cpp
+  src/wust_vision.cpp
   src/detect/trt.cpp
   src/common/tools.cpp
   src/detect/mono_measure_tool.cpp
   src/detect/openvino.cpp
   src/detect/light_corner_corrector.cpp
+  src/tracker/tracker.cpp
+  src/tracker/extended_kalman_filter.cpp
+
 )
 include_directories(
   /home/hy/TensorRT-8.5.2.2/include
@@ -25,6 +28,7 @@ link_directories(
 )
 
 
+
 # 查找依赖
 find_package(OpenCV REQUIRED)
 find_package(OpenVINO REQUIRED COMPONENTS Runtime ONNX)
@@ -32,6 +36,7 @@ find_package(Eigen3 REQUIRED)
 find_package(CUDAToolkit REQUIRED)
 find_package(fmt REQUIRED)
 find_package(yaml-cpp REQUIRED)
+
 
 # 包含路径
 target_include_directories(${PROJECT_NAME} PUBLIC

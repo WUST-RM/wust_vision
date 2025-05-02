@@ -3,7 +3,9 @@
 
 #include "opencv2/opencv.hpp"
 #include <numeric>
-
+#include <string>
+#include <fmt/core.h>
+#include "common/tf.hpp"
 struct Light : public cv::RotatedRect {
     Light() = default;
     explicit Light(const std::vector<cv::Point> &contour)
@@ -62,6 +64,23 @@ struct GridAndStride
 enum class ArmorColor { BLUE = 0, RED, NONE, PURPLE };
 
 enum class ArmorNumber { SENTRY = 0, NO1, NO2, NO3, NO4, NO5, OUTPOST, BASE };
+template <>
+struct fmt::formatter<ArmorNumber> {
+    constexpr auto parse(fmt::format_parse_context& ctx) -> decltype(ctx.begin()) {
+        return ctx.begin();
+    }
+
+    template <typename FormatContext>
+    auto format(ArmorNumber num, FormatContext& ctx) -> decltype(ctx.out()) {
+        const char* names[] = {"SENTRY", "NO1", "NO2", "NO3", "NO4", "NO5", "OUTPOST", "BASE"};
+        int index = static_cast<int>(num);
+        if (index >= 0 && index < sizeof(names) / sizeof(names[0])) {
+            return fmt::format_to(ctx.out(), "{}", names[index]);
+        } else {
+            return fmt::format_to(ctx.out(), "UNKNOWN");
+        }
+      }
+    };
 
 typedef struct ArmorObject
 {
@@ -92,3 +111,50 @@ typedef struct ArmorObject
 } ArmorObject;
 
 constexpr const char * K_ARMOR_NAMES[] = {"guard", "1", "2", "3", "4", "5", "outpost", "base"};
+
+
+
+
+// struct rpy
+// {
+//   float roll;
+//   float pitch;
+//   float yaw;
+  
+// };
+struct Armor
+{ 
+  ArmorNumber number;
+  std::string type;
+  Position pos;
+  tf2::Quaternion ori;
+  float distance_to_image_center;
+
+};
+struct Armors
+{
+  std::vector<Armor> armors;
+  std::chrono::steady_clock::time_point timestamp;
+  std::string frame_id;
+};
+struct Target
+{ std::chrono::steady_clock::time_point timestamp;
+  std::string frame_id;
+  bool tracking;
+  ArmorNumber id;
+  int armors_num;
+
+  Position position_;
+  Position velocity_;
+  float yaw;
+  float v_yaw;
+  float radius_1;
+  float radius_2;
+  float d_za;
+  float d_zc;
+  float yaw_diff;
+  float position_diff;
+
+  
+
+};

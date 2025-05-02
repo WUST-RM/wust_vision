@@ -32,7 +32,7 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# 计算代码总行数（排除指定目录）
+
 echo -e "${yellow}\n<--- Total Lines --->${reset}"
 total=$(find .. \
     -type d \( \
