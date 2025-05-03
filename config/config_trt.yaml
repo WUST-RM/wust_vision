@@ -1,0 +1,42 @@
+debug_mode: true
+
+max_infer_running: 4
+
+model_path: "/home/hy/wust_vision/model/opt-1208-001.onnx"
+model:
+  input_w: 416
+  input_h: 416
+  num_classes: 8
+  num_colors: 4
+  conf_threshold: 0.25
+  nms_threshold: 0.3
+  top_k: 128
+
+camera:
+  serial: ""
+  camera_info_path: "/home/hy/wust_vision/config/camera_info.yaml"
+  acquisition_frame_rate: 165
+  exposure_time: 4000
+  gain: 7.0
+  adc_bit_depth: "Bits_8"
+  pixel_format: "BayerRG8"
+
+detect_color: 0
+
+tracker:
+  target_frame: "odom"
+  max_match_distance: 0.5
+  max_match_yaw_diff: 1.0
+  tracking_thres: 2
+  lost_time_thres: 1.0
+  ekf:
+    s2qx: 0.05
+    s2qy: 0.15
+    s2qz: 0.05
+    s2qyaw: 5.0
+    s2qr: 80.0
+    s2qd_zc: 800.0
+    r_x: 9e-4
+    r_y: 9e-4
+    r_z: 9e-4
+    r_yaw: 6e-3

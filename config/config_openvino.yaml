@@ -1,0 +1,53 @@
+debug_mode: true
+
+max_infer_running: 4
+
+classify_model_path: "/home/hy/wust_vision/model/mlp.onnx"
+classify_label_path: "/home/hy/wust_vision/model/label.txt"
+
+
+model:
+  model_path: "/home/hy/wust_vision/model/opt-1208-001.onnx"
+  device_type: "GPU"  
+  conf_threshold: 0.25
+  top_k: 128
+  nms_threshold: 0.3
+
+
+light:
+  expand_ratio_w: 2.0
+  expand_ratio_h: 1.5
+  binary_thres: 85
+  min_ratio: 0.0001
+  max_ratio: 0.45
+  max_angle: 40.0
+
+
+camera:
+  camera_info_path: "/home/hy/wust_vision/config/camera_info.yaml"
+  serial: "" 
+  acquisition_frame_rate: 165
+  exposure_time: 4000
+  gain: 7.0
+  adc_bit_depth: "Bits_8"
+  pixel_format: "BayerRG8"
+
+detect_color: 0
+
+tracker:
+  target_frame: "odom"
+  max_match_distance: 0.5
+  max_match_yaw_diff: 1.0
+  tracking_thres: 2
+  lost_time_thres: 1.0
+  ekf:
+    s2qx: 0.05
+    s2qy: 0.15
+    s2qz: 0.05
+    s2qyaw: 5.0
+    s2qr: 80.0
+    s2qd_zc: 800.0
+    r_x: 9e-4
+    r_y: 9e-4
+    r_z: 9e-4
+    r_yaw: 6e-3
