@@ -1,4 +1,4 @@
-#include "wust_vision.hpp"
+#include "wust_vision_trt.hpp"
 #include "common/logger.hpp"
 #include "common/tf.hpp"
 #include "common/tools.hpp"
@@ -8,6 +8,7 @@
 #include <iostream>
 #include <vector>
 #include "string"
+#include <yaml-cpp/yaml.h>
 
 WustVision::WustVision()
 {
@@ -28,10 +29,11 @@ WustVision::~WustVision() {
     measure_tool_.reset();
 
 
-    thread_pool_.reset();
     if (thread_pool_) {
-        thread_pool_->waitUntilEmpty(); 
+        thread_pool_->waitUntilEmpty();
+        thread_pool_.reset();
     }
+    
 
 
     WUST_INFO(vision_logger) << "WustVision shutdown complete.";
@@ -46,8 +48,12 @@ void WustVision::stop() {
   
   
     measure_tool_.reset();
-  
-    thread_pool_.reset();
+
+    if (thread_pool_) {
+        thread_pool_->waitUntilEmpty();
+        thread_pool_.reset();
+    }
+    
   
     camera_.getImageQueue().shutdown();  
   
@@ -66,57 +72,64 @@ void WustVision::stop() {
 }
 
 
-void  WustVision::init()
+void WustVision::init()
 {
-    
-    const std::string model_path = "/home/hy/wust_vision/model/opt-1208-001.onnx";
+    YAML::Node config = YAML::LoadFile("/home/hy/wust_vision/config/config_trt.yaml");
+    debug_mode_ = config["debug_mode"].as<bool>();
+
+    // 模型参数
+    const std::string model_path = config["model_path"].as<std::string>();
     AdaptedTRTModule::Params params;
-    params.input_w = 416;
-    params.input_h = 416;
-    params.num_classes = 8;
-    params.num_colors = 4;
-    params.conf_threshold = 0.25;
-    params.nms_threshold = 0.3;
-    params.top_k = 128;
+    params.input_w = config["model"]["input_w"].as<int>();
+    params.input_h = config["model"]["input_h"].as<int>();
+    params.num_classes = config["model"]["num_classes"].as<int>();
+    params.num_colors = config["model"]["num_colors"].as<int>();
+    params.conf_threshold = config["model"]["conf_threshold"].as<float>();
+    params.nms_threshold = config["model"]["nms_threshold"].as<float>();
+    params.top_k = config["model"]["top_k"].as<int>();
 
-    const std::string camera_info_path = "/home/hy/wust_vision/config/camera_info.yaml";
-    measure_tool_=std::make_unique<MonoMeasureTool>(camera_info_path);
+    // 相机参数
+    const std::string camera_info_path = config["camera"]["camera_info_path"].as<std::string>();
+    measure_tool_ = std::make_unique<MonoMeasureTool>(camera_info_path);
+
     initTF();
-    initTracker();
-    
+    initTracker(config["tracker"]);
 
-
-    detect_color_=0;
+    detect_color_ = config["detect_color"].as<int>(0);
+    max_infer_running_ = config["max_infer_running"].as<int>(4);
 
     if (model_path.empty()) {
-        WUST_ERROR(vision_logger)<< "Model path is empty.";
+        WUST_ERROR(vision_logger) << "Model path is empty.";
         return;
     }
 
-  // Create AdaptedTRTModule
-  detector_ = std::make_unique<AdaptedTRTModule>(model_path, params);
-  detector_->setCallback(std::bind(
-    &WustVision::DetectCallback, this, std::placeholders::_1,
-    std::placeholders::_2, std::placeholders::_3));
-  
-  thread_pool_ = std::make_unique<ThreadPool>(std::thread::hardware_concurrency(), 100);
-  
-  if (!camera_.initializeCamera("")) {
-    WUST_ERROR(vision_logger) << "Camera initialization failed." ;
-    return ;
+    detector_ = std::make_unique<AdaptedTRTModule>(model_path, params);
+    detector_->setCallback(std::bind(
+        &WustVision::DetectCallback, this, std::placeholders::_1,
+        std::placeholders::_2, std::placeholders::_3));
+
+    thread_pool_ = std::make_unique<ThreadPool>(std::thread::hardware_concurrency(), 100);
+
+    std::string camera_serial = config["camera"]["serial"].as<std::string>("");
+    if (!camera_.initializeCamera(camera_serial)) {
+        WUST_ERROR(vision_logger) << "Camera initialization failed.";
+        return;
     }
-    camera_.setParameters(165,4000,7.0,"Bits_8","BayerRG8");
+
+    camera_.setParameters(
+        config["camera"]["acquisition_frame_rate"].as<int>(),
+        config["camera"]["exposure_time"].as<int>(),
+        config["camera"]["gain"].as<double>(),
+        config["camera"]["adc_bit_depth"].as<std::string>(),
+        config["camera"]["pixel_format"].as<std::string>());
+
     camera_.startCamera();
-
     startTimer();
-
-  is_inited_ = true;
- 
-
+    is_inited_ = true;
 }
 void WustVision::startTimer()
 {
-    if (timer_running_) return;  // 避免重复启动
+    if (timer_running_) return;  
     timer_running_ = true;
 
     timer_thread_ = std::thread([this]() {
@@ -150,76 +163,94 @@ void WustVision::initTF()
     tf_tree_.setTransform("camera", "camera_optical_frame", createTf(0, 0, 0, orientation));
 }
 
-void WustVision::initTracker()
-{ target_frame_="odom";
-  double max_match_distance = 0.2;
-  double max_match_yaw_diff = 1.0;
-  tracker_ = std::make_unique<Tracker>(max_match_distance, max_match_yaw_diff);
-  tracker_->tracking_thres =  5;
-  lost_time_thres_ = 0.3;
-  // EKF
-  // xa = x_armor, xc = x_robot_center
-  // state: xc, v_xc, yc, v_yc, zc, v_zc, yaw, v_yaw, r, d_zc
-  // measurement: p, y, d, yaw
-  // f - Process function
-  auto f = Predict(0.005);
-  // h - Observation function
-  auto h = Measure();
-  // update_Q - process noise covariance matrix
-  s2qx_ = 20.0;
-  s2qy_ = 20.0;
-  s2qz_ = 20.0;
-  s2qyaw_ = 100.0;
-  s2qr_ = 800.0;
-  s2qd_zc_ = 800.0;
 
-  auto u_q = [this]() {
-    Eigen::Matrix<double, X_N, X_N> q;
-    double t = dt_, x = s2qx_, y = s2qy_, z = s2qz_, yaw = s2qyaw_, r = s2qr_, d_zc=s2qd_zc_;
-    double q_x_x = pow(t, 4) / 4 * x, q_x_vx = pow(t, 3) / 2 * x, q_vx_vx = pow(t, 2) * x;
-    double q_y_y = pow(t, 4) / 4 * y, q_y_vy = pow(t, 3) / 2 * y, q_vy_vy = pow(t, 2) * y;
-    double q_z_z = pow(t, 4) / 4 * x, q_z_vz = pow(t, 3) / 2 * x, q_vz_vz = pow(t, 2) * z;
-    double q_yaw_yaw = pow(t, 4) / 4 * yaw, q_yaw_vyaw = pow(t, 3) / 2 * x,
-           q_vyaw_vyaw = pow(t, 2) * yaw;
-    double q_r = pow(t, 4) / 4 * r;
-    double q_d_zc = pow(t, 4) / 4 * d_zc;
-    // clang-format off
-    //    xc      v_xc    yc      v_yc    zc      v_zc    yaw         v_yaw       r       d_za
-    q <<  q_x_x,  q_x_vx, 0,      0,      0,      0,      0,          0,          0,      0,
-          q_x_vx, q_vx_vx,0,      0,      0,      0,      0,          0,          0,      0,
-          0,      0,      q_y_y,  q_y_vy, 0,      0,      0,          0,          0,      0,
-          0,      0,      q_y_vy, q_vy_vy,0,      0,      0,          0,          0,      0,
-          0,      0,      0,      0,      q_z_z,  q_z_vz, 0,          0,          0,      0,
-          0,      0,      0,      0,      q_z_vz, q_vz_vz,0,          0,          0,      0,
-          0,      0,      0,      0,      0,      0,      q_yaw_yaw,  q_yaw_vyaw, 0,      0,
-          0,      0,      0,      0,      0,      0,      q_yaw_vyaw, q_vyaw_vyaw,0,      0,
-          0,      0,      0,      0,      0,      0,      0,          0,          q_r,    0,
-          0,      0,      0,      0,      0,      0,      0,          0,          0,      q_d_zc;
+void WustVision::initTracker(const YAML::Node& config)
+{
+    // 目标参考坐标系
+    target_frame_ = config["target_frame"].as<std::string>("odom");
 
-    // clang-format on
-    return q;
-  };
-  // update_R - measurement noise covariance matrix
-  r_x_ = 0.05;
-  r_y_ = 0.05;
-  r_z_ = 0.05;
-  r_yaw_ = 0.02;
-  auto u_r = [this](const Eigen::Matrix<double, Z_N, 1> &z) {
-    Eigen::Matrix<double, Z_N, Z_N> r;
-    // clang-format off
-    r << r_x_ * std::abs(z[0]), 0, 0, 0,
-         0, r_y_ * std::abs(z[1]), 0, 0,
-         0, 0, r_z_ * std::abs(z[2]), 0,
-         0, 0, 0, r_yaw_;
-    // clang-format on
-    return r;
-  };
-  // P - error estimate covariance matrix
-  Eigen::DiagonalMatrix<double, X_N> p0;
-  p0.setIdentity();
-  tracker_->ekf = std::make_unique<RobotStateEKF>(f, h, u_q, u_r, p0);
+    // Tracker 基础参数
+    double max_match_distance = config["max_match_distance"].as<double>(0.2);
+    double max_match_yaw_diff = config["max_match_yaw_diff"].as<double>(1.0);
+    tracker_ = std::make_unique<Tracker>(max_match_distance, max_match_yaw_diff);
+
+    // 跟踪判定参数
+    tracker_->tracking_thres = config["tracking_thres"].as<int>(5);
+    lost_time_thres_ = config["lost_time_thres"].as<double>(0.3);
+
+    // EKF 噪声参数
+    s2qx_ = config["ekf"]["s2qx"].as<double>(20.0);
+    s2qy_ = config["ekf"]["s2qy"].as<double>(20.0);
+    s2qz_ = config["ekf"]["s2qz"].as<double>(20.0);
+    s2qyaw_ = config["ekf"]["s2qyaw"].as<double>(100.0);
+    s2qr_ = config["ekf"]["s2qr"].as<double>(800.0);
+    s2qd_zc_ = config["ekf"]["s2qd_zc"].as<double>(800.0);
+
+    r_x_ = config["ekf"]["r_x"].as<double>(0.05);
+    r_y_ = config["ekf"]["r_y"].as<double>(0.05);
+    r_z_ = config["ekf"]["r_z"].as<double>(0.05);
+    r_yaw_ = config["ekf"]["r_yaw"].as<double>(0.02);
+
+    // EKF 状态预测函数
+    auto f = Predict(0.005);  // dt 固定为 5ms
+
+    // EKF 观测函数
+    auto h = Measure();
+
+    // EKF 过程噪声协方差 Q
+    auto u_q = [this]() {
+        Eigen::Matrix<double, X_N, X_N> q;
+        double t = dt_, x = s2qx_, y = s2qy_, z = s2qz_, yaw = s2qyaw_, r = s2qr_, d_zc=s2qd_zc_;
+        double q_x_x = pow(t, 4) / 4 * x, q_x_vx = pow(t, 3) / 2 * x, q_vx_vx = pow(t, 2) * x;
+        double q_y_y = pow(t, 4) / 4 * y, q_y_vy = pow(t, 3) / 2 * y, q_vy_vy = pow(t, 2) * y;
+        double q_z_z = pow(t, 4) / 4 * x, q_z_vz = pow(t, 3) / 2 * x, q_vz_vz = pow(t, 2) * z;
+        double q_yaw_yaw = pow(t, 4) / 4 * yaw, q_yaw_vyaw = pow(t, 3) / 2 * x,
+               q_vyaw_vyaw = pow(t, 2) * yaw;
+        double q_r = pow(t, 4) / 4 * r;
+        double q_d_zc = pow(t, 4) / 4 * d_zc;
+        // clang-format off
+        //    xc      v_xc    yc      v_yc    zc      v_zc    yaw         v_yaw       r       d_za
+        q <<  q_x_x,  q_x_vx, 0,      0,      0,      0,      0,          0,          0,      0,
+              q_x_vx, q_vx_vx,0,      0,      0,      0,      0,          0,          0,      0,
+              0,      0,      q_y_y,  q_y_vy, 0,      0,      0,          0,          0,      0,
+              0,      0,      q_y_vy, q_vy_vy,0,      0,      0,          0,          0,      0,
+              0,      0,      0,      0,      q_z_z,  q_z_vz, 0,          0,          0,      0,
+              0,      0,      0,      0,      q_z_vz, q_vz_vz,0,          0,          0,      0,
+              0,      0,      0,      0,      0,      0,      q_yaw_yaw,  q_yaw_vyaw, 0,      0,
+              0,      0,      0,      0,      0,      0,      q_yaw_vyaw, q_vyaw_vyaw,0,      0,
+              0,      0,      0,      0,      0,      0,      0,          0,          q_r,    0,
+              0,      0,      0,      0,      0,      0,      0,          0,          0,      q_d_zc;
+    
+        // clang-format on
+        return q;
+      };
+
+    // EKF 观测噪声协方差 R（基于测量值调整）
+    auto u_r = [this](const Eigen::Matrix<double, Z_N, 1> &z) {
+        Eigen::Matrix<double, Z_N, Z_N> r;
+        // clang-format off
+        r << r_x_ * std::abs(z[0]), 0, 0, 0,
+             0, r_y_ * std::abs(z[1]), 0, 0,
+             0, 0, r_z_ * std::abs(z[2]), 0,
+             0, 0, 0, r_yaw_;
+        // clang-format on
+        return r;
+      };
+
+    // 初始协方差
+    Eigen::DiagonalMatrix<double, X_N> p0;
+    p0.setIdentity();
+
+    // 初始化 EKF 滤波器
+    tracker_->ekf = std::make_unique<RobotStateEKF>(f, h, u_q, u_r, p0);
 }
+
 void WustVision::armorsCallback(const Armors& armors_) {
+    if (armors_.timestamp <= last_time_) {
+        WUST_WARN(vision_logger) << "Received out-of-order armor data, discarded.";
+        return;
+    }
+    
     Target target_;
     auto time = armors_.timestamp;
     target_.timestamp = time;
@@ -265,7 +296,11 @@ void WustVision::armorsCallback(const Armors& armors_) {
         }
     }
 
-    armor_target = target_; // Copy the result into armor_target_
+   
+    {
+        std::lock_guard<std::mutex> target_lock(armor_target_mutex_);
+        armor_target = target_; 
+    }
 
    
 
@@ -421,9 +456,12 @@ void WustVision::DetectCallback(
   }   
 
     infer_running_count_--;
-
-    
-    img=src_img.clone();
+if(debug_mode_)
+{
+    std::lock_guard<std::mutex> target_lock(img_mutex_);
+    imgframe_.img=src_img.clone();
+    imgframe_.timestamp=armors.timestamp;
+}
    thread_pool_->enqueue([this, armors = std::move(armors)]() {
       this->armorsCallback(armors);
   });
@@ -433,13 +471,15 @@ void WustVision::DetectCallback(
 void WustVision::timerCallback()
 { 
   if(!is_inited_)return;
-  //std::cout<<"timerCallback"<<std::endl;
-  Target target=armor_target;
+    if(debug_mode_)
+    {
+  Target target;
+    {
+        std::lock_guard<std::mutex> lock(armor_target_mutex_);
+        target = armor_target; 
+    }
   Armors armor_data=visualizeTargetProjection(target);
-  
-
-  
-    
+ 
   for (auto& armor : armor_data.armors) {
     try {
       Transform tf(armor.pos, armor.ori);
@@ -457,7 +497,14 @@ void WustVision::timerCallback()
   measure_tool_->reprojectArmorsCorners(armor_data,target_info );
        
   Tracker::State state=tracker_->tracker_state;
-  drawreprojec(img, target_info,target,state);
+  cv::Mat src;
+  {
+    std::lock_guard<std::mutex> lock(img_mutex_);
+    src=imgframe_.img.clone();
+  }
+ 
+  drawreprojec(imgframe_, target_info,target,state);
+}
 }
 
 void WustVision::processImage(const ImageFrame& frame) {
@@ -465,7 +512,7 @@ void WustVision::processImage(const ImageFrame& frame) {
     
 
     img_recv_count_++;
-        if (infer_running_count_.load() >= 4) {
+        if (infer_running_count_.load() >= max_infer_running_) {
        WUST_WARN(vision_logger)<<"Infer running too much ("<<infer_running_count_.load()<<"), dropping frame";
        return;    
         }
@@ -547,6 +594,5 @@ int main()
     consumer_thread.join();
     
 }
-
 
 

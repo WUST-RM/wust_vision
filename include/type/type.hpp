@@ -63,7 +63,7 @@ struct GridAndStride
 
 enum class ArmorColor { BLUE = 0, RED, NONE, PURPLE };
 
-enum class ArmorNumber { SENTRY = 0, NO1, NO2, NO3, NO4, NO5, OUTPOST, BASE };
+enum class ArmorNumber { SENTRY = 0, NO1, NO2, NO3, NO4, NO5, OUTPOST, BASE ,UNKNOWN};
 template <>
 struct fmt::formatter<ArmorNumber> {
     constexpr auto parse(fmt::format_parse_context& ctx) -> decltype(ctx.begin()) {
@@ -144,7 +144,7 @@ struct Target
   std::string frame_id;
   std::string type;
   bool tracking=false;
-  ArmorNumber id;
+  ArmorNumber id=ArmorNumber::UNKNOWN;
   int armors_num=0;
 
 
@@ -160,7 +160,7 @@ struct Target
   float position_diff;
 
   void clear() {
-    id = ArmorNumber::NO1;
+    id = ArmorNumber::UNKNOWN;
     tracking = false;
     armors_num = 0;
     type = "";
@@ -174,4 +174,12 @@ struct Target
     d_za = 0.0;
 }
 
+};
+struct imgframe {
+  cv::Mat img;
+  std::chrono::steady_clock::time_point timestamp;
+};
+struct SyncedData {
+  Target target;
+  imgframe image;
 };

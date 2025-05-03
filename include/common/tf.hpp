@@ -204,10 +204,16 @@ struct fmt::formatter<std::vector<tf2::Quaternion>> : fmt::formatter<std::string
 struct Transform {
     Position position;
     tf2::Quaternion orientation;
-    double timestamp = 0.0;
+    std::chrono::steady_clock::time_point timestamp; 
 
-    Transform() : position(), orientation(), timestamp(0.0) {}
-    Transform(Position p, tf2::Quaternion q, double ts = 0.0) : position(p), orientation(q), timestamp(ts) {}
+    Transform() : position(), orientation(), timestamp() {}
+    Transform(Position p, tf2::Quaternion q, std::chrono::steady_clock::time_point ts ) : position(p), orientation(q), timestamp(ts) {}
+    Transform(Position p, const tf2::Quaternion& q)
+    {
+        position = p;
+        orientation = q;
+        timestamp = std::chrono::steady_clock::now();
+    }
 
     cv::Matx44d toMatrix() const {
         tf2::Matrix3x3 R(orientation);
@@ -239,8 +245,8 @@ struct Transform {
     }
 };
 
-inline Transform createTf(float x, float y, float z, const tf2::Quaternion& q, double ts = 0.0) {
-    return Transform(Position(x, y, z), q, ts);
+inline Transform createTf(float x, float y, float z, const tf2::Quaternion& q) {
+    return Transform(Position(x, y, z), q);
 }
 
 inline tf2::Quaternion eulerToQuaternion(double roll, double pitch, double yaw) {

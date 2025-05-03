@@ -1,17 +1,29 @@
 cmake_minimum_required(VERSION 3.8)
 project(wust_vision)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-add_executable(${PROJECT_NAME}
+add_executable(${PROJECT_NAME}_openvino
   src/driver/hik.cpp
-  src/wust_vision.cpp
-  src/detect/trt.cpp
+  src/wust_vision_openvino.cpp
+
   src/common/tools.cpp
   src/detect/mono_measure_tool.cpp
   src/detect/openvino.cpp
+  src/detect/light_corner_corrector.cpp
+  src/tracker/tracker.cpp
+  src/tracker/extended_kalman_filter.cpp
+
+)
+add_executable(${PROJECT_NAME}_trt
+  src/driver/hik.cpp
+  src/wust_vision_trt.cpp
+  src/detect/trt.cpp
+  src/common/tools.cpp
+  src/detect/mono_measure_tool.cpp
+
   src/detect/light_corner_corrector.cpp
   src/tracker/tracker.cpp
   src/tracker/extended_kalman_filter.cpp
@@ -38,13 +50,23 @@ find_package(fmt REQUIRED)
 find_package(yaml-cpp REQUIRED)
 
 
+
 # 包含路径
-target_include_directories(${PROJECT_NAME} PUBLIC
+target_include_directories(${PROJECT_NAME}_openvino PUBLIC
   ${OpenCV_INCLUDE_DIRS}
   ${OpenVINO_INCLUDE_DIRS}
   ${EIGEN3_INCLUDE_DIRS}
   ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${CMAKE_CURRENT_SOURCE_DIR}/hikSDK/include
+
+)
+target_include_directories(${PROJECT_NAME}_trt PUBLIC
+  ${OpenCV_INCLUDE_DIRS}
+  ${OpenVINO_INCLUDE_DIRS}
+  ${EIGEN3_INCLUDE_DIRS}
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/hikSDK/include
+
 )
 set(TENSORRT_LIBS
   /home/hy/TensorRT-8.5.2.2/lib/libnvinfer.so
@@ -55,15 +77,21 @@ set(TENSORRT_LIBS
 
 # 链接路径
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
-  target_link_directories(${PROJECT_NAME} PUBLIC hikSDK/lib/amd64)
+  target_link_directories(${PROJECT_NAME}_openvino PUBLIC hikSDK/lib/amd64)
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
-  target_link_directories(${PROJECT_NAME} PUBLIC hikSDK/lib/arm64)
+  target_link_directories(${PROJECT_NAME}_openvino PUBLIC hikSDK/lib/arm64)
 else()
   message(FATAL_ERROR "Unsupported host system architecture: ${CMAKE_HOST_SYSTEM_PROCESSOR}!")
 endif()
-
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
+  target_link_directories(${PROJECT_NAME}_trt PUBLIC hikSDK/lib/amd64)
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
+  target_link_directories(${PROJECT_NAME}_trt PUBLIC hikSDK/lib/arm64)
+else()
+  message(FATAL_ERROR "Unsupported host system architecture: ${CMAKE_HOST_SYSTEM_PROCESSOR}!")
+endif()
 # 链接库
-target_link_libraries(${PROJECT_NAME}
+target_link_libraries(${PROJECT_NAME}_openvino
   FormatConversion
   MediaProcess
   MvCameraControl
@@ -79,5 +107,25 @@ target_link_libraries(${PROJECT_NAME}
   /usr/local/cuda-11.8/lib64/libcudart.so
   fmt::fmt
   yaml-cpp
+
+ 
+)
+target_link_libraries(${PROJECT_NAME}_trt
+  FormatConversion
+  MediaProcess
+  MvCameraControl
+  MVRender
+  MvUsb3vTL
+  ${OpenCV_LIBS}
+  openvino::frontend::onnx
+  openvino::runtime
+  ${OpenVINO_LIBRARIES}
+  ${OpenVINO_RUNTIME_LIBRARIES}
+  ${OpenVINO_ONNX_LIBRARIES}
+  ${TENSORRT_LIBS}
+  /usr/local/cuda-11.8/lib64/libcudart.so
+  fmt::fmt
+  yaml-cpp
+
  
 )

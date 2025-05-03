@@ -9,6 +9,7 @@ struct ImageFrame {
     int step;
     std::chrono::steady_clock::time_point timestamp;
 };
+
 // inline cv::Mat convertToMat(const ImageFrame& frame) {
 //     // 注意，这里 frame.step 通常是 width * 3（RGB）
 //     cv::Mat rgb(frame.height, frame.width, CV_8UC3, const_cast<uint8_t*>(frame.data.data()), frame.step);
