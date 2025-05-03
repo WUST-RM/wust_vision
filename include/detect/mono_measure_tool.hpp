@@ -19,9 +19,16 @@
 #include <string>
 #include <vector>
 
-#include "common/tools.hpp"
-#include "opencv2/opencv.hpp"
+#include "common/tf.hpp"
 
+#include "opencv2/opencv.hpp"
+#include "type/type.hpp"
+struct Target_info
+{
+  std::vector<std::vector<cv::Point2f>> pts;
+  std::vector<Position> pos;
+  std::vector<tf2::Quaternion> ori;
+};
 
 class MonoMeasureTool
 {
@@ -83,14 +90,26 @@ public:
     const ArmorObject & obj, cv::Point3f & position, cv::Mat & rvec, std::string & armor_type);
 
   float calcDistanceToCenter(const ArmorObject & obj);
+  
+  bool reprojectArmorsCorners(
+    Armors & armors,
+    Target_info & target_info);
+  
+  bool reprojectArmorCorners(
+    const Armor & armor,
+    std::vector<cv::Point2f> & image_points);
+
+
+    static std::vector<cv::Point3f> SMALL_ARMOR_3D_POINTS;
+    static std::vector<cv::Point3f> BIG_ARMOR_3D_POINTS;
+    cv::Mat camera_intrinsic_;   // 相机内参3*3
+    cv::Mat camera_distortion_;  // 相机畸变参数1*5
 
 private:
   // 相机参数
-  cv::Mat camera_intrinsic_;   // 相机内参3*3
-  cv::Mat camera_distortion_;  // 相机畸变参数1*5
+  
 
-  static std::vector<cv::Point3f> SMALL_ARMOR_3D_POINTS;
-  static std::vector<cv::Point3f> BIG_ARMOR_3D_POINTS;
+  
 
   std::string mono_logger="mono_measure_tool";
 

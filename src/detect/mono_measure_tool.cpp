@@ -178,3 +178,59 @@ float MonoMeasureTool::calcDistanceToCenter(const ArmorObject & obj)
   auto dis_vec = img_center - armor_center;
   return sqrt(dis_vec.dot(dis_vec));
 }
+bool MonoMeasureTool::reprojectArmorCorners(
+  const Armor & armor,
+  std::vector<cv::Point2f> & image_points)
+{
+  if (camera_intrinsic_.empty() || camera_distortion_.empty()) {
+    WUST_ERROR(mono_logger) << "Camera parameters not initialized.";
+    return false;
+  }
+
+  // 获取装甲板的模板角点
+  const std::vector<cv::Point3f> * model_points;
+  if (armor.type == "large") {
+    model_points = &BIG_ARMOR_3D_POINTS;
+  } else if (armor.type == "small") {
+    model_points = &SMALL_ARMOR_3D_POINTS;
+  } else {
+    WUST_ERROR(mono_logger) << "Unknown armor type: " << armor.type;
+    return false;
+  }
+
+  // 四元数 -> 旋转矩阵
+  tf2::Matrix3x3 tf_rot(armor.target_ori);
+  cv::Mat rot_mat = (cv::Mat_<double>(3, 3) <<
+    tf_rot[0][0], tf_rot[0][1], tf_rot[0][2],
+    tf_rot[1][0], tf_rot[1][1], tf_rot[1][2],
+    tf_rot[2][0], tf_rot[2][1], tf_rot[2][2]);
+
+  // 旋转矩阵 -> 旋转向量
+  cv::Mat rvec;
+  cv::Rodrigues(rot_mat, rvec);
+
+  // 平移向量
+  cv::Mat tvec = (cv::Mat_<double>(3,1) << armor.target_pos.x, armor.target_pos.y, armor.target_pos.z);
+
+  // 反投影
+  cv::projectPoints(*model_points, rvec, tvec, camera_intrinsic_, camera_distortion_, image_points);
+
+  return true;
+}
+bool MonoMeasureTool::reprojectArmorsCorners(
+  Armors & armors,
+  Target_info & target_info)
+  {
+    if (camera_intrinsic_.empty() || camera_distortion_.empty()) {
+      WUST_ERROR(mono_logger) << "Camera parameters not initialized.";
+      return false;
+    }
+    for (auto & armor : armors.armors) { 
+      std::vector<cv::Point2f> pts;
+      reprojectArmorCorners(armor, pts);
+      target_info.pts.push_back(pts);
+      target_info.pos.push_back(armor.pos);
+      target_info.ori.push_back(armor.ori);
+    }
+    return true;
+  }

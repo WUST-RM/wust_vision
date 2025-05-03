@@ -73,7 +73,7 @@ void  WustVision::init()
       &WustVision::DetectCallback, this, std::placeholders::_1,
       std::placeholders::_2, std::placeholders::_3));
   thread_pool_ = std::make_unique<ThreadPool>(std::thread::hardware_concurrency(), 100);
-  if (!camera_.initializeCamera()) {
+  if (!camera_.initializeCamera("")) {
     WUST_ERROR(vision_logger) << "Camera initialization failed." ;
     return ;
     }

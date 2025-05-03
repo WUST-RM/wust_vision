@@ -54,6 +54,7 @@ public:
   Armor tracked_armor;
   ArmorNumber tracked_id;
   ArmorsNum tracked_armors_num;
+  std::string type;
   Eigen::VectorXd measurement;
   Eigen::VectorXd target_state;
 
@@ -74,6 +75,8 @@ private:
   int lost_count_;
 
   double last_yaw_;
+
+  std::string tracker_logger = "tracker";
 };
 
 #endif  // ARMOR_SOLVER_TRACKER_HPP_

@@ -1,6 +1,8 @@
 #include "wust_vision.hpp"
 #include "common/logger.hpp"
 #include "common/tf.hpp"
+#include "common/tools.hpp"
+#include "detect/mono_measure_tool.hpp"
 #include "type/type.hpp"
 #include <csignal>
 #include <iostream>
@@ -16,7 +18,7 @@ WustVision::~WustVision() {
 
 
     is_inited_ = false;
-
+    stopTimer();
     camera_.stopCamera();
 
 
@@ -36,6 +38,7 @@ WustVision::~WustVision() {
 }
 void WustVision::stop() {
     is_inited_ = false;
+    stopTimer();
     std::this_thread::sleep_for(std::chrono::seconds(1));
     camera_.stopCamera();  
     detector_.reset();
@@ -54,6 +57,14 @@ void WustVision::stop() {
   
     WUST_INFO(vision_logger) << "WustVision shutdown complete.";
   }
+  void WustVision::stopTimer()
+{
+    timer_running_ = false;
+    if (timer_thread_.joinable()) {
+        timer_thread_.join();
+    }
+}
+
 
 void  WustVision::init()
 {
@@ -72,6 +83,8 @@ void  WustVision::init()
     measure_tool_=std::make_unique<MonoMeasureTool>(camera_info_path);
     initTF();
     initTracker();
+    
+
 
     detect_color_=0;
 
@@ -88,15 +101,37 @@ void  WustVision::init()
   
   thread_pool_ = std::make_unique<ThreadPool>(std::thread::hardware_concurrency(), 100);
   
-  if (!camera_.initializeCamera()) {
+  if (!camera_.initializeCamera("")) {
     WUST_ERROR(vision_logger) << "Camera initialization failed." ;
     return ;
     }
     camera_.setParameters(165,4000,7.0,"Bits_8","BayerRG8");
     camera_.startCamera();
+
+    startTimer();
+
   is_inited_ = true;
+ 
 
 }
+void WustVision::startTimer()
+{
+    if (timer_running_) return;  // 避免重复启动
+    timer_running_ = true;
+
+    timer_thread_ = std::thread([this]() {
+        const auto interval = std::chrono::microseconds(5000);  // 5ms = 200Hz
+        auto next_time = std::chrono::steady_clock::now() + interval;
+
+        while (timer_running_) {
+            std::this_thread::sleep_until(next_time);
+            if (!timer_running_) break;
+            this->timerCallback();
+            next_time += interval;
+        }
+    });
+}
+
 void WustVision::initTF()
 {
     // odom 是世界坐标系的根节点
@@ -184,71 +219,122 @@ void WustVision::initTracker()
   p0.setIdentity();
   tracker_->ekf = std::make_unique<RobotStateEKF>(f, h, u_q, u_r, p0);
 }
-void WustVision::armorsCallback(const Armors& armors_msg) {
-    // Lazy initialize solver owing to weak_from_this() can't be called in constructor
+void WustVision::armorsCallback(const Armors& armors_) {
+    Target target_;
+    auto time = armors_.timestamp;
+    target_.timestamp = time;
+    target_.frame_id = target_frame_;
+    target_.type = tracker_->type;
 
-  
-  
-    
-
-    
-    
-  
-    // Init message
-    
-    Target target_msg;
-    auto time = std::chrono::steady_clock::now();
-    target_msg.timestamp = time;
-    target_msg.frame_id = target_frame_;
-  
-  
     // Update tracker
     if (tracker_->tracker_state == Tracker::LOST) {
-      tracker_->init(armors_msg);
-      target_msg.tracking = false;
+        tracker_->init(armors_);
+        target_.tracking = false;
     } else {
-      dt_ = std::chrono::duration<double>(time - last_time_).count();
-      tracker_->lost_thres = std::abs(static_cast<int>(lost_time_thres_ / dt_));
-      if (tracker_->tracked_id == ArmorNumber::OUTPOST) {
-        tracker_->ekf->setPredictFunc(Predict{dt_, MotionModel::CONSTANT_ROTATION});
-      } else {
-        tracker_->ekf->setPredictFunc(Predict{dt_, MotionModel::CONSTANT_VEL_ROT});
-      }
-      tracker_->update(armors_msg);
+        dt_ = std::chrono::duration<double>(time - last_time_).count();
+        tracker_->lost_thres = std::abs(static_cast<int>(lost_time_thres_ / dt_));
+        if (tracker_->tracked_id == ArmorNumber::OUTPOST) {
+            tracker_->ekf->setPredictFunc(Predict{dt_, MotionModel::CONSTANT_ROTATION});
+        } else {
+            tracker_->ekf->setPredictFunc(Predict{dt_, MotionModel::CONSTANT_VEL_ROT});
+        }
+        tracker_->update(armors_);
 
-      if (tracker_->tracker_state == Tracker::DETECTING) {
-        target_msg.tracking = false;
-      } else if (tracker_->tracker_state == Tracker::TRACKING ||
-                 tracker_->tracker_state == Tracker::TEMP_LOST) {
-        target_msg.tracking = true;
-        // Fill target message
-        const auto &state = tracker_->target_state;
-        target_msg.id = tracker_->tracked_id;
-        target_msg.armors_num = static_cast<int>(tracker_->tracked_armors_num);
-        target_msg.position_.x = state(0);
-        target_msg.velocity_.x = state(1);
-        target_msg.position_.y = state(2);
-        target_msg.velocity_.y = state(3);
-        target_msg.position_.z = state(4);
-        target_msg.velocity_.z = state(5);
-        target_msg.yaw = state(6);
-        target_msg.v_yaw = state(7);
-        target_msg.radius_1 = state(8);
-        target_msg.radius_2 = tracker_->another_r;
-        target_msg.d_zc = state(9);
-        target_msg.d_za = tracker_->d_za;
-      }
+        if (tracker_->tracker_state == Tracker::DETECTING) {
+            target_.tracking = false;
+        } else if (tracker_->tracker_state == Tracker::TRACKING ||
+                   tracker_->tracker_state == Tracker::TEMP_LOST) {
+            target_.tracking = true;
+            // Fill target 
+            const auto &state = tracker_->target_state;
+            target_.id = tracker_->tracked_id;
+            target_.armors_num = static_cast<int>(tracker_->tracked_armors_num);
+            
+            target_.position_.x = state(0);
+            target_.velocity_.x = state(1);
+            target_.position_.y = state(2);
+            target_.velocity_.y = state(3);
+            target_.position_.z = state(4);
+            target_.velocity_.z = state(5);
+            target_.yaw = state(6);
+            target_.v_yaw = state(7);
+            target_.radius_1 = state(8);
+            target_.radius_2 = tracker_->another_r;
+            target_.d_zc = state(9);
+            target_.d_za = tracker_->d_za;
+        }
     }
-    //WUST_DEBUG(vision_logger)<<"x:"<<target_msg.position_.x<<"y:"<<target_msg.position_.y<<"z:"<<target_msg.position_.z;
+
+    armor_target = target_; // Copy the result into armor_target_
+
    
-  
+
     last_time_ = time;
+}
+
+Armors WustVision::visualizeTargetProjection(Target armor_target_)
+  { 
+    
+    Armors  armor_data;
+    armor_data.frame_id = "odom";
+    armor_data.timestamp = armor_target_.timestamp;
+
+    
+
+    if (armor_target_.tracking) {
+        double yaw = armor_target_.yaw, r1 = armor_target_.radius_1, r2 = armor_target_.radius_2;
+        float xc = armor_target_.position_.x, yc = armor_target_.position_.y, zc = armor_target_.position_.z;
+        double d_za = armor_target_.d_za, d_zc = armor_target_.d_zc;
+    
+     
+        bool is_current_pair = true;
+    
+
+        armor_data.armors.clear();
+
+        size_t a_n = armor_target_.armors_num;
+
+        armor_data.armors.reserve(a_n);
+
+    
+        for (size_t i = 0; i < a_n; ++i) {
+            double tmp_yaw = yaw + i * (2 * M_PI / a_n);
+            double cos_yaw = std::cos(tmp_yaw);
+            double sin_yaw = std::sin(tmp_yaw);
+    
+            Position pos;
+            if (a_n == 4) {
+                double r = is_current_pair ? r1 : r2;
+                pos.z = zc + d_zc + (is_current_pair ? 0 : d_za);
+                pos.x = xc - r * cos_yaw;
+                pos.y = yc - r * sin_yaw;
+                is_current_pair = !is_current_pair;
+            } else {
+                pos.z = zc;
+                pos.x = xc - r1 * cos_yaw;
+                pos.y = yc - r1 * sin_yaw;
+            }
+    
+            tf2::Quaternion ori;
+            ori.setRPY(M_PI/2, armor_target_.id == ArmorNumber::OUTPOST ? -0.2618 : 0.2618, tmp_yaw);
+    
+            armor_data.armors.emplace_back(Armor{
+                .type = armor_target_.type,
+                .pos = pos,
+                .ori = ori,
+                .target_pos = {xc, yc, zc},
+                .distance_to_image_center = 0.0f
+            });
+        }
+    }
+    return armor_data;
   }
+  
 void WustVision::DetectCallback(
     const std::vector<ArmorObject>& objs, int64_t timestamp_nanosec, const cv::Mat& src_img)
 {   std::lock_guard<std::mutex> lock(callback_mutex_);
     detect_finish_count_++;
-    if(objs.size()>=6){
+    if(objs.size()>=10){
     WUST_WARN(vision_logger)<<"Detected "<<objs.size()<<" objects"<<"too much";
     infer_running_count_--;
     return;}
@@ -320,35 +406,60 @@ void WustVision::DetectCallback(
         continue;
     }
 }
-    armors.timestamp=std::chrono::steady_clock::now();
+    armors.timestamp=std::chrono::time_point_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::time_point(std::chrono::nanoseconds(timestamp_nanosec)));
     armors.frame_id="camera_optical_frame";
     for (auto& armor : armors.armors) {
       try {
-          auto pose_intargetframe =tf_tree_.transform(armor.pos, armors.frame_id, target_frame_);
-          armor.pos = pose_intargetframe.position;
-          armor.ori = pose_intargetframe.orientation;
+          Transform tf(armor.pos, armor.ori);
+          auto pose_intargetframe =tf_tree_.transform(tf, armors.frame_id, target_frame_);
+          armor.target_pos = pose_intargetframe.position;
+          armor.target_ori = pose_intargetframe.orientation;
       } catch (const std::exception& e) {
           WUST_ERROR(vision_logger) << "Can't find transform from " << armors.frame_id << " to " << target_frame_ << ": " << e.what();
           return;
       }
-  }
-  
-    
-
-
-  
-    
+  }   
 
     infer_running_count_--;
 
-    thread_pool_->enqueue([this, armors = std::move(armors)]() {
+    
+    img=src_img.clone();
+   thread_pool_->enqueue([this, armors = std::move(armors)]() {
       this->armorsCallback(armors);
   });
 
-    drawresult(src_img, objs,timestamp_nanosec);
-    
     
 }
+void WustVision::timerCallback()
+{ 
+  if(!is_inited_)return;
+  //std::cout<<"timerCallback"<<std::endl;
+  Target target=armor_target;
+  Armors armor_data=visualizeTargetProjection(target);
+  
+
+  
+    
+  for (auto& armor : armor_data.armors) {
+    try {
+      Transform tf(armor.pos, armor.ori);
+      auto pose_in_target_frame = tf_tree_.transform(tf, armor_data.frame_id, "camera_optical_frame");
+      armor.target_pos = pose_in_target_frame.position;
+      armor.target_ori = pose_in_target_frame.orientation;
+    } catch (const std::exception& e) {
+      WUST_ERROR(vision_logger) << "Can't find transform from " << armor_data.frame_id << " to " << target_frame_ << ": " << e.what();
+      continue;
+    }
+
+    
+  }
+  Target_info target_info;
+  measure_tool_->reprojectArmorsCorners(armor_data,target_info );
+       
+  Tracker::State state=tracker_->tracker_state;
+  drawreprojec(img, target_info,target,state);
+}
+
 void WustVision::processImage(const ImageFrame& frame) {
   
     
@@ -413,6 +524,7 @@ void WustVision::imageConsumer(ThreadSafeQueue<ImageFrame>& queue, ThreadPool& p
         });
     }
   }
+  
   
 
 WustVision* global_vision = nullptr;

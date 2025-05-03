@@ -8,6 +8,7 @@
 #include <opencv2/core.hpp>
 #include <shared_mutex>
 #include <unordered_set>
+#include "fmt/format.h"
 
 namespace tf2 {
 
@@ -43,9 +44,15 @@ public:
         y = cr * sp * cy + sr * cp * sy;
         z = cr * cp * sy - sr * sp * cy;
     }
+    
+    
 
 };
 
+inline double getYawFromQuaternion(const Quaternion &q) {
+    auto R = q.toRotationMatrix();
+    return std::atan2(R(1, 0), R(0, 0));  // yaw = atan2(r21, r11)
+}
 class Matrix3x3 {
 public:
     float m[3][3];
@@ -116,21 +123,82 @@ public:
             yaw = std::atan2(m[1][0], m[0][0]);
         }
     }
+    Matrix3x3 transpose() const {
+        return Matrix3x3(
+            m[0][0], m[1][0], m[2][0],
+            m[0][1], m[1][1], m[2][1],
+            m[0][2], m[1][2], m[2][2]
+        );
+    }
 };
 
 inline std::ostream& operator<<(std::ostream& os, const Quaternion& q) {
     os << "Quaternion(x=" << q.x << ", y=" << q.y << ", z=" << q.z << ", w=" << q.w << ")";
     return os;
 }
+struct Vector3 {
+    double x_, y_, z_;
+    Vector3(double x, double y, double z) : x_(x), y_(y), z_(z) {}
+    double x() const { return x_; }
+    double y() const { return y_; }
+    double z() const { return z_; }
+  
+    Vector3 operator*(const Matrix3x3 &mat) const {
+      return Vector3(
+        mat[0][0]*x_ + mat[0][1]*y_ + mat[0][2]*z_,
+        mat[1][0]*x_ + mat[1][1]*y_ + mat[1][2]*z_,
+        mat[2][0]*x_ + mat[2][1]*y_ + mat[2][2]*z_
+      );
+    }
+    Vector3 operator-() const {
+    return Vector3(-x_, -y_, -z_);
+}
+  };
+  
+  inline Vector3 operator*(const Matrix3x3 &m, const Vector3 &v) {
+    return v * m;
+  }
+  
 
 
 
 } // namespace tf2
+template <>
+struct fmt::formatter<tf2::Quaternion> {
+    constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
+    template <typename FormatContext>
+    auto format(const tf2::Quaternion& q, FormatContext& ctx) {
+        return fmt::format_to(ctx.out(), "{:.3f}, {:.3f}, {:.3f}, {:.3f}", q.w, q.x, q.y, q.z);
+    }
+};
 struct Position {
     float x, y, z;
     Position() : x(0.0f), y(0.0f), z(0.0f) {}
     Position(float x_, float y_, float z_) : x(x_), y(y_), z(z_) {}
+};
+template <>
+struct fmt::formatter<Position> {
+    constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+
+    template <typename FormatContext>
+    auto format(const Position& p, FormatContext& ctx) {
+        return fmt::format_to(ctx.out(), "{:.3f}, {:.3f}, {:.3f}", p.x, p.y, p.z);
+    }
+};
+
+template<>
+struct fmt::formatter<std::vector<tf2::Quaternion>> : fmt::formatter<std::string_view> {
+    template<typename FormatContext>
+    auto format(const std::vector<tf2::Quaternion>& quats, FormatContext& ctx) -> decltype(ctx.out()) {
+        std::string result = "[";
+        for (size_t i = 0; i < quats.size(); ++i) {
+            if (i > 0) result += ", ";
+            result += fmt::format("{{{:.3f}, {:.3f}, {:.3f}, {:.3f}}}", quats[i].w, quats[i].x, quats[i].y, quats[i].z);
+        }
+        result += "]";
+        return fmt::format_to(ctx.out(), "{}", result);
+    }
 };
 
 struct Transform {
@@ -196,20 +264,16 @@ public:
         }
 
         try {
-            std::vector<std::string> path = getPathToRoot(source_frame);
-            std::vector<std::string> target_path = getPathToRoot(target_frame);
+            auto path_source = getPathToRoot(source_frame);
+            auto path_target = getPathToRoot(target_frame);
 
-            // Find common ancestor
-            int i = path.size() - 1, j = target_path.size() - 1;
-            while (i >= 0 && j >= 0 && path[i] == target_path[j]) {
-                --i;
-                --j;
+            int i = path_source.size() - 1, j = path_target.size() - 1;
+            while (i >= 0 && j >= 0 && path_source[i] == path_target[j]) {
+                --i; --j;
             }
 
-            // Compose: source -> common -> target (invert)
-            Transform tf_src_to_common = accumulatePath(path, i + 1);
-            Transform tf_target_to_common = accumulatePath(target_path, j + 1);
-            Transform tf_common_to_target = invert(tf_target_to_common);
+            Transform tf_src_to_common = accumulatePath(path_source, i + 1, false);
+            Transform tf_common_to_target = accumulatePath(path_target, j + 1, true);
 
             out = Transform::compose(tf_common_to_target, tf_src_to_common);
             return true;
@@ -218,78 +282,63 @@ public:
         }
     }
 
-    Transform transform(const Transform& input, const std::string& target_frame) const {
-        Transform tf_map;
-        if (!getTransform(input_frame(input), target_frame, tf_map)) {
-            throw std::runtime_error("No transform from " + input_frame(input) + " to " + target_frame);
-        }
-        return Transform::compose(tf_map, input);
-    }
+    // Transform transform(const Transform& input, const std::string& source_frame, const std::string& target_frame) const {
+    //     Transform tf_map;
+    //     if (!getTransform(source_frame, target_frame, tf_map)) {
+    //         throw std::runtime_error("No transform from " + source_frame + " to " + target_frame);
+    //     }
+    //     return Transform::compose(tf_map, input);
+    // }
+
     Transform transform(const Position& pos, const std::string& source_frame, const std::string& target_frame) const {
-        // 获取当前转换关系
-        Transform transform;
-        if (!getTransform(source_frame, target_frame, transform)) {
+        Transform tf;
+        if (!getTransform(source_frame, target_frame, tf)) {
             throw std::runtime_error("Cannot find transform from " + source_frame + " to " + target_frame);
         }
-    
-        // 将 Position 位置转化为矩阵
-        cv::Matx44d mat_pos = transform.toMatrix();
-        cv::Matx44d mat_input = cv::Matx44d::eye();
-        mat_input(0, 3) = pos.x;
-        mat_input(1, 3) = pos.y;
-        mat_input(2, 3) = pos.z;
-    
-        // 应用变换
-        cv::Matx44d mat_result = mat_pos * mat_input;
-        Position result_pos(static_cast<float>(mat_result(0, 3)), static_cast<float>(mat_result(1, 3)), static_cast<float>(mat_result(2, 3)));
-    
-        // 返回包含转换后的 Position 的 Transform
-        Transform result_transform = Transform::fromMatrix(mat_result);
-        result_transform.position = result_pos;  // 更新 Transform 的位置部分
-        return result_transform;
+
+        cv::Matx44d mat = tf.toMatrix();
+        cv::Vec4d p(pos.x, pos.y, pos.z, 1.0);
+        cv::Vec4d result = mat * p;
+        return Transform(Position(result[0], result[1], result[2]), tf.orientation);
     }
-    
+
     Transform transform(const tf2::Quaternion& ori, const std::string& source_frame, const std::string& target_frame) const {
-        // 获取当前转换关系
-        Transform transform;
-        if (!getTransform(source_frame, target_frame, transform)) {
+        Transform tf;
+        if (!getTransform(source_frame, target_frame, tf)) {
             throw std::runtime_error("Cannot find transform from " + source_frame + " to " + target_frame);
         }
-    
-        // 将 tf2::Quaternion 转换为矩阵
-        cv::Matx44d mat_transform = transform.toMatrix();
-        cv::Matx44d mat_input = cv::Matx44d::eye();
-    
-        // 旋转部分由传入的 Quaternion 表示
-        tf2::Matrix3x3 rotation(ori);
+
+        tf2::Matrix3x3 R_input(ori);
         cv::Matx33d R;
-        for (int i = 0; i < 3; ++i) {
-            for (int j = 0; j < 3; ++j) {
-                R(i, j) = rotation[i][j];
-            }
-        }
-    
-        // 更新变换矩阵
+        for (int i = 0; i < 3; ++i)
+            for (int j = 0; j < 3; ++j)
+                R(i, j) = R_input[i][j];
+
+        cv::Matx44d mat_input = cv::Matx44d::eye();
         mat_input.get_minor<3, 3>(0, 0) = R;
-        cv::Matx44d mat_result = mat_transform * mat_input;
-    
-        // 提取新的方向
-        tf2::Quaternion result_orientation;
-        tf2::Matrix3x3 mat_result_rotation(
+
+        cv::Matx44d mat_result = tf.toMatrix() * mat_input;
+        tf2::Matrix3x3 R_result(
             mat_result(0, 0), mat_result(0, 1), mat_result(0, 2),
             mat_result(1, 0), mat_result(1, 1), mat_result(1, 2),
             mat_result(2, 0), mat_result(2, 1), mat_result(2, 2)
         );
-        mat_result_rotation.getRotation(result_orientation);
-    
-        // 返回包含转换后的方向的 Transform
-        Transform result_transform = Transform::fromMatrix(mat_result);
-        result_transform.orientation = result_orientation;  // 更新 Transform 的方向部分
-        return result_transform;
+        tf2::Quaternion out_q;
+        R_result.getRotation(out_q);
+
+        return Transform(tf.position, out_q);
     }
-    
-    
-    
+
+    Transform transform(const Transform& input, const std::string& source_frame, const std::string& target_frame) const {
+        Transform tf;
+        if (!getTransform(source_frame, target_frame, tf)) {
+            throw std::runtime_error("Cannot find transform from " + source_frame + " to " + target_frame);
+        }
+
+        cv::Matx44d mat_input = input.toMatrix();
+        cv::Matx44d mat_result = tf.toMatrix() * mat_input;
+        return Transform::fromMatrix(mat_result);
+    }
 
 private:
     struct FrameNode {
@@ -299,13 +348,6 @@ private:
 
     std::unordered_map<std::string, FrameNode> nodes_;
     mutable std::shared_mutex mutex_;
-
-    std::string input_frame(const Transform& t) const {
-        for (const auto& [frame, node] : nodes_) {
-            if (&node.transform == &t) return frame;
-        }
-        return "";
-    }
 
     std::vector<std::string> getPathToRoot(const std::string& frame) const {
         std::vector<std::string> path;
@@ -318,15 +360,22 @@ private:
             path.push_back(current);
             current = nodes_.at(current).parent_frame;
         }
-        path.push_back(current);  // root (may not be in map)
+        path.push_back(current); // root
         return path;
     }
 
-    Transform accumulatePath(const std::vector<std::string>& path, int end_idx) const {
+    Transform accumulatePath(const std::vector<std::string>& path, int end_idx, bool reverse = false) const {
         Transform result;
-        for (int i = 0; i < end_idx; ++i) {
-            const auto& f = path[i];
-            result = Transform::compose(nodes_.at(f).transform, result);
+        if (!reverse) {
+            for (int i = 0; i < end_idx; ++i) {
+                const auto& f = path[i];
+                result = Transform::compose(nodes_.at(f).transform, result);
+            }
+        } else {
+            for (int i = end_idx - 1; i >= 0; --i) {
+                const auto& f = path[i];
+                result = Transform::compose(invert(nodes_.at(f).transform), result);
+            }
         }
         return result;
     }
@@ -335,5 +384,11 @@ private:
         cv::Matx44d inv = tf.toMatrix().inv();
         return Transform::fromMatrix(inv);
     }
+};
+struct rpy
+{
+    float roll;
+    float pitch;
+    float yaw;
 };
 #endif // TF2_HPP

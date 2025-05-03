@@ -2,6 +2,7 @@
 #define HIK_HPP
 
 #include <iostream>
+#include <opencv2/videoio.hpp>
 #include <string>
 #include <thread>
 #include <vector>
@@ -26,7 +27,7 @@ public:
     HikCamera();
     ~HikCamera();
 
-    bool initializeCamera();
+    bool initializeCamera(const std::string& video_path);
     void setParameters(double acquisition_frame_rate,
         double exposure_time,
         double gain,
@@ -40,7 +41,8 @@ public:
     ThreadSafeQueue<ImageFrame>& getImageQueue();
 
 private:
-    void captureLoop();
+    void hikCaptureLoop();
+    void videoCaptureLoop();
 
     void * camera_handle_;
     int fail_count_;
@@ -54,6 +56,9 @@ private:
     bool in_low_frame_rate_state_;                         
     std::chrono::steady_clock::time_point low_frame_rate_start_time_; 
     std::atomic<bool> stop_signal_{false};
+    bool is_video_mode_;
+    cv::VideoCapture video_cap_;
+    int video_fps_;
 };
 
 #endif // HIK_HPP

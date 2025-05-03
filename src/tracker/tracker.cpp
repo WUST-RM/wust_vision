@@ -1,5 +1,6 @@
 #include "tracker/tracker.hpp"
 #include "common/angles.h"
+#include "common/logger.hpp"
 
 // std
 #include <cfloat>
@@ -30,9 +31,10 @@ void Tracker::init(const Armors &armors_msg) noexcept {
     if (armor.distance_to_image_center < min_distance) {
       min_distance = armor.distance_to_image_center;
       tracked_armor = armor;
+      type=armor.type;
     }
   }
-
+  WUST_INFO(tracker_logger)<<"INIT EKF";
   initEKF(tracked_armor);
   tracked_id = tracked_armor.number;
   tracker_state = DETECTING;
@@ -61,13 +63,13 @@ void Tracker::update(const Armors &armors_msg) noexcept {
       if (armor.number == tracked_id) {
         same_id_armor = armor;
         same_id_armors_count++;
-        auto p = armor.pos;
+        auto p = armor.target_pos;
         Eigen::Vector3d position_vec(p.x, p.y, p.z);
         double position_diff = (predicted_position - position_vec).norm();
 
         if (position_diff < min_position_diff) {
           min_position_diff = position_diff;
-          yaw_diff = std::abs(orientationToYaw(armor.ori) - ekf_prediction(6));
+          yaw_diff = std::abs(orientationToYaw(armor.target_ori) - ekf_prediction(6));
           tracked_armor = armor;
 
           
@@ -82,12 +84,14 @@ void Tracker::update(const Armors &armors_msg) noexcept {
 
     if (min_position_diff < max_match_distance_ && yaw_diff < max_match_yaw_diff_) {
       matched = true;
-      auto p = tracked_armor.pos;
-      double measured_yaw = orientationToYaw(tracked_armor.ori);
+      auto p = tracked_armor.target_pos;
+      double measured_yaw = orientationToYaw(tracked_armor.target_ori);
       measurement = Eigen::Vector4d(p.x, p.y, p.z, measured_yaw);
       target_state = ekf->update(measurement);
     } else if (same_id_armors_count == 1 && yaw_diff > max_match_yaw_diff_) {
       handleArmorJump(same_id_armor);
+    }else {
+      WUST_DEBUG(tracker_logger)<<"No matched armor found!";
     }
   }
 
@@ -132,11 +136,11 @@ void Tracker::update(const Armors &armors_msg) noexcept {
 }
 
 void Tracker::initEKF(const Armor &a) noexcept {
-  double xa = a.pos.x;
-  double ya = a.pos.y;
-  double za = a.pos.z;
+  double xa = a.target_pos.x;
+  double ya = a.target_pos.y;
+  double za = a.target_pos.z;
   last_yaw_ = 0;
-  double yaw = orientationToYaw(a.ori);
+  double yaw = orientationToYaw(a.target_ori);
 
   target_state = Eigen::VectorXd::Zero(X_N);
   double r = 0.26;
@@ -150,30 +154,31 @@ void Tracker::initEKF(const Armor &a) noexcept {
 
 void Tracker::handleArmorJump(const Armor &current_armor) noexcept {
   double last_yaw = target_state(6);
-  double yaw = orientationToYaw(current_armor.ori);
+  double yaw = orientationToYaw(current_armor.target_ori);
 
   if (std::abs(yaw - last_yaw) > 0.4) {
     target_state(6) = yaw;
 
     if (tracked_armors_num == ArmorsNum::NORMAL_4) {
-      d_za = target_state(4) + target_state(9) - current_armor.pos.z;
+      d_za = target_state(4) + target_state(9) - current_armor.target_pos.z;
       std::swap(target_state(8), another_r);
       d_zc = d_zc == 0 ? -d_za : 0;
       target_state(9) = d_zc;
     }
+    WUST_DEBUG(tracker_logger)<<"Armor Jump!";
   }
 
-  Eigen::Vector3d current_p(current_armor.pos.x, current_armor.pos.y, current_armor.pos.z);
+  Eigen::Vector3d current_p(current_armor.target_pos.x, current_armor.target_pos.y, current_armor.target_pos.z);
   Eigen::Vector3d infer_p = getArmorPositionFromState(target_state);
 
   if ((current_p - infer_p).norm() > max_match_distance_) {
     d_zc = 0;
     double r = target_state(8);
-    target_state(0) = current_armor.pos.x + r * cos(yaw);
+    target_state(0) = current_armor.target_pos.x + r * cos(yaw);
     target_state(1) = 0;
-    target_state(2) = current_armor.pos.y + r * sin(yaw);
+    target_state(2) = current_armor.target_pos.y + r * sin(yaw);
     target_state(3) = 0;
-    target_state(4) = current_armor.pos.z;
+    target_state(4) = current_armor.target_pos.z;
     target_state(5) = 0;
     target_state(9) = d_zc;
   }

@@ -128,6 +128,8 @@ struct Armor
   std::string type;
   Position pos;
   tf2::Quaternion ori;
+  Position target_pos;
+  tf2::Quaternion target_ori;
   float distance_to_image_center;
 
 };
@@ -140,9 +142,11 @@ struct Armors
 struct Target
 { std::chrono::steady_clock::time_point timestamp;
   std::string frame_id;
-  bool tracking;
+  std::string type;
+  bool tracking=false;
   ArmorNumber id;
-  int armors_num;
+  int armors_num=0;
+
 
   Position position_;
   Position velocity_;
@@ -155,6 +159,19 @@ struct Target
   float yaw_diff;
   float position_diff;
 
-  
+  void clear() {
+    id = ArmorNumber::NO1;
+    tracking = false;
+    armors_num = 0;
+    type = "";
+    position_ = Position();  // Assuming Position is a struct with a default constructor
+    velocity_ = Position();  // Assuming Velocity is a struct with a default constructor
+    yaw = 0.0;
+    v_yaw = 0.0;
+    radius_1 = 0.0;
+    radius_2 = 0.0;
+    d_zc = 0.0;
+    d_za = 0.0;
+}
 
 };

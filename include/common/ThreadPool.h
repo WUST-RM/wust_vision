@@ -72,6 +72,7 @@ public:
 
         cond_var_.notify_one();
     }
+    
 
     size_t pendingTasks() const {
         std::unique_lock<std::mutex> lock(mutex_);

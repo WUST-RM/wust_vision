@@ -184,7 +184,7 @@ AdaptedTRTModule::~AdaptedTRTModule()
   cudaFree(device_buffers_[input_idx_]);
   if (context_) context_->destroy();
   if (engine_) engine_->destroy();
-  if (runtime_) runtime_->destroy();  // ✅ 最后销毁 runtime
+  if (runtime_) runtime_->destroy();  
   thread_pool_.reset();
     if (thread_pool_) {
         thread_pool_->waitUntilEmpty(); 
