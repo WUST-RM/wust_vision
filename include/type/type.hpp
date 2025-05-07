@@ -113,15 +113,6 @@ typedef struct ArmorObject
 constexpr const char * K_ARMOR_NAMES[] = {"guard", "1", "2", "3", "4", "5", "outpost", "base"};
 
 
-
-
-// struct rpy
-// {
-//   float roll;
-//   float pitch;
-//   float yaw;
-  
-// };
 struct Armor
 { 
   ArmorNumber number;
@@ -156,22 +147,24 @@ struct Target
   float radius_2;
   float d_za;
   float d_zc;
-  float yaw_diff;
-  float position_diff;
+  // float yaw_diff;
+  // float position_diff;
 
   void clear() {
     id = ArmorNumber::UNKNOWN;
     tracking = false;
     armors_num = 0;
     type = "";
-    position_ = Position();  // Assuming Position is a struct with a default constructor
-    velocity_ = Position();  // Assuming Velocity is a struct with a default constructor
+    position_ = Position();  
+    velocity_ = Position(); 
     yaw = 0.0;
     v_yaw = 0.0;
     radius_1 = 0.0;
     radius_2 = 0.0;
     d_zc = 0.0;
     d_za = 0.0;
+    // yaw_diff = 0.0;
+    // position_diff = 0.0;
 }
 
 };

@@ -60,13 +60,16 @@ void Tracker::update(const Armors &armors_msg) noexcept {
     double min_position_diff = DBL_MAX;
     double yaw_diff = DBL_MAX;
 
-    for (const auto &armor : armors_msg.armors) {
-      if (armor.number == tracked_id) {
+    for ( auto &armor : armors_msg.armors) {
+    
+      if (armor.type == type) {
         same_id_armor = armor;
         same_id_armors_count++;
+        //WUST_INFO(tracker_logger)<<"Same ID armor found!"<<fmt::format("count: {}\n", same_id_armors_count);
         auto p = armor.target_pos;
         Eigen::Vector3d position_vec(p.x, p.y, p.z);
         double position_diff = (predicted_position - position_vec).norm();
+       // WUST_INFO(tracker_logger)<<"Armor found!"<<fmt::format("position_diff: {}\n", position_diff);
 
         if (position_diff < min_position_diff) {
           min_position_diff = position_diff;
@@ -144,7 +147,7 @@ void Tracker::initEKF(const Armor &a) noexcept {
   double yaw = orientationToYaw(a.target_ori);
 
   target_state = Eigen::VectorXd::Zero(X_N);
-  double r = 0.26;
+  double r = 0.24;
   double xc = xa + r * cos(yaw);
   double yc = ya + r * sin(yaw);
   double zc = za;

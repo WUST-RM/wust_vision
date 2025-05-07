@@ -33,7 +33,6 @@ void LightCornerCorrector::correctCorners(ArmorObject& armor) noexcept {
     
     double zero_x = armor.new_x;
     double zero_y = armor.new_y;
-    
 
     for (auto& light : armor.lights) {
         if (light.width <= PASS_OPTIMIZE_WIDTH)
@@ -79,13 +78,27 @@ void LightCornerCorrector::correctCorners(ArmorObject& armor) noexcept {
 
 
     armor.pts_binary.clear();
-    std::vector<cv::Point2f> lamp_points;
+    cv::Point2f armor_center = (armor.pts[0] + armor.pts[1] + armor.pts[2] + armor.pts[3]) * 0.25;
+
+    // Step 2: 计算每个灯条中心与装甲板中心的距离
+    std::vector<std::pair<const Light*, double>> light_distances;
     for (const auto& light : armor.lights) {
-        lamp_points.push_back(light.top);
-        lamp_points.push_back(light.bottom);
+        double dist = cv::norm(light.center - armor_center);
+        light_distances.emplace_back(&light, dist);
     }
 
-    std::vector<cv::Point2f> candidates = lamp_points;
+    // Step 3: 按距离排序，选择最近两个灯条
+    std::sort(light_distances.begin(), light_distances.end(), [](const auto& a, const auto& b) {
+        return a.second < b.second;
+    });
+
+    // Step 4: 构建 candidates，只保留两个灯条的 top/bottom
+    std::vector<cv::Point2f> candidates;
+    for (int i = 0; i < std::min(2, (int)light_distances.size()); ++i) {
+        const auto* light = light_distances[i].first;
+        candidates.push_back(light->top);
+        candidates.push_back(light->bottom);
+    }
 
 
     double w = cv::norm(armor.pts[0] - armor.pts[1]);

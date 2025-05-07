@@ -1,5 +1,5 @@
 #!/bin/bash
-
+cd "$(dirname "$0")"
 export MVCAM_SDK_PATH=/opt/MVS
 export MVCAM_COMMON_RUNENV=/opt/MVS/lib
 export MVCAM_GENICAM_CLPROTOCOL=/opt/MVS/lib/CLProtocol
@@ -32,6 +32,21 @@ if [ $? -ne 0 ]; then
     echo -e "${red}\n--- Make Failed ---${reset}"
     exit 1
 fi
+echo -e "${yellow}\n<--- Total Lines --->${reset}"
+total=$(find .. \
+    -type d \( \
+        -path ../build -o \
+        -path ../hikSDK -o \
+        -path ../model \
+    \) -prune -o \
+    -type f \( \
+        -name "*.cpp" -o \
+        -name "*.hpp" -o \
+        -name "*.c" -o \
+        -name "*.h" \
+    \) -exec wc -l {} + | awk 'END{print $1}')
+echo -e "${blue}        $total${reset}"
+
 if [ "$1" == "build" ]; then
     echo -e "${yellow}\n<--- Only building and copying both executables --->${reset}"
     # Copy the executables to /usr/local/bin
@@ -61,20 +76,7 @@ if [ $? -ne 0 ]; then
 fi
 echo -e "${blue}\n----- Both executables copied to /usr/local/bin -----${reset}"
 
-echo -e "${yellow}\n<--- Total Lines --->${reset}"
-total=$(find .. \
-    -type d \( \
-        -path ../build -o \
-        -path ../hikSDK -o \
-        -path ../model \
-    \) -prune -o \
-    -type f \( \
-        -name "*.cpp" -o \
-        -name "*.hpp" -o \
-        -name "*.c" -o \
-        -name "*.h" \
-    \) -exec wc -l {} + | awk 'END{print $1}')
-echo -e "${blue}        $total${reset}"
+
 
 # Check input argument to decide which program to run
 if [ "$1" == "trt" ]; then

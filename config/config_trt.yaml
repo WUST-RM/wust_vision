@@ -1,4 +1,7 @@
-debug_mode: true
+debug:
+  debug_mode: true
+  show_armor: true
+  show_target: true
 
 max_infer_running: 4
 
@@ -16,8 +19,8 @@ camera:
   serial: ""
   camera_info_path: "/home/hy/wust_vision/config/camera_info.yaml"
   acquisition_frame_rate: 165
-  exposure_time: 4000
-  gain: 7.0
+  exposure_time: 3500
+  gain: 16.0
   adc_bit_depth: "Bits_8"
   pixel_format: "BayerRG8"
 
@@ -30,13 +33,13 @@ tracker:
   tracking_thres: 2
   lost_time_thres: 1.0
   ekf:
-    s2qx: 0.05
-    s2qy: 0.15
-    s2qz: 0.05
+    s2qx: 0.07
+    s2qy: 0.07
+    s2qz: 0.15
     s2qyaw: 5.0
-    s2qr: 80.0
-    s2qd_zc: 800.0
-    r_x: 9e-4
-    r_y: 9e-4
-    r_z: 9e-4
-    r_yaw: 6e-3
+    s2qr: 70.0
+    s2qd_zc: 1000.0
+    r_x: 3e-3
+    r_y: 3e-3
+    r_z: 3e-3
+    r_yaw: 5e-3

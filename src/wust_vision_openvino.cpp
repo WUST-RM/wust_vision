@@ -36,7 +36,9 @@ WustVision::~WustVision() {
 void  WustVision::init()
 { 
   YAML::Node config = YAML::LoadFile("/home/hy/wust_vision/config/config_openvino.yaml");
-  debug_mode_ = config["debug_mode"].as<bool>();
+  debug_mode_ = config["debug"]["debug_mode"].as<bool>();
+  show_armor_  = config["debug"]["show_armor"].as<bool>();
+  show_target_ = config["debug"]["show_target"].as<bool>();
   auto classify_model_path = config["classify_model_path"].as<std::string>();
   auto classify_label_path = config["classify_label_path"].as<std::string>();
   const std::string model_path = config["model"]["model_path"].as<std::string>();
@@ -92,6 +94,11 @@ void  WustVision::init()
 
   camera_.startCamera();
   startTimer();
+  // video_writer_ = cv::VideoWriter("aa.mp4", 
+  //   cv::VideoWriter::fourcc('M','J','P','G'), 
+  //   60, 
+  //   cv::Size(1440, 1080));
+is_recording_ = video_writer_.isOpened();
   is_inited_ = true;
 }
 void WustVision::stop() {
@@ -104,6 +111,9 @@ void WustVision::stop() {
   if (thread_pool_) {
     thread_pool_->waitUntilEmpty();
     thread_pool_.reset();
+} 
+if (video_writer_.isOpened()) {
+  video_writer_.release();
 }
 
   camera_.getImageQueue().shutdown();  
@@ -349,7 +359,7 @@ Armors WustVision::visualizeTargetProjection(Target armor_target_)
               .type = armor_target_.type,
               .pos = pos,
               .ori = ori,
-              .target_pos = {xc, yc, zc},
+              //.target_pos = {xc, yc, zc},
               .distance_to_image_center = 0.0f
           });
       }
@@ -430,6 +440,20 @@ void WustVision::DetectCallback(
       continue;
   }
 }
+// if (!armors.armors.empty()) {
+//     // 找到 distance_to_image_center 最小的 armor
+//     auto min_it = std::min_element(armors.armors.begin(), armors.armors.end(),
+//         [](const Armor& a, const Armor& b) {
+//             return a.distance_to_image_center < b.distance_to_image_center;
+//         });
+
+//     // 如果找到最小值，则清空列表并保留该元素
+//     if (min_it != armors.armors.end()) {
+//         // 创建一个新的 vector，仅包含最小的元素
+//         std::vector<Armor> temp{ *min_it };
+//         armors.armors.swap(temp);  // 替换原容器内容
+//     }
+// }
       armors.timestamp=std::chrono::time_point_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::time_point(std::chrono::nanoseconds(timestamp_nanosec)));
           armors.frame_id="camera_optical_frame";
           for (auto& armor : armors.armors) {
@@ -438,11 +462,13 @@ void WustVision::DetectCallback(
                 auto pose_intargetframe =tf_tree_.transform(tf, armors.frame_id, target_frame_);
                 armor.target_pos = pose_intargetframe.position;
                 armor.target_ori = pose_intargetframe.orientation;
+               // WUST_DEBUG(vision_logger)<<"Z:"<<armor.pos.y;
             } catch (const std::exception& e) {
                 WUST_ERROR(vision_logger) << "Can't find transform from " << armors.frame_id << " to " << target_frame_ << ": " << e.what();
                 return;
             }
-        }   
+        }  
+     
 
     infer_running_count_--;
 if(debug_mode_)
@@ -455,15 +481,17 @@ if(debug_mode_)
       this->armorsCallback(armors);
   });
 
-
-  //drawresult(src_img, objs,timestamp_nanosec);
+  if(debug_mode_&&show_armor_)
+  {
+  drawresult(src_img, objs,timestamp_nanosec);
+  }
   
   
 }
 void WustVision::timerCallback()
 { 
   if(!is_inited_)return;
-    if(debug_mode_)
+    if(debug_mode_&&show_target_)
     {
   Target target;
     {
@@ -494,8 +522,14 @@ void WustVision::timerCallback()
     std::lock_guard<std::mutex> lock(img_mutex_);
     src=imgframe_.img.clone();
   }
- 
+  dumpTargetToFile(target,"/tmp/target_status.txt");
   drawreprojec(imgframe_, target_info,target,state);
+  // if (is_recording_ && !src.empty())
+  //       {
+  //           if (video_writer_.isOpened()) {
+  //               video_writer_.write(src);
+  //           }
+  //       }
 }
 }
 void WustVision::processImage(const ImageFrame& frame) {
@@ -504,7 +538,7 @@ void WustVision::processImage(const ImageFrame& frame) {
 
   img_recv_count_++;
       if (infer_running_count_.load() >= max_infer_running_) {
-     WUST_WARN(vision_logger)<<"Infer running too much ("<<infer_running_count_.load()<<"), dropping frame";
+    // WUST_WARN(vision_logger)<<"Infer running too much ("<<infer_running_count_.load()<<"), dropping frame";
      return;    
       }
 

@@ -282,11 +282,11 @@ void HikCamera::hikCaptureLoop() {
                         actual_fps = f_value.fCurValue;
                         //WUST_DEBUG(hik_logger) << "SDK Reported FPS: " << actual_fps;
                     }
-                    // 方案2：使用手动计算的帧率（备用）
+                    //方案2：使用手动计算的帧率（备用）
                     else {
                         actual_fps = frame_counter / 1.0f; // 每秒帧数
                         WUST_DEBUG(hik_logger) << "Calculated FPS: " << actual_fps;
-                    }
+                   }
 
                     // 重置计数器
                     frame_counter = 0;

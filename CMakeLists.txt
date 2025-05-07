@@ -31,6 +31,7 @@ add_executable(${PROJECT_NAME}_trt
 )
 include_directories(
   /home/hy/TensorRT-8.5.2.2/include
+  /home/hy/wust_vision/thirdparty/matplotlibcpp
   /usr/local/cuda-11.8/include
 )
 
@@ -44,6 +45,7 @@ link_directories(
 # 查找依赖
 find_package(OpenCV REQUIRED)
 find_package(OpenVINO REQUIRED COMPONENTS Runtime ONNX)
+find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(CUDAToolkit REQUIRED)
 find_package(fmt REQUIRED)
@@ -58,6 +60,9 @@ target_include_directories(${PROJECT_NAME}_openvino PUBLIC
   ${EIGEN3_INCLUDE_DIRS}
   ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${CMAKE_CURRENT_SOURCE_DIR}/hikSDK/include
+  ${PROJECT_SOURCE_DIR}/thirdparty/matplotlibcpp
+  ${Python3_INCLUDE_DIRS}
+
 
 )
 target_include_directories(${PROJECT_NAME}_trt PUBLIC
@@ -66,6 +71,9 @@ target_include_directories(${PROJECT_NAME}_trt PUBLIC
   ${EIGEN3_INCLUDE_DIRS}
   ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${CMAKE_CURRENT_SOURCE_DIR}/hikSDK/include
+  ${PROJECT_SOURCE_DIR}/thirdparty/matplotlibcpp
+  ${Python3_INCLUDE_DIRS}
+
 
 )
 set(TENSORRT_LIBS
@@ -107,6 +115,8 @@ target_link_libraries(${PROJECT_NAME}_openvino
   /usr/local/cuda-11.8/lib64/libcudart.so
   fmt::fmt
   yaml-cpp
+  ${Python3_LIBRARIES}
+
 
  
 )
@@ -126,6 +136,8 @@ target_link_libraries(${PROJECT_NAME}_trt
   /usr/local/cuda-11.8/lib64/libcudart.so
   fmt::fmt
   yaml-cpp
+  ${Python3_LIBRARIES}
+
 
  
 )

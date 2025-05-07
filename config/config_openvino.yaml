@@ -1,4 +1,7 @@
-debug_mode: true
+debug:
+  debug_mode: true
+  show_armor: true
+  show_target: true
 
 max_infer_running: 4
 
@@ -15,10 +18,10 @@ model:
 
 
 light:
-  expand_ratio_w: 2.0
-  expand_ratio_h: 1.5
+  expand_ratio_w: 1.1
+  expand_ratio_h: 1.1
   binary_thres: 85
-  min_ratio: 0.0001
+  min_ratio: 0.02
   max_ratio: 0.45
   max_angle: 40.0
 
@@ -26,9 +29,9 @@ light:
 camera:
   camera_info_path: "/home/hy/wust_vision/config/camera_info.yaml"
   serial: "" 
-  acquisition_frame_rate: 165
-  exposure_time: 4000
-  gain: 7.0
+  acquisition_frame_rate: 160
+  exposure_time: 3500
+  gain: 16.0
   adc_bit_depth: "Bits_8"
   pixel_format: "BayerRG8"
 
@@ -38,16 +41,16 @@ tracker:
   target_frame: "odom"
   max_match_distance: 0.5
   max_match_yaw_diff: 1.0
-  tracking_thres: 2
-  lost_time_thres: 1.0
+  tracking_thres: 5
+  lost_time_thres: 0.2
   ekf:
-    s2qx: 0.05
-    s2qy: 0.15
-    s2qz: 0.05
-    s2qyaw: 5.0
+    s2qx: 0.1
+    s2qy: 0.1
+    s2qz: 0.2
+    s2qyaw: 6.0
     s2qr: 80.0
-    s2qd_zc: 800.0
-    r_x: 9e-4
-    r_y: 9e-4
-    r_z: 9e-4
-    r_yaw: 6e-3
+    s2qd_zc: 1000.0
+    r_x: 3e-3
+    r_y: 3e-3
+    r_z: 5e-3
+    r_yaw: 5e-3

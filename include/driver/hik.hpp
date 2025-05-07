@@ -20,8 +20,6 @@
 
 
 
-
-// 海康相机类声明
 class HikCamera {
 public:
     HikCamera();

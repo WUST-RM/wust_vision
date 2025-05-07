@@ -43,6 +43,8 @@ public:
     std::string vision_logger="tensorrt_vision";
     std::atomic<bool> run_loop_{false};
     bool debug_mode_ = false;
+    bool show_armor_ = false;
+    bool show_target_ = false;
     std::atomic<bool> timer_running_{false};
     std::thread timer_thread_;
     std::unique_ptr<Tracker> tracker_;
@@ -51,7 +53,6 @@ public:
     double s2qx_, s2qy_, s2qz_, s2qyaw_, s2qr_, s2qd_zc_;
     double r_x_, r_y_, r_z_, r_yaw_;
     double lost_time_thres_;
-    
     TfTree tf_tree_;
     std::string target_frame_;
     std::chrono::steady_clock::time_point last_time_;

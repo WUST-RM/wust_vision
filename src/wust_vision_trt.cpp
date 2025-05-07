@@ -75,7 +75,9 @@ void WustVision::stop() {
 void WustVision::init()
 {
     YAML::Node config = YAML::LoadFile("/home/hy/wust_vision/config/config_trt.yaml");
-    debug_mode_ = config["debug_mode"].as<bool>();
+    debug_mode_ = config["debug"]["debug_mode"].as<bool>();
+    show_armor_  = config["debug"]["show_armor"].as<bool>();
+    show_target_ = config["debug"]["show_target"].as<bool>();
 
     // 模型参数
     const std::string model_path = config["model_path"].as<std::string>();
@@ -465,13 +467,16 @@ if(debug_mode_)
    thread_pool_->enqueue([this, armors = std::move(armors)]() {
       this->armorsCallback(armors);
   });
-
+  if(debug_mode_&&show_armor_)
+  {
+  drawresult(src_img, objs,timestamp_nanosec);
+  }
     
 }
 void WustVision::timerCallback()
 { 
   if(!is_inited_)return;
-    if(debug_mode_)
+    if(debug_mode_&&show_target_)
     {
   Target target;
     {
@@ -502,7 +507,7 @@ void WustVision::timerCallback()
     std::lock_guard<std::mutex> lock(img_mutex_);
     src=imgframe_.img.clone();
   }
- 
+  dumpTargetToFile(target,"/tmp/target_status.txt");
   drawreprojec(imgframe_, target_info,target,state);
 }
 }
