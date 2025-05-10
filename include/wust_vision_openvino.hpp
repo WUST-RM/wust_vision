@@ -1,7 +1,11 @@
 #include "driver/hik.hpp"
 #include "type/image.hpp"
 #include "detect/openvino.hpp"
+#include "type/type.hpp"
 #include "yaml-cpp/yaml.h"
+#include "common/gobal.hpp"
+#include "driver/serial.hpp"
+#include <opencv2/core/mat.hpp>
 class WustVision {
 public:
     WustVision();
@@ -17,8 +21,9 @@ public:
     void DetectCallback(
         const std::vector<ArmorObject>& objs, int64_t timestamp_nanosec, const cv::Mat& src_img);
     void stop();
-    void armorsCallback(const Armors& armors_);
+    void armorsCallback(const Armors& armors_,const cv::Mat& src_img);
     void initTF();
+    void initSerial();
     void initTracker(const YAML::Node& config);
     void timerCallback();
     void startTimer();
@@ -39,7 +44,7 @@ public:
     std::atomic<int> infer_running_count_{0};
     int max_infer_running_ ; 
     std::mutex callback_mutex_;
-    std::unique_ptr<MonoMeasureTool> measure_tool_;
+    
     int detect_color_;
     std::string vision_logger="openvino_vision";
     std::atomic<bool> run_loop_{false};
@@ -51,11 +56,13 @@ public:
     std::unique_ptr<Tracker> tracker_;
     Target armor_target;
     std::mutex armor_target_mutex_;
+    Armors armors_gobal;
+    std::mutex armors_gobal_mutex_;
     double s2qx_, s2qy_, s2qz_, s2qyaw_, s2qr_, s2qd_zc_;
     double r_x_, r_y_, r_z_, r_yaw_;
     double lost_time_thres_;
     
-    TfTree tf_tree_;
+    
     std::string target_frame_;
     std::chrono::steady_clock::time_point last_time_;
     double dt_;
@@ -63,4 +70,6 @@ public:
     std::mutex img_mutex_;
     cv::VideoWriter video_writer_;  // 新增成员变量
     bool is_recording_;
+    Serial serial_;
+    Eigen::Matrix3d imu_to_camera_;
 };

@@ -82,6 +82,8 @@ void Tracker::update(const Armors &armors_msg) noexcept {
           } else {
             tracked_armors_num = ArmorsNum::NORMAL_4;
           }
+        }else {
+          position_diff_ = position_diff;
         }
       }
     }
@@ -94,6 +96,7 @@ void Tracker::update(const Armors &armors_msg) noexcept {
       target_state = ekf->update(measurement);
     } else if (same_id_armors_count == 1 && yaw_diff > max_match_yaw_diff_) {
       handleArmorJump(same_id_armor);
+      yaw_diff_=yaw_diff;
     }else {
       WUST_DEBUG(tracker_logger)<<"No matched armor found!";
     }

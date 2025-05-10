@@ -1,6 +1,6 @@
 debug:
   debug_mode: true
-  show_armor: true
+  show_armor: false
   show_target: true
 
 max_infer_running: 4

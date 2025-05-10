@@ -94,14 +94,20 @@ public:
   bool reprojectArmorsCorners(
     Armors & armors,
     Target_info & target_info);
+
   
   bool reprojectArmorCorners(
     const Armor & armor,
     std::vector<cv::Point2f> & image_points);
+    bool reprojectArmorCorners_raw(
+      const Armor & armor,
+      std::vector<cv::Point2f> & image_points);
 
 
     static std::vector<cv::Point3f> SMALL_ARMOR_3D_POINTS;
     static std::vector<cv::Point3f> BIG_ARMOR_3D_POINTS;
+    static std::vector<cv::Point3f> SMALL_ARMOR_3D_POINTS_NET;
+    static std::vector<cv::Point3f> BIG_ARMOR_3D_POINTS_NET;
     cv::Mat camera_intrinsic_;   // 相机内参3*3
     cv::Mat camera_distortion_;  // 相机畸变参数1*5
 

@@ -24,6 +24,8 @@ public:
     void startTimer();
     void stopTimer();
     Armors visualizeTargetProjection(Target armor_target_);
+
+    void startHttpServer();
     
 
 
@@ -59,4 +61,6 @@ public:
     double dt_;
     imgframe imgframe_;
     std::mutex img_mutex_;
+
+
 };

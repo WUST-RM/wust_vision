@@ -291,26 +291,111 @@ OpenVino::OpenVino(
       thread_pool_->waitUntilEmpty();
     }
   }
-  void OpenVino::extractNumberImage(const cv::Mat & src, ArmorObject & armor)
-{
-  // 光条长度和装甲板尺寸参数
-  const int light_length = 12;
-  const int warp_height = 28;
-  const int small_armor_width = 32;
-  const int large_armor_width = 54;
-  const cv::Size roi_size(20, 28);
+//   void OpenVino::extractNumberImage(const cv::Mat & src, ArmorObject & armor)
+// {
+//   // 光条长度和装甲板尺寸参数
+//   const int light_length = 12;
+//   const int warp_height = 28;
+//   const int small_armor_width = 32;
+//   const int large_armor_width = 54;
+//   const cv::Size roi_size(20, 28);
 
-  // 判断装甲板类型
-  bool is_large = (armor.number == ArmorNumber::NO1 || armor.number == ArmorNumber::BASE);
+//   // 判断装甲板类型
+//   bool is_large = (armor.number == ArmorNumber::NO1 || armor.number == ArmorNumber::BASE);
 
-  // 计算外接矩形并扩展
+//   // 计算外接矩形并扩展
+//   std::vector<cv::Point2f> pts_vec(std::begin(armor.pts), std::end(armor.pts));
+//   cv::Rect bbox = cv::boundingRect(pts_vec);
+
+
+
+//   int new_width = static_cast<int>(bbox.width * expand_ratio_w_);
+//   int new_height = static_cast<int>(bbox.height * expand_ratio_h_);
+//   int new_x = static_cast<int>(bbox.x - (new_width - bbox.width) / 2);
+//   int new_y = static_cast<int>(bbox.y - (new_height - bbox.height) / 2);
+
+//   // 保证不越界
+//   new_x = std::max(new_x, 0);
+//   new_y = std::max(new_y, 0);
+
+//   if (new_x + new_width > src.cols) new_width = src.cols - new_x;
+//   if (new_y + new_height > src.rows) new_height = src.rows - new_y;
+
+//   armor.new_x = new_x;
+//   armor.new_y = new_y;
+
+//   cv::Rect expanded_rect(new_x, new_y, new_width, new_height);
+//   cv::Mat litroi = src(expanded_rect).clone();
+//   cv::Mat litroi_color = src(expanded_rect).clone();
+//   cv::cvtColor(litroi, litroi, cv::COLOR_RGB2GRAY);
+
+
+//   cv::Mat  litroi_gray = litroi.clone();
+//   armor.whole_gray_img = litroi_gray;
+
+//   cv::threshold(litroi, litroi, binary_thres_, 255, cv::THRESH_BINARY | cv::THRESH_OTSU);
+
+
+//   // === 装甲板透视变换 ===
+//   cv::Point2f lights_vertices[4] = {armor.pts[0], armor.pts[1], armor.pts[2], armor.pts[3]};
+
+//   const int top_light_y = (warp_height - light_length) / 2 - 1;
+//   const int bottom_light_y = top_light_y + light_length;
+//   const int warp_width = is_large ? large_armor_width : small_armor_width;
+
+//   cv::Point2f target_vertices[4] = {
+//     cv::Point(0, bottom_light_y),
+//     cv::Point(0, top_light_y),
+//     cv::Point(warp_width - 1, top_light_y),
+//     cv::Point(warp_width - 1, bottom_light_y),
+//   };
+
+//   cv::Mat number_image;
+//   auto rotation_matrix = cv::getPerspectiveTransform(lights_vertices, target_vertices);
+//   cv::warpPerspective(src, number_image, rotation_matrix, cv::Size(warp_width, warp_height));
+
+
+  
+
+//   // 获取 ROI（中心字符区域）
+//   number_image = number_image(cv::Rect(cv::Point((warp_width - roi_size.width) / 2, 0), roi_size));
+
+//   // 灰度 + 二值化
+//   cv::cvtColor(number_image, number_image, cv::COLOR_RGB2GRAY);
+//   cv::threshold(number_image, number_image,0 , 255, cv::THRESH_BINARY | cv::THRESH_OTSU);
+
+//   // 上下翻转
+//   cv::Mat flipped_image;
+//   cv::flip(number_image, flipped_image, 0);
+  
+
+//   armor.number_img = flipped_image;
+//   armor.whole_binary_img = litroi;
+//   armor.whole_rgb_img = litroi_color;
+
+//   cv::imshow("number_image", flipped_image);
+//   cv::waitKey(1);
+  
+  
+// }
+void OpenVino::extractNumberImage(const cv::Mat & src, ArmorObject & armor)  {
+  // Light length in image
+  static const int light_length = 12;
+  // Image size after warp
+  static const int warp_height = 28;
+  static const int small_armor_width = 32;
+  static const int large_armor_width = 54;
+  // Number ROI size
+  static const cv::Size roi_size(20, 28);
+  static const cv::Size input_size(28, 28);
+
   std::vector<cv::Point2f> pts_vec(std::begin(armor.pts), std::end(armor.pts));
   cv::Rect bbox = cv::boundingRect(pts_vec);
 
-
-
-  int new_width = static_cast<int>(bbox.width * expand_ratio_w_);
-  int new_height = static_cast<int>(bbox.height * expand_ratio_h_);
+  float expand_ratio_w = 2.0f;
+  float expand_ratio_h = 1.5f;
+  int new_width = static_cast<int>(bbox.width * expand_ratio_w);
+  int new_height = static_cast<int>(bbox.height * expand_ratio_h);
   int new_x = static_cast<int>(bbox.x - (new_width - bbox.width) / 2);
   int new_y = static_cast<int>(bbox.y - (new_height - bbox.height) / 2);
 
@@ -334,48 +419,38 @@ OpenVino::OpenVino(
   armor.whole_gray_img = litroi_gray;
 
   cv::threshold(litroi, litroi, binary_thres_, 255, cv::THRESH_BINARY | cv::THRESH_OTSU);
-
-
-  // === 装甲板透视变换 ===
-  cv::Point2f lights_vertices[4] = {armor.pts[0], armor.pts[1], armor.pts[2], armor.pts[3]};
+  // Warp perspective transform
+  cv::Point2f lights_vertices[4] = {
+    armor.pts[0], armor.pts[1], armor.pts[2], armor.pts[3]};
 
   const int top_light_y = (warp_height - light_length) / 2 - 1;
   const int bottom_light_y = top_light_y + light_length;
-  const int warp_width = is_large ? large_armor_width : small_armor_width;
-
+  const int warp_width = (armor.number == ArmorNumber::NO1 || armor.number == ArmorNumber::BASE) ? small_armor_width : large_armor_width;
   cv::Point2f target_vertices[4] = {
     cv::Point(0, bottom_light_y),
     cv::Point(0, top_light_y),
     cv::Point(warp_width - 1, top_light_y),
     cv::Point(warp_width - 1, bottom_light_y),
   };
-
   cv::Mat number_image;
   auto rotation_matrix = cv::getPerspectiveTransform(lights_vertices, target_vertices);
   cv::warpPerspective(src, number_image, rotation_matrix, cv::Size(warp_width, warp_height));
 
-
-  
-
-  // 获取 ROI（中心字符区域）
+  // Get ROI
   number_image = number_image(cv::Rect(cv::Point((warp_width - roi_size.width) / 2, 0), roi_size));
 
-  // 灰度 + 二值化
+  // Binarize
   cv::cvtColor(number_image, number_image, cv::COLOR_RGB2GRAY);
-  cv::threshold(number_image, number_image,0 , 255, cv::THRESH_BINARY | cv::THRESH_OTSU);
-
-  // 上下翻转
-  cv::Mat flipped_image;
-  cv::flip(number_image, flipped_image, 0);
-  
-
+  cv::threshold(number_image, number_image, 0, 255, cv::THRESH_BINARY | cv::THRESH_OTSU);
+  cv::resize(number_image, number_image, input_size);
+      cv::Mat flipped_image;
+    cv::flip(number_image, flipped_image, 0);
   armor.number_img = flipped_image;
   armor.whole_binary_img = litroi;
   armor.whole_rgb_img = litroi_color;
-
-
-  
-  
+  // cv::imshow("number_image",flipped_image);
+  // cv::waitKey(1);
+  return ;
 }
   std::vector<Light> OpenVino::findLights(const cv::Mat &rgb_img,
     const cv::Mat &binary_img, ArmorObject &armor) noexcept
@@ -431,53 +506,100 @@ OpenVino::OpenVino(
     corner_corrector.correctCorners(armor);
     
   }
-  bool OpenVino::classifyNumber(ArmorObject & armor)
-{
-  static thread_local std::unique_ptr<cv::dnn::Net> thread_net;
+//   bool OpenVino::classifyNumber(ArmorObject & armor)
+// {
+//   static thread_local std::unique_ptr<cv::dnn::Net> thread_net;
 
-  if (!thread_net) {
+//   if (!thread_net) {
+//     thread_net = std::make_unique<cv::dnn::Net>(cv::dnn::readNetFromONNX(classify_model_path_));
+//     if (thread_net->empty()) {
+//       std::cerr << "Failed to load thread-local number classifier model." << std::endl;
+//       return false;
+//     }
+//   }
+
+//   cv::Mat image = armor.number_img.clone();
+//   image = image / 255.0;
+
+//   cv::Mat blob;
+//   cv::dnn::blobFromImage(image, blob);
+
+//   thread_net->setInput(blob);  // ✅ 正确使用线程局部变量
+//   cv::Mat outputs = thread_net->forward();
+
+//   float max_prob = *std::max_element(outputs.begin<float>(), outputs.end<float>());
+//   cv::Mat softmax_prob;
+//   cv::exp(outputs - max_prob, softmax_prob);
+//   float sum = static_cast<float>(cv::sum(softmax_prob)[0]);
+//   softmax_prob /= sum;
+
+//   double confidence;
+//   cv::Point class_id_point;
+//   cv::minMaxLoc(softmax_prob.reshape(1, 1), nullptr, &confidence, nullptr, &class_id_point);
+//   int label_id = class_id_point.x;
+
+//   armor.confidence = confidence;
+
+//   static const std::map<int, ArmorNumber> label_to_armor_number = {
+//     {0, ArmorNumber::NO1}, {1, ArmorNumber::NO2}, {2, ArmorNumber::NO3},
+//     {3, ArmorNumber::NO4}, {4, ArmorNumber::NO5}, {5, ArmorNumber::OUTPOST},
+//     {6, ArmorNumber::SENTRY}, {7, ArmorNumber::BASE}
+//   };
+
+//   if (label_id < 8 && label_to_armor_number.find(label_id) != label_to_armor_number.end()) {
+//     armor.number = label_to_armor_number.at(label_id);
+//     return true;
+//   } else {
+//     armor.confidence = 0;
+//     return false;
+//   }
+// }
+bool OpenVino::classifyNumber(ArmorObject & armor)  {
+  // Normalize
+
+  static thread_local std::unique_ptr<cv::dnn::Net> thread_net;
+    if (!thread_net) {
     thread_net = std::make_unique<cv::dnn::Net>(cv::dnn::readNetFromONNX(classify_model_path_));
     if (thread_net->empty()) {
       std::cerr << "Failed to load thread-local number classifier model." << std::endl;
       return false;
     }
   }
-
   cv::Mat image = armor.number_img.clone();
-  image = image / 255.0;
+  image=image/255.0;
 
+  // Create blob from image
   cv::Mat blob;
   cv::dnn::blobFromImage(image, blob);
+  
+  // Set the input blob for the neural network
+ // mutex_.lock();
+  thread_net->setInput(blob);
 
-  thread_net->setInput(blob);  // ✅ 正确使用线程局部变量
-  cv::Mat outputs = thread_net->forward();
+  // Forward pass the image blob through the model
+  cv::Mat outputs = thread_net->forward().clone();
+ // mutex_.unlock();
 
-  float max_prob = *std::max_element(outputs.begin<float>(), outputs.end<float>());
-  cv::Mat softmax_prob;
-  cv::exp(outputs - max_prob, softmax_prob);
-  float sum = static_cast<float>(cv::sum(softmax_prob)[0]);
-  softmax_prob /= sum;
-
+  // Decode the output
   double confidence;
   cv::Point class_id_point;
-  cv::minMaxLoc(softmax_prob.reshape(1, 1), nullptr, &confidence, nullptr, &class_id_point);
+  minMaxLoc(outputs.reshape(1, 1), nullptr, &confidence, nullptr, &class_id_point);
   int label_id = class_id_point.x;
 
   armor.confidence = confidence;
-
-  static const std::map<int, ArmorNumber> label_to_armor_number = {
+    static const std::map<int, ArmorNumber> label_to_armor_number = {
     {0, ArmorNumber::NO1}, {1, ArmorNumber::NO2}, {2, ArmorNumber::NO3},
     {3, ArmorNumber::NO4}, {4, ArmorNumber::NO5}, {5, ArmorNumber::OUTPOST},
     {6, ArmorNumber::SENTRY}, {7, ArmorNumber::BASE}
   };
-
-  if (label_id < 8 && label_to_armor_number.find(label_id) != label_to_armor_number.end()) {
+    if (label_id < 8 && label_to_armor_number.find(label_id) != label_to_armor_number.end()) {
     armor.number = label_to_armor_number.at(label_id);
     return true;
   } else {
     armor.confidence = 0;
     return false;
   }
+  
 }
 
 void OpenVino::setCallback(DetectorCallback callback) { infer_callback_ = callback; }

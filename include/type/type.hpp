@@ -64,6 +64,7 @@ struct GridAndStride
 enum class ArmorColor { BLUE = 0, RED, NONE, PURPLE };
 
 enum class ArmorNumber { SENTRY = 0, NO1, NO2, NO3, NO4, NO5, OUTPOST, BASE ,UNKNOWN};
+
 template <>
 struct fmt::formatter<ArmorNumber> {
     constexpr auto parse(fmt::format_parse_context& ctx) -> decltype(ctx.begin()) {
@@ -83,7 +84,8 @@ struct fmt::formatter<ArmorNumber> {
     };
 
 typedef struct ArmorObject
-{
+{ 
+  
   ArmorColor color;
   ArmorNumber number;
   float prob;
@@ -102,6 +104,7 @@ typedef struct ArmorObject
 
   std::vector<Light> lights;
 
+
   double new_x;
   double new_y;
   bool is_ok =false;
@@ -110,18 +113,21 @@ typedef struct ArmorObject
 
 } ArmorObject;
 
-constexpr const char * K_ARMOR_NAMES[] = {"guard", "1", "2", "3", "4", "5", "outpost", "base"};
+constexpr const char * K_ARMOR_NAMES[] = {"sentry", "1", "2", "3", "4", "5", "outpost", "base"};
 
 
 struct Armor
 { 
+  
   ArmorNumber number;
   std::string type;
+  
   Position pos;
   tf2::Quaternion ori;
   Position target_pos;
   tf2::Quaternion target_ori;
   float distance_to_image_center;
+  float yaw;
 
 };
 struct Armors
@@ -139,16 +145,16 @@ struct Target
   int armors_num=0;
 
 
-  Position position_;
-  Position velocity_;
-  float yaw;
-  float v_yaw;
-  float radius_1;
-  float radius_2;
-  float d_za;
-  float d_zc;
-  // float yaw_diff;
-  // float position_diff;
+  Position position_=Position();
+  Position velocity_=Position();
+  float yaw=0;
+  float v_yaw=0;
+  float radius_1=0.24;
+  float radius_2=0.24;
+  float d_za=0;
+  float d_zc=0;
+  float yaw_diff;
+  float position_diff;
 
   void clear() {
     id = ArmorNumber::UNKNOWN;
@@ -163,8 +169,8 @@ struct Target
     radius_2 = 0.0;
     d_zc = 0.0;
     d_za = 0.0;
-    // yaw_diff = 0.0;
-    // position_diff = 0.0;
+    yaw_diff = 0.0;
+    position_diff = 0.0;
 }
 
 };

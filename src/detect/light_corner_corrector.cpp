@@ -68,8 +68,11 @@ void LightCornerCorrector::correctCorners(ArmorObject& armor) noexcept {
         light.top.y += zero_y;
         light.center.x += zero_x;
         light.center.y += zero_y;
+
         light.bottom.x += zero_x;
         light.bottom.y += zero_y;
+        light.axis.x += zero_x;
+        light.axis.y += zero_y;
 
 
     }
@@ -79,6 +82,7 @@ void LightCornerCorrector::correctCorners(ArmorObject& armor) noexcept {
 
     armor.pts_binary.clear();
     cv::Point2f armor_center = (armor.pts[0] + armor.pts[1] + armor.pts[2] + armor.pts[3]) * 0.25;
+
 
     // Step 2: 计算每个灯条中心与装甲板中心的距离
     std::vector<std::pair<const Light*, double>> light_distances;
@@ -91,6 +95,13 @@ void LightCornerCorrector::correctCorners(ArmorObject& armor) noexcept {
     std::sort(light_distances.begin(), light_distances.end(), [](const auto& a, const auto& b) {
         return a.second < b.second;
     });
+    if (light_distances.size() >= 2) {
+        const Light* l1 = light_distances[0].first;
+        const Light* l2 = light_distances[1].first;
+    
+        
+    }
+
 
     // Step 4: 构建 candidates，只保留两个灯条的 top/bottom
     std::vector<cv::Point2f> candidates;
@@ -98,6 +109,7 @@ void LightCornerCorrector::correctCorners(ArmorObject& armor) noexcept {
         const auto* light = light_distances[i].first;
         candidates.push_back(light->top);
         candidates.push_back(light->bottom);
+        
     }
 
 
@@ -160,6 +172,7 @@ void LightCornerCorrector::correctCorners(ArmorObject& armor) noexcept {
         armor.pts_binary.clear();
         
     }
+
 
   }
    

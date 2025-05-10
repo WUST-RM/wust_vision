@@ -60,6 +60,8 @@ public:
 
   double d_za, another_r;
   double d_zc;
+  float yaw_diff_;
+  float position_diff_;
 
 private:
   void initEKF(const Armor &a) noexcept;

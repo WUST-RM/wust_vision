@@ -15,6 +15,10 @@ add_executable(${PROJECT_NAME}_openvino
   src/detect/light_corner_corrector.cpp
   src/tracker/tracker.cpp
   src/tracker/extended_kalman_filter.cpp
+  src/driver/serial.cpp
+  src/common/gobal.cpp
+  src/driver/crc8_crc16.cpp
+
 
 )
 add_executable(${PROJECT_NAME}_trt
@@ -27,6 +31,11 @@ add_executable(${PROJECT_NAME}_trt
   src/detect/light_corner_corrector.cpp
   src/tracker/tracker.cpp
   src/tracker/extended_kalman_filter.cpp
+  src/driver/serial.cpp
+  src/common/gobal.cpp
+  src/driver/crc8_crc16.cpp
+
+
 
 )
 include_directories(
@@ -60,7 +69,7 @@ target_include_directories(${PROJECT_NAME}_openvino PUBLIC
   ${EIGEN3_INCLUDE_DIRS}
   ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${CMAKE_CURRENT_SOURCE_DIR}/hikSDK/include
-  ${PROJECT_SOURCE_DIR}/thirdparty/matplotlibcpp
+
   ${Python3_INCLUDE_DIRS}
 
 
@@ -71,7 +80,7 @@ target_include_directories(${PROJECT_NAME}_trt PUBLIC
   ${EIGEN3_INCLUDE_DIRS}
   ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${CMAKE_CURRENT_SOURCE_DIR}/hikSDK/include
-  ${PROJECT_SOURCE_DIR}/thirdparty/matplotlibcpp
+
   ${Python3_INCLUDE_DIRS}
 
 
@@ -116,6 +125,8 @@ target_link_libraries(${PROJECT_NAME}_openvino
   fmt::fmt
   yaml-cpp
   ${Python3_LIBRARIES}
+
+  
 
 
  

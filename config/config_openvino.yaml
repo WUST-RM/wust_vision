@@ -5,7 +5,7 @@ debug:
 
 max_infer_running: 4
 
-classify_model_path: "/home/hy/wust_vision/model/mlp.onnx"
+classify_model_path: "/home/hy/wust_vision/model/lenet.onnx"
 classify_label_path: "/home/hy/wust_vision/model/label.txt"
 
 
@@ -30,8 +30,8 @@ camera:
   camera_info_path: "/home/hy/wust_vision/config/camera_info.yaml"
   serial: "" 
   acquisition_frame_rate: 160
-  exposure_time: 3500
-  gain: 16.0
+  exposure_time: 2500
+  gain: 12.0
   adc_bit_depth: "Bits_8"
   pixel_format: "BayerRG8"
 
@@ -39,18 +39,18 @@ detect_color: 0
 
 tracker:
   target_frame: "odom"
-  max_match_distance: 0.5
-  max_match_yaw_diff: 1.0
+  max_match_distance: 0.4
+  max_match_yaw_diff: 0.7
   tracking_thres: 5
   lost_time_thres: 0.2
   ekf:
-    s2qx: 0.1
-    s2qy: 0.1
-    s2qz: 0.2
-    s2qyaw: 6.0
-    s2qr: 80.0
+    s2qx: 0.07
+    s2qy: 0.07
+    s2qz: 0.15
+    s2qyaw: 4.0
+    s2qr: 30.0
     s2qd_zc: 1000.0
-    r_x: 3e-3
-    r_y: 3e-3
-    r_z: 5e-3
+    r_x: 3e-5
+    r_y: 3e-5
+    r_z: 3e-3
     r_yaw: 5e-3

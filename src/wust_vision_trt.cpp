@@ -147,6 +147,7 @@ void WustVision::startTimer()
     });
 }
 
+
 void WustVision::initTF()
 {
     // odom 是世界坐标系的根节点
@@ -508,7 +509,8 @@ void WustVision::timerCallback()
     src=imgframe_.img.clone();
   }
   dumpTargetToFile(target,"/tmp/target_status.txt");
-  drawreprojec(imgframe_, target_info,target,state);
+  drawreprojec(imgframe_, target_info, target, state);
+
 }
 }
 

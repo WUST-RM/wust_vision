@@ -9,7 +9,13 @@
 #include <shared_mutex>
 #include <unordered_set>
 #include "fmt/format.h"
-
+#include "Eigen/Dense"
+struct rpy
+{
+    float roll;
+    float pitch;
+    float yaw;
+};
 namespace tf2 {
 
 class Quaternion {
@@ -44,6 +50,25 @@ public:
         y = cr * sp * cy + sr * cp * sy;
         z = cr * cp * sy - sr * sp * cy;
     }
+    void getRPY(double& roll, double& pitch, double& yaw) const {
+        // roll (x-axis rotation)
+        double sinr_cosp = 2.0 * (w * x + y * z);
+        double cosr_cosp = 1.0 - 2.0 * (x * x + y * y);
+        roll = std::atan2(sinr_cosp, cosr_cosp);
+    
+        // pitch (y-axis rotation)
+        double sinp = 2.0 * (w * y - z * x);
+        if (std::abs(sinp) >= 1)
+            pitch = std::copysign(M_PI / 2, sinp); // use 90 degrees if out of range
+        else
+            pitch = std::asin(sinp);
+    
+        // yaw (z-axis rotation)
+        double siny_cosp = 2.0 * (w * z + x * y);
+        double cos_y_cosp = 1.0 - 2.0 * (y * y + z * z);
+        yaw = std::atan2(siny_cosp, cos_y_cosp);
+    }
+    
     
     
 
@@ -52,6 +77,28 @@ public:
 inline double getYawFromQuaternion(const Quaternion &q) {
     auto R = q.toRotationMatrix();
     return std::atan2(R(1, 0), R(0, 0));  // yaw = atan2(r21, r11)
+}
+inline rpy getRPYFromQuaternion(const Quaternion &q) {
+    rpy result;
+
+    // roll (x-axis rotation)
+    double sinr_cosp = 2.0 * (q.w * q.x + q.y * q.z);
+    double cosr_cosp = 1.0 - 2.0 * (q.x * q.x + q.y * q.y);
+    result.roll = static_cast<float>(std::atan2(sinr_cosp, cosr_cosp));
+
+    // pitch (y-axis rotation)
+    double sinp = 2.0 * (q.w * q.y - q.z * q.x);
+    if (std::abs(sinp) >= 1.0)
+        result.pitch = static_cast<float>(std::copysign(M_PI / 2, sinp));
+    else
+        result.pitch = static_cast<float>(std::asin(sinp));
+
+    // yaw (z-axis rotation)
+    double siny_cosp = 2.0 * (q.w * q.z + q.x * q.y);
+    double cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z);
+    result.yaw = static_cast<float>(std::atan2(siny_cosp, cosy_cosp));
+
+    return result;
 }
 class Matrix3x3 {
 public:
@@ -130,6 +177,14 @@ public:
             m[0][2], m[1][2], m[2][2]
         );
     }
+    Eigen::Matrix3d toEigen() const {
+        Eigen::Matrix3d mat;
+        for (int i = 0; i < 3; ++i)
+          for (int j = 0; j < 3; ++j)
+            mat(i, j) = static_cast<double>(m[i][j]);
+        return mat;
+      }
+      
 };
 
 inline std::ostream& operator<<(std::ostream& os, const Quaternion& q) {
@@ -391,10 +446,5 @@ private:
         return Transform::fromMatrix(inv);
     }
 };
-struct rpy
-{
-    float roll;
-    float pitch;
-    float yaw;
-};
+
 #endif // TF2_HPP
