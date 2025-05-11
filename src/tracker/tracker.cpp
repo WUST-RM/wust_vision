@@ -32,6 +32,7 @@ void Tracker::init(const Armors &armors_msg) noexcept {
     if (armor.distance_to_image_center < min_distance) {
       min_distance = armor.distance_to_image_center;
       tracked_armor = armor;
+      retype=retypetotracker(armor.number);
       type=armor.type;
     }
   }
@@ -60,9 +61,11 @@ void Tracker::update(const Armors &armors_msg) noexcept {
     double min_position_diff = DBL_MAX;
     double yaw_diff = DBL_MAX;
 
+
     for ( auto &armor : armors_msg.armors) {
+   
     
-      if (armor.type == type) {
+      if (retypetotracker(armor.number) == retype) {
         same_id_armor = armor;
         same_id_armors_count++;
         //WUST_INFO(tracker_logger)<<"Same ID armor found!"<<fmt::format("count: {}\n", same_id_armors_count);

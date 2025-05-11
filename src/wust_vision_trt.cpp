@@ -44,7 +44,7 @@ void WustVision::stop() {
     std::this_thread::sleep_for(std::chrono::seconds(1));
     camera_.stopCamera();  
     detector_.reset();
-  
+    serial_.stopThread();
   
   
     measure_tool_.reset();
@@ -95,6 +95,7 @@ void WustVision::init()
     measure_tool_ = std::make_unique<MonoMeasureTool>(camera_info_path);
 
     initTF();
+    initSerial();
     initTracker(config["tracker"]);
 
     detect_color_ = config["detect_color"].as<int>(0);
@@ -111,7 +112,7 @@ void WustVision::init()
         std::placeholders::_2, std::placeholders::_3));
 
     thread_pool_ = std::make_unique<ThreadPool>(std::thread::hardware_concurrency(), 100);
-
+    solver_=std::make_unique<Solver>(config);
     std::string camera_serial = config["camera"]["serial"].as<std::string>("");
     if (!camera_.initializeCamera(camera_serial)) {
         WUST_ERROR(vision_logger) << "Camera initialization failed.";
@@ -149,12 +150,14 @@ void WustVision::startTimer()
 
 
 void WustVision::initTF()
-{
+{  
     // odom 是世界坐标系的根节点
     tf_tree_.setTransform("", "odom", createTf(0, 0, 0, tf2::Quaternion(0, 0, 0, 1)));
 
     // camera 相对于 odom，设置 odom -> camera 的变换
-    tf_tree_.setTransform("odom", "camera", createTf(0, 0, 0, tf2::Quaternion(0, 0, 0, 1)));
+    tf_tree_.setTransform("odom", "gimbal_odom", createTf(0, 0, 0, tf2::Quaternion(0, 0, 0, 1)));
+    tf_tree_.setTransform("gimbal_odom", "gimbal_link", createTf(0, 0, 0, tf2::Quaternion(0, 0, 0, 1)));
+    tf_tree_.setTransform("gimbal_link", "camera", createTf(0, 0, 0, tf2::Quaternion(0, 0, 0, 1)));
 
     // camera_optical_frame 相对于 camera，设置 camera -> camera_optical_frame 的旋转变换
     double yaw = -M_PI / 2;
@@ -165,8 +168,16 @@ void WustVision::initTF()
     orientation.setRPY(roll, pitch, yaw);
     tf_tree_.setTransform("camera", "camera_optical_frame", createTf(0, 0, 0, orientation));
 }
+void WustVision::initSerial()
+{
+  SerialPortConfig cfg{ /*baud*/115200, /*csize*/8,
+    boost::asio::serial_port_base::parity::none,
+    boost::asio::serial_port_base::stop_bits::one,
+    boost::asio::serial_port_base::flow_control::none };
 
-
+  serial_.init( "/dev/ttyACM0",cfg);
+  serial_.startThread();
+}
 void WustVision::initTracker(const YAML::Node& config)
 {
     // 目标参考坐标系
@@ -248,18 +259,26 @@ void WustVision::initTracker(const YAML::Node& config)
     tracker_->ekf = std::make_unique<RobotStateEKF>(f, h, u_q, u_r, p0);
 }
 
-void WustVision::armorsCallback(const Armors& armors_) {
+void WustVision::armorsCallback(const Armors& armors_,const cv::Mat& src_img) {
     if (armors_.timestamp <= last_time_) {
         WUST_WARN(vision_logger) << "Received out-of-order armor data, discarded.";
         return;
     }
+    if(debug_mode_)
+  {
+      std::lock_guard<std::mutex> target_lock(img_mutex_);
+      imgframe_.img=src_img.clone();
+      imgframe_.timestamp=armors_.timestamp;
+      std::lock_guard<std::mutex> armor_gobal_lock(armors_gobal_mutex_);
+      armors_gobal=armors_;
+  }
     
     Target target_;
     auto time = armors_.timestamp;
     target_.timestamp = time;
     target_.frame_id = target_frame_;
     target_.type = tracker_->type;
-
+  
     // Update tracker
     if (tracker_->tracker_state == Tracker::LOST) {
         tracker_->init(armors_);
@@ -273,7 +292,7 @@ void WustVision::armorsCallback(const Armors& armors_) {
             tracker_->ekf->setPredictFunc(Predict{dt_, MotionModel::CONSTANT_VEL_ROT});
         }
         tracker_->update(armors_);
-
+  
         if (tracker_->tracker_state == Tracker::DETECTING) {
             target_.tracking = false;
         } else if (tracker_->tracker_state == Tracker::TRACKING ||
@@ -296,19 +315,22 @@ void WustVision::armorsCallback(const Armors& armors_) {
             target_.radius_2 = tracker_->another_r;
             target_.d_zc = state(9);
             target_.d_za = tracker_->d_za;
+            
         }
     }
-
-   
+  
+    target_.yaw_diff=tracker_->yaw_diff_;
+    target_.position_diff=tracker_->position_diff_;
     {
         std::lock_guard<std::mutex> target_lock(armor_target_mutex_);
         armor_target = target_; 
     }
-
+  
    
-
+  
     last_time_ = time;
-}
+  }
+  
 
 Armors WustVision::visualizeTargetProjection(Target armor_target_)
   { 
@@ -360,7 +382,7 @@ Armors WustVision::visualizeTargetProjection(Target armor_target_)
                 .type = armor_target_.type,
                 .pos = pos,
                 .ori = ori,
-                .target_pos = {xc, yc, zc},
+                //.target_pos = {xc, yc, zc},
                 .distance_to_image_center = 0.0f
             });
         }
@@ -381,6 +403,8 @@ void WustVision::DetectCallback(
     return;
   } 
     Armors armors;
+    armors.timestamp=std::chrono::time_point_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::time_point(std::chrono::nanoseconds(timestamp_nanosec)));
+    armors.frame_id="camera_optical_frame";
     for (auto & obj : objs) {
     if (detect_color_ == 0 && obj.color != ArmorColor::RED) {
         continue;
@@ -444,14 +468,14 @@ void WustVision::DetectCallback(
         continue;
     }
 }
-    armors.timestamp=std::chrono::time_point_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::time_point(std::chrono::nanoseconds(timestamp_nanosec)));
-    armors.frame_id="camera_optical_frame";
+    
     for (auto& armor : armors.armors) {
       try {
           Transform tf(armor.pos, armor.ori);
           auto pose_intargetframe =tf_tree_.transform(tf, armors.frame_id, target_frame_);
           armor.target_pos = pose_intargetframe.position;
           armor.target_ori = pose_intargetframe.orientation;
+          armor.yaw=getRPYFromQuaternion(armor.target_ori).yaw;
       } catch (const std::exception& e) {
           WUST_ERROR(vision_logger) << "Can't find transform from " << armors.frame_id << " to " << target_frame_ << ": " << e.what();
           return;
@@ -459,48 +483,73 @@ void WustVision::DetectCallback(
   }   
 
     infer_running_count_--;
-if(debug_mode_)
-{
-    std::lock_guard<std::mutex> target_lock(img_mutex_);
-    imgframe_.img=src_img.clone();
-    imgframe_.timestamp=armors.timestamp;
-}
-   thread_pool_->enqueue([this, armors = std::move(armors)]() {
-      this->armorsCallback(armors);
+
+   thread_pool_->enqueue([this, armors = std::move(armors), src_img]() {
+      this->armorsCallback(armors,src_img);
   });
-  if(debug_mode_&&show_armor_)
-  {
-  drawresult(src_img, objs,timestamp_nanosec);
-  }
+//   if(debug_mode_&&show_armor_)
+//   {
+//   drawresult(src_img, objs,timestamp_nanosec);
+//   }
     
 }
 void WustVision::timerCallback()
 { 
+  
   if(!is_inited_)return;
-    if(debug_mode_&&show_target_)
-    {
+  serial_.send_robot_cmd_data_.data.gimbal.pitch=0;
   Target target;
     {
         std::lock_guard<std::mutex> lock(armor_target_mutex_);
         target = armor_target; 
     }
-  Armors armor_data=visualizeTargetProjection(target);
- 
-  for (auto& armor : armor_data.armors) {
-    try {
-      Transform tf(armor.pos, armor.ori);
-      auto pose_in_target_frame = tf_tree_.transform(tf, armor_data.frame_id, "camera_optical_frame");
-      armor.target_pos = pose_in_target_frame.position;
-      armor.target_ori = pose_in_target_frame.orientation;
-    } catch (const std::exception& e) {
-      WUST_ERROR(vision_logger) << "Can't find transform from " << armor_data.frame_id << " to " << target_frame_ << ": " << e.what();
-      continue;
+    GimbalCmd gimbal_cmd;
+    if(target.id!=ArmorNumber::UNKNOWN)
+    {
+      if (target.tracking) {
+        try {
+        auto now=std::chrono::steady_clock::now();
+        gimbal_cmd=solver_->solve(target, now);
+        serial_.transformGimbalCmd(gimbal_cmd);
+        } catch (...) {
+        WUST_ERROR(vision_logger)<<"solver error";
+        serial_.transformGimbalCmd(gimbal_cmd);
+        }
+        }else {
+          serial_.transformGimbalCmd(gimbal_cmd);
+        }
+    }else {
+      serial_.transformGimbalCmd(gimbal_cmd);
     }
-
+      
     
-  }
+    
+    
+
+  
+    if(debug_mode_&&show_target_)
+    {
+  
+    Armors armor_data=visualizeTargetProjection(target);
+ 
+    for (auto& armor : armor_data.armors) {
+      try {
+        Transform tf(armor.pos, armor.ori);
+        auto pose_in_target_frame = tf_tree_.transform(tf, armor_data.frame_id, "camera_optical_frame");
+        armor.target_pos = pose_in_target_frame.position;
+        armor.target_ori = pose_in_target_frame.orientation;
+      } catch (const std::exception& e) {
+        WUST_ERROR(vision_logger) << "Can't find transform from " << armor_data.frame_id << " to " << target_frame_ << ": " << e.what();
+        continue;
+      }
+
+      
+    }
   Target_info target_info;
-  measure_tool_->reprojectArmorsCorners(armor_data,target_info );
+  target_info.select_id=gimbal_cmd.select_id;
+  //std::cout<<"select_id:"<<gimbal_cmd.select_id<<std::endl;
+  
+  if(!measure_tool_->reprojectArmorsCorners(armor_data,target_info ))return;
        
   Tracker::State state=tracker_->tracker_state;
   cv::Mat src;
@@ -508,10 +557,20 @@ void WustVision::timerCallback()
     std::lock_guard<std::mutex> lock(img_mutex_);
     src=imgframe_.img.clone();
   }
+   
   dumpTargetToFile(target,"/tmp/target_status.txt");
-  drawreprojec(imgframe_, target_info, target, state);
+  drawreprojec(imgframe_, target_info,target,state,gimbal_cmd);
 
 }
+if(debug_mode_&&show_armor_)
+   {
+    Armors armors;
+  {
+    std::lock_guard<std::mutex> lock(armors_gobal_mutex_);
+    armors=armors_gobal;
+  }
+  drawresult(imgframe_, armors);
+  }
 }
 
 void WustVision::processImage(const ImageFrame& frame) {

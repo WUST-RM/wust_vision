@@ -6,6 +6,7 @@
 #include "common/gobal.hpp"
 #include "driver/serial.hpp"
 #include <opencv2/core/mat.hpp>
+#include "control/armor_solver.hpp"
 class WustVision {
 public:
     WustVision();
@@ -45,7 +46,7 @@ public:
     int max_infer_running_ ; 
     std::mutex callback_mutex_;
     
-    int detect_color_;
+    
     std::string vision_logger="openvino_vision";
     std::atomic<bool> run_loop_{false};
     bool debug_mode_ = false;
@@ -68,8 +69,9 @@ public:
     double dt_;
     imgframe imgframe_;
     std::mutex img_mutex_;
-    cv::VideoWriter video_writer_;  // 新增成员变量
+    cv::VideoWriter video_writer_;  
     bool is_recording_;
     Serial serial_;
-    Eigen::Matrix3d imu_to_camera_;
+    std::unique_ptr<Solver> solver_;
+
 };

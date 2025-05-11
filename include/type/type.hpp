@@ -64,7 +64,30 @@ struct GridAndStride
 enum class ArmorColor { BLUE = 0, RED, NONE, PURPLE };
 
 enum class ArmorNumber { SENTRY = 0, NO1, NO2, NO3, NO4, NO5, OUTPOST, BASE ,UNKNOWN};
-
+inline int retypetotracker(ArmorNumber a)
+{
+  switch (a) {
+    case ArmorNumber::SENTRY:
+      return 0;
+    case ArmorNumber::NO1:
+      return 1;
+    case ArmorNumber::NO2:
+      return 0;
+    case ArmorNumber::NO3:
+      return 0;
+    case ArmorNumber::NO4:
+      return 0;
+    case ArmorNumber::NO5:
+      return 0;
+    case ArmorNumber::OUTPOST:
+      return 2;
+    case ArmorNumber::BASE:
+      return 1;
+    case ArmorNumber::UNKNOWN:
+      return -1;
+  
+  }
+}
 template <>
 struct fmt::formatter<ArmorNumber> {
     constexpr auto parse(fmt::format_parse_context& ctx) -> decltype(ctx.begin()) {
@@ -181,4 +204,14 @@ struct imgframe {
 struct SyncedData {
   Target target;
   imgframe image;
+};
+struct GimbalCmd{
+  std::chrono::steady_clock::time_point timestamp;
+  float pitch=0;
+  float yaw=0;
+  float yaw_diff=0;
+  float pitch_diff=0;
+  float distance=-1;
+  bool fire_advice=false;
+  int select_id=-1;
 };

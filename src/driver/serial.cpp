@@ -1,7 +1,9 @@
 #include "driver/serial.hpp"
 #include <iostream>
+#include "common/gobal.hpp"
 #include "driver/crc8_crc16.hpp"
 #include "common/logger.hpp"
+#include "type/type.hpp"
 Serial::Serial()
 : device_name_(""),
  config_(SerialPortConfig()),
@@ -229,6 +231,55 @@ void Serial::imu_cbk(ReceiveImuData & imu_data)
 
 
     
-   // tf_tree_.setTransform("gimbal_odom", "gimbal_link", gimbal_tf);
+    tf_tree_.setTransform("gimbal_odom", "gimbal_link", gimbal_tf);
     
+}
+void Serial::sendData()
+{
+  WUST_INFO(serial_logger)<< "Start sendData!";
+
+  send_robot_cmd_data_.frame_header.sof = SOF_SEND;
+  send_robot_cmd_data_.frame_header.id = ID_ROBOT_CMD;
+  send_robot_cmd_data_.frame_header.len = sizeof(SendRobotCmdData) - 6;
+  // send_robot_cmd_data_.data.speed_vector.vx = 0;
+  // send_robot_cmd_data_.data.speed_vector.vy = 0;
+  // send_robot_cmd_data_.data.speed_vector.wz = 0;
+  // 添加帧头crc8校验
+  crc8::append_CRC8_check_sum(
+    reinterpret_cast<uint8_t *>(&send_robot_cmd_data_), sizeof(HeaderFrame));
+
+  int retry_count = 0;
+
+  while (running_) {
+    if (!is_usb_ok_) {
+      WUST_WARN(serial_logger)<< "send: usb is not ok! Retry count:" <<retry_count++;
+      std::this_thread::sleep_for(std::chrono::milliseconds(USB_NOT_OK_SLEEP_MS));
+      continue;
+    }
+
+    try {
+      // 整包数据校验
+      // 添加数据段crc16校验
+      crc16::append_CRC16_check_sum(
+        reinterpret_cast<uint8_t *>(&send_robot_cmd_data_), sizeof(SendRobotCmdData));
+
+      // 发送数据
+      std::vector<uint8_t> send_data = toVector(send_robot_cmd_data_);
+      driver_.send(send_data);
+    } catch (const std::exception & ex) {
+      WUST_ERROR(serial_logger)<< "Error sending data: "<< ex.what();
+      is_usb_ok_ = false;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
+}
+void Serial::transformGimbalCmd(GimbalCmd & gimbal_cmd)
+{
+  send_robot_cmd_data_.data.gimbal.yaw=gimbal_cmd.yaw;
+  send_robot_cmd_data_.data.gimbal.pitch=gimbal_cmd.pitch;
+  send_robot_cmd_data_.data.gimbal.distance=gimbal_cmd.distance;
+  send_robot_cmd_data_.data.shoot.pitch_diff=gimbal_cmd.pitch_diff;
+  send_robot_cmd_data_.data.shoot.yaw_diff=gimbal_cmd.yaw_diff;
+  send_robot_cmd_data_.data.shoot.fire=gimbal_cmd.fire_advice;
+  send_robot_cmd_data_.data.debug.detect_color=detect_color_;
 }

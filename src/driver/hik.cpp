@@ -24,6 +24,7 @@ HikCamera::~HikCamera() {
 
 // 初始化相机：枚举设备、创建句柄、打开设备、获取图像信息等
 bool HikCamera::initializeCamera(const std::string& video_path) {
+    if(stop_signal_)return false;
     if (!video_path.empty()) {
         // 视频模式初始化
         is_video_mode_ = true;
@@ -44,7 +45,7 @@ bool HikCamera::initializeCamera(const std::string& video_path) {
          return true;
     }
     MV_CC_DEVICE_INFO_LIST device_list;
-    while (true) {
+    while (!stop_signal_) {
         int n_ret = MV_CC_EnumDevices(MV_USB_DEVICE, &device_list);
         if (n_ret != MV_OK) {
             WUST_WARN(hik_logger) << "Failed to enumerate devices, retrying...";
@@ -57,6 +58,7 @@ bool HikCamera::initializeCamera(const std::string& video_path) {
             break;
         }
     }
+    if(stop_signal_)return false;
 
     int n_ret = MV_CC_CreateHandle(&camera_handle_, device_list.pDeviceInfo[0]);
     if (n_ret != MV_OK) {
@@ -186,6 +188,9 @@ void HikCamera::videoCaptureLoop() {
 }
 
 bool HikCamera::restartCamera() {
+    if (stop_signal_) {
+        return true;
+    }
     if (is_video_mode_) {
         WUST_INFO(hik_logger) << "Restarting video playback...";
         video_cap_.set(cv::CAP_PROP_POS_FRAMES, 0);
@@ -200,7 +205,7 @@ bool HikCamera::restartCamera() {
 
     std::this_thread::sleep_for(std::chrono::seconds(1));
 
-    if (!initializeCamera("")) {
+    if (!initializeCamera("")&&!stop_signal_) {
         WUST_ERROR(hik_logger) << "Failed to re-initialize camera.";
         return false;
     }
@@ -332,7 +337,7 @@ void HikCamera::hikCaptureLoop() {
                 if (std::chrono::duration_cast<std::chrono::seconds>(
                     std::chrono::steady_clock::now() - fail_start_time
                 ).count() > 5) {
-                    if (!restartCamera()) {
+                    if (!restartCamera()&&!stop_signal_) {
                         WUST_ERROR(hik_logger) << "Failed to restart camera after hardware failure.";
                         break;
                     }

@@ -2,12 +2,14 @@
 #include "common/gobal.hpp"
 #include "common/logger.hpp"
 
+#include <iostream>
 #include <mutex>
 #include <opencv2/core/mat.hpp>
 #include <opencv2/highgui.hpp>
 #include <functional>
 #include <string>
 #include "common/tf.hpp"
+#include "control/armor_solver.hpp"
 #include "type/type.hpp"
 #include <csignal>
 WustVision::WustVision()
@@ -71,10 +73,11 @@ void  WustVision::init()
   
   const std::string camera_info_path = config["camera"]["camera_info_path"].as<std::string>();
   measure_tool_=std::make_unique<MonoMeasureTool>(camera_info_path);
- 
+  
   initTF();
+  
   initSerial();
-    initTracker(config["tracker"]);
+  initTracker(config["tracker"]);
   detect_color_ = config["detect_color"].as<int>(0);
   max_infer_running_ = config["max_infer_running"].as<int>(4);
   detector_ = std::make_unique<OpenVino>(
@@ -86,6 +89,7 @@ void  WustVision::init()
       &WustVision::DetectCallback, this, std::placeholders::_1,
       std::placeholders::_2, std::placeholders::_3));
   thread_pool_ = std::make_unique<ThreadPool>(std::thread::hardware_concurrency(), 100);
+  solver_=std::make_unique<Solver>(config);
   std::string camera_serial = config["camera"]["serial"].as<std::string>("");
   if (!camera_.initializeCamera(camera_serial)) {
     WUST_ERROR(vision_logger) << "Camera initialization failed." ;
@@ -100,11 +104,7 @@ void  WustVision::init()
 
   camera_.startCamera();
   startTimer();
-  // video_writer_ = cv::VideoWriter("aa.mp4", 
-  //   cv::VideoWriter::fourcc('M','J','P','G'), 
-  //   60, 
-  //   cv::Size(1440, 1080));
-is_recording_ = video_writer_.isOpened();
+
   is_inited_ = true;
 }
 void WustVision::stop() {
@@ -156,7 +156,7 @@ void WustVision::startTimer()
     });
 }
 void WustVision::initTF()
-{   imu_to_camera_ = Eigen::Matrix3d::Identity();
+{  
     // odom 是世界坐标系的根节点
     tf_tree_.setTransform("", "odom", createTf(0, 0, 0, tf2::Quaternion(0, 0, 0, 1)));
 
@@ -410,8 +410,8 @@ void WustVision::DetectCallback(
   WUST_WARN(vision_logger)<<"NO camera info";
   return;
 } Armors armors;
-armors.timestamp=std::chrono::time_point_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::time_point(std::chrono::nanoseconds(timestamp_nanosec)));
-          armors.frame_id="camera_optical_frame";
+  armors.timestamp=std::chrono::time_point_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::time_point(std::chrono::nanoseconds(timestamp_nanosec)));
+  armors.frame_id="camera_optical_frame";
 
 
   for (auto & obj : objs) {
@@ -498,7 +498,7 @@ armors.timestamp=std::chrono::time_point_cast<std::chrono::nanoseconds>(std::chr
                 auto pose_intargetframe =tf_tree_.transform(tf, armors.frame_id, target_frame_);
                 armor.target_pos = pose_intargetframe.position;
                 armor.target_ori = pose_intargetframe.orientation;
-                auto rpy = getRPYFromQuaternion(armor.target_ori);
+                
 
                 armor.yaw=getRPYFromQuaternion(armor.target_ori).yaw;
              
@@ -527,35 +527,59 @@ armors.timestamp=std::chrono::time_point_cast<std::chrono::nanoseconds>(std::chr
 }
 void WustVision::timerCallback()
 { 
+  
   if(!is_inited_)return;
-  Armors armors;
-  {
-    std::lock_guard<std::mutex> lock(armors_gobal_mutex_);
-    armors=armors_gobal;
-  }
-    if(debug_mode_&&show_target_)
-    {
+  serial_.send_robot_cmd_data_.data.gimbal.pitch=0;
   Target target;
     {
         std::lock_guard<std::mutex> lock(armor_target_mutex_);
         target = armor_target; 
     }
-  Armors armor_data=visualizeTargetProjection(target);
- 
-  for (auto& armor : armor_data.armors) {
-    try {
-      Transform tf(armor.pos, armor.ori);
-      auto pose_in_target_frame = tf_tree_.transform(tf, armor_data.frame_id, "camera_optical_frame");
-      armor.target_pos = pose_in_target_frame.position;
-      armor.target_ori = pose_in_target_frame.orientation;
-    } catch (const std::exception& e) {
-      WUST_ERROR(vision_logger) << "Can't find transform from " << armor_data.frame_id << " to " << target_frame_ << ": " << e.what();
-      continue;
+    GimbalCmd gimbal_cmd;
+    if(target.id!=ArmorNumber::UNKNOWN)
+    {
+      if (target.tracking) {
+        try {
+        auto now=std::chrono::steady_clock::now();
+        gimbal_cmd=solver_->solve(target, now);
+        serial_.transformGimbalCmd(gimbal_cmd);
+        } catch (...) {
+        WUST_ERROR(vision_logger)<<"solver error";
+        serial_.transformGimbalCmd(gimbal_cmd);
+        }
+        }else {
+          serial_.transformGimbalCmd(gimbal_cmd);
+        }
+    }else {
+      serial_.transformGimbalCmd(gimbal_cmd);
     }
-
+      
     
-  }
+    
+    
+
+  
+    if(debug_mode_&&show_target_)
+    {
+  
+    Armors armor_data=visualizeTargetProjection(target);
+ 
+    for (auto& armor : armor_data.armors) {
+      try {
+        Transform tf(armor.pos, armor.ori);
+        auto pose_in_target_frame = tf_tree_.transform(tf, armor_data.frame_id, "camera_optical_frame");
+        armor.target_pos = pose_in_target_frame.position;
+        armor.target_ori = pose_in_target_frame.orientation;
+      } catch (const std::exception& e) {
+        WUST_ERROR(vision_logger) << "Can't find transform from " << armor_data.frame_id << " to " << target_frame_ << ": " << e.what();
+        continue;
+      }
+
+      
+    }
   Target_info target_info;
+  target_info.select_id=gimbal_cmd.select_id;
+  //std::cout<<"select_id:"<<gimbal_cmd.select_id<<std::endl;
   
   if(!measure_tool_->reprojectArmorsCorners(armor_data,target_info ))return;
        
@@ -565,21 +589,20 @@ void WustVision::timerCallback()
     std::lock_guard<std::mutex> lock(img_mutex_);
     src=imgframe_.img.clone();
   }
-  // if(debug_mode_&&show_armor_)
-  // {
-  drawresult(imgframe_, armors);
-  //}
+   
   dumpTargetToFile(target,"/tmp/target_status.txt");
-  drawreprojec(imgframe_, target_info,target,state);
-  
-  
-  // if (is_recording_ && !src.empty())
-  //       {
-  //           if (video_writer_.isOpened()) {
-  //               video_writer_.write(src);
-  //           }
-  //       }
+  drawreprojec(imgframe_, target_info,target,state,gimbal_cmd);
+
 }
+if(debug_mode_&&show_armor_)
+   {
+    Armors armors;
+  {
+    std::lock_guard<std::mutex> lock(armors_gobal_mutex_);
+    armors=armors_gobal;
+  }
+  drawresult(imgframe_, armors);
+  }
 }
 void WustVision::processImage(const ImageFrame& frame) {
   

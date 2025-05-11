@@ -10,7 +10,9 @@ void drawresult(const imgframe &src_img, const Armors &armors);
 void drawreprojec(const cv::Mat &src_img, const std::vector<std::vector<cv::Point2f>> all_pts,const Target target,const Tracker::State state);
 void drawreprojec(const cv::Mat &src_img, const Target_info target_info,const Target target,const Tracker::State state);
 void drawreprojec(const imgframe &src_img, const Target_info target_info,const Target target,const Tracker::State state);
+void drawreprojec(const imgframe &src_img, const Target_info target_info,const Target target,const Tracker::State state,GimbalCmd gimbal_cmd);
 //cv::Mat drawreprojec(const imgframe &src_img, const Target_info target_info,const Target target,const Tracker::State state);
 void dumpTargetToFile(const Target& target, const std::string& path = "/tmp/target_status.txt") ;
-
+void drawGimbalDirection(cv::Mat& debug_img,
+    const GimbalCmd& gimbal_cmd);
 void updatePlot(const std::vector<Armor>& armors);

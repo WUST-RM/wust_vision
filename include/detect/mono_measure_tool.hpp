@@ -28,6 +28,7 @@ struct Target_info
   std::vector<std::vector<cv::Point2f>> pts;
   std::vector<Position> pos;
   std::vector<tf2::Quaternion> ori;
+  int select_id;
 };
 
 class MonoMeasureTool
@@ -113,6 +114,8 @@ public:
 
 private:
   // 相机参数
+  cv::Mat prev_rvec_, prev_tvec_;
+  bool has_prev_{false};
   
 
   

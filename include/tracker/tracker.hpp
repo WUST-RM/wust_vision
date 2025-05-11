@@ -55,6 +55,7 @@ public:
   ArmorNumber tracked_id;
   ArmorsNum tracked_armors_num;
   std::string type;
+  int retype;
   Eigen::VectorXd measurement;
   Eigen::VectorXd target_state;
 

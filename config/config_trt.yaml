@@ -1,6 +1,6 @@
 debug:
   debug_mode: true
-  show_armor: false
+  show_armor: true
   show_target: true
 
 max_infer_running: 4
@@ -20,7 +20,7 @@ camera:
   camera_info_path: "/home/hy/wust_vision/config/camera_info.yaml"
   acquisition_frame_rate: 165
   exposure_time: 3500
-  gain: 16.0
+  gain: 12.0
   adc_bit_depth: "Bits_8"
   pixel_format: "BayerRG8"
 
@@ -28,18 +28,40 @@ detect_color: 0
 
 tracker:
   target_frame: "odom"
-  max_match_distance: 0.5
-  max_match_yaw_diff: 1.0
-  tracking_thres: 2
-  lost_time_thres: 1.0
+  max_match_distance: 0.4
+  max_match_yaw_diff: 0.7
+  tracking_thres: 5
+  lost_time_thres: 0.2
   ekf:
     s2qx: 0.07
     s2qy: 0.07
     s2qz: 0.15
     s2qyaw: 5.0
-    s2qr: 70.0
+    s2qr: 80.0
     s2qd_zc: 1000.0
     r_x: 3e-3
     r_y: 3e-3
     r_z: 3e-3
     r_yaw: 5e-3
+solver:
+      prediction_delay: 0.0
+      controller_delay: 0.0
+      max_tracking_v_yaw: 180.0 #转速(rad/s)大于这个值时瞄准机器人中心 
+      side_angle: 20.0 
+      bullet_speed: 25.0
+      compenstator_type: "ideal"
+      gravity: 9.8
+      resistance: 0.092
+      iteration_times: 20 # 补偿的迭代次数
+      # ["距离下限, 距离上限, 高度下限, 高度下限, pitch轴补偿值"]
+      pitch_offset: [
+        "5.0 6.0 -1.0 0.4 0.0",
+        "5.0 6.0  0.4 0.8 0.0",
+        "5.0 6.0  0.8 1.2 0.0",
+        "6.0 7.0 -1.0 0.4 0.0",
+        "6.0 7.0  0.4 0.8 0.0",
+        "6.0 7.0  0.8 1.2 0.0",
+        "7.0 8.0 -1.0 0.4 0.0",
+        "7.0 8.0  0.4 0.8 0.0",
+        "7.0 8.0  0.8 1.2 0.0",
+      ]

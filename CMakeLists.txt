@@ -18,6 +18,9 @@ add_executable(${PROJECT_NAME}_openvino
   src/driver/serial.cpp
   src/common/gobal.cpp
   src/driver/crc8_crc16.cpp
+  src/control/trajectory_compensator.cpp
+  src/control/armor_solver.cpp
+  src/control/manual_compensator.cpp
 
 
 )
@@ -34,6 +37,9 @@ add_executable(${PROJECT_NAME}_trt
   src/driver/serial.cpp
   src/common/gobal.cpp
   src/driver/crc8_crc16.cpp
+  src/control/trajectory_compensator.cpp
+  src/control/armor_solver.cpp
+  src/control/manual_compensator.cpp
 
 
 

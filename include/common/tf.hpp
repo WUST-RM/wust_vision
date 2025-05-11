@@ -231,6 +231,18 @@ struct Position {
     float x, y, z;
     Position() : x(0.0f), y(0.0f), z(0.0f) {}
     Position(float x_, float y_, float z_) : x(x_), y(y_), z(z_) {}
+
+    Position operator+(const Position& other) const {
+        return Position(x + other.x, y + other.y, z + other.z);
+    }
+
+    Position operator-(const Position& other) const {
+        return Position(x - other.x, y - other.y, z - other.z);
+    }
+
+    Position operator*(double scalar) const {
+        return Position(x * scalar, y * scalar, z * scalar);
+    }
 };
 template <>
 struct fmt::formatter<Position> {
