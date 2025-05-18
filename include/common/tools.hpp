@@ -5,6 +5,7 @@
 #include "common/tf.hpp"
 #include "tracker/tracker.hpp"
 #include <opencv2/core/mat.hpp>
+#include "driver/packet_typedef.hpp"
 void drawresult(const cv::Mat &src_img, const std::vector<ArmorObject> &objs,int64_t timestamp_nanosec);
 void drawresult(const imgframe &src_img, const Armors &armors);
 void drawreprojec(const cv::Mat &src_img, const std::vector<std::vector<cv::Point2f>> all_pts,const Target target,const Tracker::State state);
@@ -16,3 +17,5 @@ void dumpTargetToFile(const Target& target, const std::string& path = "/tmp/targ
 void drawGimbalDirection(cv::Mat& debug_img,
     const GimbalCmd& gimbal_cmd);
 void updatePlot(const std::vector<Armor>& armors);
+void dumpImuToFile(const ReceiveImuData& imu, const std::string& path ="/tmp/imu_status.txt");
+std::string formatImuInfo(const ReceiveImuData& imu);

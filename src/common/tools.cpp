@@ -747,3 +747,60 @@ void dumpTargetToFile(const Target& target, const std::string& path) {
         file.close();
     }
 }
+
+
+std::string formatImuInfo(const ReceiveImuData& imu) {
+    std::ostringstream oss;
+    oss << std::fixed << std::setprecision(3);  // 设置输出精度
+
+    // 静态变量用于统计帧率
+    static int frame_count = 0;
+    static double fps = 0.0;
+    static auto last_time = std::chrono::steady_clock::now();
+
+    // 每帧计数
+    ++frame_count;
+
+    // 时间间隔
+    auto now = std::chrono::steady_clock::now();
+    double elapsed = std::chrono::duration<double>(now - last_time).count();
+
+    if (elapsed >= 1.0) {
+        fps = frame_count / elapsed;
+        frame_count = 0;
+        last_time = now;
+    }
+
+    oss << "=== IMU Info ===\n";
+    oss << "Timestamp     : " << imu.time_stamp << "\n";
+
+    oss << "\n-- Orientation (rad) --\n";
+    oss << "Yaw   : " << imu.data.yaw   << "\n";
+    oss << "Pitch : " << imu.data.pitch << "\n";
+    oss << "Roll  : " << imu.data.roll  << "\n";
+
+    oss << "\n-- Angular Velocity (rad/s) --\n";
+    oss << "Yaw_vel   : " << imu.data.yaw_vel   << "\n";
+    oss << "Pitch_vel : " << imu.data.pitch_vel << "\n";
+    oss << "Roll_vel  : " << imu.data.roll_vel  << "\n";
+
+    oss << "\n-- Orientation (deg) --\n";
+    oss << "Yaw   : " << imu.data.yaw   * 180 / M_PI << "\n";
+    oss << "Pitch : " << imu.data.pitch * 180 / M_PI << "\n";
+    oss << "Roll  : " << imu.data.roll  * 180 / M_PI << "\n";
+
+    oss << "\nCRC           : 0x" << std::hex << imu.crc << std::dec << "\n";
+
+    // 显示最近一次统计得到的 FPS
+    oss << "Frame Rate (FPS): " << std::setprecision(1) << fps << "\n";
+
+    return oss.str();
+}
+
+void dumpImuToFile(const ReceiveImuData& imu, const std::string& path) {
+    std::ofstream file(path);
+    if (file.is_open()) {
+        file << formatImuInfo(imu); 
+        file.close();
+    }
+}

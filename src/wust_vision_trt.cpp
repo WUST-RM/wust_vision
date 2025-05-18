@@ -9,6 +9,7 @@
 #include <vector>
 #include "string"
 #include <yaml-cpp/yaml.h>
+#include "common/calculation.hpp"
 
 WustVision::WustVision()
 {
@@ -78,7 +79,8 @@ void WustVision::init()
     debug_mode_ = config["debug"]["debug_mode"].as<bool>();
     show_armor_  = config["debug"]["show_armor"].as<bool>();
     show_target_ = config["debug"]["show_target"].as<bool>();
-
+    debug_show_dt_  = config["debug"]["debug_show_dt"].as<double>(0.05);
+    use_calculation_ = config["use_calculation"].as<bool>();
     // 模型参数
     const std::string model_path = config["model_path"].as<std::string>();
     AdaptedTRTModule::Params params;
@@ -259,7 +261,8 @@ void WustVision::initTracker(const YAML::Node& config)
     tracker_->ekf = std::make_unique<RobotStateEKF>(f, h, u_q, u_r, p0);
 }
 
-void WustVision::armorsCallback(const Armors& armors_,const cv::Mat& src_img) {
+void WustVision::armorsCallback(Armors armors_,const cv::Mat& src_img) {
+    transformArmorData(armors_);
     if (armors_.timestamp <= last_time_) {
         WUST_WARN(vision_logger) << "Received out-of-order armor data, discarded.";
         return;
@@ -271,6 +274,11 @@ void WustVision::armorsCallback(const Armors& armors_,const cv::Mat& src_img) {
       imgframe_.timestamp=armors_.timestamp;
       std::lock_guard<std::mutex> armor_gobal_lock(armors_gobal_mutex_);
       armors_gobal=armors_;
+  }
+  if (use_calculation_) {
+    command_callback(armors_);
+    return;
+
   }
     
     Target target_;
@@ -345,7 +353,10 @@ Armors WustVision::visualizeTargetProjection(Target armor_target_)
         double yaw = armor_target_.yaw, r1 = armor_target_.radius_1, r2 = armor_target_.radius_2;
         float xc = armor_target_.position_.x, yc = armor_target_.position_.y, zc = armor_target_.position_.z;
         double d_za = armor_target_.d_za, d_zc = armor_target_.d_zc;
-    
+        xc= xc+armor_target_.velocity_.x*debug_show_dt_;
+        yc= yc+armor_target_.velocity_.y*debug_show_dt_;
+        zc= zc+armor_target_.velocity_.z*debug_show_dt_;
+        yaw = yaw + armor_target_.v_yaw*debug_show_dt_;
      
         bool is_current_pair = true;
     
@@ -469,18 +480,18 @@ void WustVision::DetectCallback(
     }
 }
     
-    for (auto& armor : armors.armors) {
-      try {
-          Transform tf(armor.pos, armor.ori);
-          auto pose_intargetframe =tf_tree_.transform(tf, armors.frame_id, target_frame_);
-          armor.target_pos = pose_intargetframe.position;
-          armor.target_ori = pose_intargetframe.orientation;
-          armor.yaw=getRPYFromQuaternion(armor.target_ori).yaw;
-      } catch (const std::exception& e) {
-          WUST_ERROR(vision_logger) << "Can't find transform from " << armors.frame_id << " to " << target_frame_ << ": " << e.what();
-          return;
-      }
-  }   
+//     for (auto& armor : armors.armors) {
+//       try {
+//           Transform tf(armor.pos, armor.ori);
+//           auto pose_intargetframe =tf_tree_.transform(tf, armors.frame_id, target_frame_);
+//           armor.target_pos = pose_intargetframe.position;
+//           armor.target_ori = pose_intargetframe.orientation;
+//           armor.yaw=getRPYFromQuaternion(armor.target_ori).yaw;
+//       } catch (const std::exception& e) {
+//           WUST_ERROR(vision_logger) << "Can't find transform from " << armors.frame_id << " to " << target_frame_ << ": " << e.what();
+//           return;
+//       }
+//   }   
 
     infer_running_count_--;
 
@@ -492,6 +503,26 @@ void WustVision::DetectCallback(
 //   drawresult(src_img, objs,timestamp_nanosec);
 //   }
     
+}
+void WustVision::transformArmorData(Armors& armors)
+{
+  for (auto& armor : armors.armors) {
+    try {
+      Transform tf(armor.pos, armor.ori, armors.timestamp);
+        auto pose_in_target_frame = tf_tree_.transform(tf, armors.frame_id, target_frame_, armors.timestamp);      
+        armor.target_pos = pose_in_target_frame.position;
+        armor.target_ori = pose_in_target_frame.orientation;
+        
+
+        armor.yaw=getRPYFromQuaternion(armor.target_ori).yaw;
+     
+
+        //WUST_DEBUG(vision_logger)<<"Z:"<<armor.yaw;
+    } catch (const std::exception& e) {
+        WUST_ERROR(vision_logger) << "Can't find transform from " << armors.frame_id << " to " << target_frame_ << ": " << e.what();
+        return;
+    }
+}  
 }
 void WustVision::timerCallback()
 { 

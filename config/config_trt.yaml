@@ -1,7 +1,10 @@
+use_calculation: false
+
 debug:
   debug_mode: true
   show_armor: true
   show_target: true
+  debug_show_dt: 0.01
 
 max_infer_running: 4
 
@@ -33,16 +36,16 @@ tracker:
   tracking_thres: 5
   lost_time_thres: 0.2
   ekf:
-    s2qx: 0.07
-    s2qy: 0.07
-    s2qz: 0.15
-    s2qyaw: 5.0
+    s2qx: 10.0
+    s2qy: 10.0
+    s2qz: 1.0
+    s2qyaw: 20.0
     s2qr: 80.0
-    s2qd_zc: 1000.0
-    r_x: 3e-3
-    r_y: 3e-3
-    r_z: 3e-3
-    r_yaw: 5e-3
+    s2qd_zc: 800.0
+    r_x: 0.0046302163
+    r_y: 0.0322467810
+    r_z: 0.2659587660
+    r_yaw: 0.1651087658
 solver:
       prediction_delay: 0.0
       controller_delay: 0.0
@@ -52,7 +55,7 @@ solver:
       compenstator_type: "ideal"
       gravity: 9.8
       resistance: 0.092
-      iteration_times: 20 # 补偿的迭代次数
+      iteration_times: 120 # 补偿的迭代次数
       # ["距离下限, 距离上限, 高度下限, 高度下限, pitch轴补偿值"]
       pitch_offset: [
         "5.0 6.0 -1.0 0.4 0.0",
@@ -65,3 +68,14 @@ solver:
         "7.0 8.0  0.4 0.8 0.0",
         "7.0 8.0  0.8 1.2 0.0",
       ]
+
+
+      
+# R_x:0.0046302163
+# R_y:0.0322467810
+# R_z:0.0229685939
+# R_yaw:0.2659587660
+# s2qx:85.5507288784
+# s2qy:79.1156214139
+# s2qz:76.3573371065
+# s2qyaw:90.5662286888

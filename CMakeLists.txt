@@ -21,6 +21,7 @@ add_executable(${PROJECT_NAME}_openvino
   src/control/trajectory_compensator.cpp
   src/control/armor_solver.cpp
   src/control/manual_compensator.cpp
+  src/common/calculation.cpp
 
 
 )
@@ -40,6 +41,7 @@ add_executable(${PROJECT_NAME}_trt
   src/control/trajectory_compensator.cpp
   src/control/armor_solver.cpp
   src/control/manual_compensator.cpp
+  src/common/calculation.cpp
 
 
 

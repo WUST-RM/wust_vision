@@ -1,6 +1,7 @@
 #include "driver/serial.hpp"
 #include <iostream>
 #include "common/gobal.hpp"
+#include "common/tools.hpp"
 #include "driver/crc8_crc16.hpp"
 #include "common/logger.hpp"
 #include "type/type.hpp"
@@ -207,14 +208,40 @@ void Serial::receiveData()
 }
 void Serial::imu_cbk(ReceiveImuData & imu_data)
 {
-    static uint32_t last_time;
-    if (imu_data.time_stamp <= last_time) {
-        WUST_WARN(serial_logger) << "Received out-of-order imu data, discarded.";
-        return;
-    }
-    last_time = imu_data.time_stamp;
+    static uint32_t last_time = 0;
+    static int valid_count = 0;
+    static bool out_of_order_detected = false;
+    
 
-    // 单位转换：角度 -> 弧度
+    if (!out_of_order_detected) {
+ 
+        if (imu_data.time_stamp <= last_time) {
+            WUST_WARN(serial_logger) << "Received out-of-order imu data, entering recovery mode.";
+            out_of_order_detected = true;
+            valid_count = 0;
+            last_time = imu_data.time_stamp;
+        } else {
+            last_time = imu_data.time_stamp; 
+        }
+    }
+
+    if (out_of_order_detected) {
+  
+        if (imu_data.time_stamp > last_time) {
+            valid_count++;
+           // last_time = imu_data.time_stamp;  
+            if (valid_count >= 100) {
+                WUST_INFO(serial_logger) << "IMU timestamp recovered after 100 valid frames, exiting recovery mode.";
+                out_of_order_detected = false;
+                valid_count = 0;
+            }
+        } else {
+            valid_count = 0; 
+        }
+        return;  
+    }
+
+
     imu_data.data.roll     *= M_PI / 180.0;
     imu_data.data.pitch    *= M_PI / 180.0;
     imu_data.data.yaw      *= M_PI / 180.0;
@@ -222,18 +249,16 @@ void Serial::imu_cbk(ReceiveImuData & imu_data)
     imu_data.data.pitch_vel*= M_PI / 180.0;
     imu_data.data.yaw_vel  *= M_PI / 180.0;
 
-    // 构造 Quaternion
     tf2::Quaternion q;
     q.setRPY(imu_data.data.roll, imu_data.data.pitch, imu_data.data.yaw);
 
-    // 构造 Transform（只更新旋转，位置为零）
     Transform gimbal_tf(Position(0, 0, 0), q);
 
-
-    
     tf_tree_.setTransform("gimbal_odom", "gimbal_link", gimbal_tf);
-    
+    dumpImuToFile(imu_data, "/tmp/imu_status.txt");
 }
+
+
 void Serial::sendData()
 {
   WUST_INFO(serial_logger)<< "Start sendData!";

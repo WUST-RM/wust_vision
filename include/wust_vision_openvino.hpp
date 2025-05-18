@@ -22,13 +22,15 @@ public:
     void DetectCallback(
         const std::vector<ArmorObject>& objs, int64_t timestamp_nanosec, const cv::Mat& src_img);
     void stop();
-    void armorsCallback(const Armors& armors_,const cv::Mat& src_img);
+    void armorsCallback(Armors armors_,const cv::Mat& src_img);
     void initTF();
     void initSerial();
     void initTracker(const YAML::Node& config);
     void timerCallback();
     void startTimer();
     void stopTimer();
+    void transformArmorData(Armors& armors);
+
     Armors visualizeTargetProjection(Target armor_target_);
    
 
@@ -67,11 +69,18 @@ public:
     std::string target_frame_;
     std::chrono::steady_clock::time_point last_time_;
     double dt_;
+    double debug_show_dt_;
     imgframe imgframe_;
     std::mutex img_mutex_;
     cv::VideoWriter video_writer_;  
     bool is_recording_;
     Serial serial_;
     std::unique_ptr<Solver> solver_;
+
+    bool use_calculation_ = false;
+
+    
+    
+
 
 };

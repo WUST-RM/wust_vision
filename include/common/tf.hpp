@@ -10,6 +10,11 @@
 #include <unordered_set>
 #include "fmt/format.h"
 #include "Eigen/Dense"
+#include <map>
+#include <shared_mutex>
+#include <stdexcept>
+#include <chrono>
+#include <set>
 struct rpy
 {
     float roll;
@@ -68,6 +73,55 @@ public:
         double cos_y_cosp = 1.0 - 2.0 * (y * y + z * z);
         yaw = std::atan2(siny_cosp, cos_y_cosp);
     }
+    Quaternion normalized() const {
+        double norm = std::sqrt(x * x + y * y + z * z + w * w);
+        if (norm == 0.0) return Quaternion(0, 0, 0, 1); // fallback
+        return Quaternion(x / norm, y / norm, z / norm, w / norm);
+    }
+    Quaternion slerp(const Quaternion& other, double t) const {
+        // 归一化输入（可选，假设已归一化也行）
+        Quaternion q1 = normalized();
+        Quaternion q2 = other.normalized();
+    
+        // 计算点积
+        double dot = q1.x * q2.x + q1.y * q2.y + q1.z * q2.z + q1.w * q2.w;
+    
+        // 如果点积为负，取-q2，避免走长路径
+        if (dot < 0.0) {
+            q2 = Quaternion(-q2.x, -q2.y, -q2.z, -q2.w);
+            dot = -dot;
+        }
+    
+        const double DOT_THRESHOLD = 0.9995;
+        if (dot > DOT_THRESHOLD) {
+            // 角度太小，用线性插值代替
+            Quaternion result(
+                q1.x + t * (q2.x - q1.x),
+                q1.y + t * (q2.y - q1.y),
+                q1.z + t * (q2.z - q1.z),
+                q1.w + t * (q2.w - q1.w)
+            );
+            return result.normalized();
+        }
+    
+        // 真正的 SLERP
+        double theta_0 = std::acos(dot);        // 起始角
+        double theta = theta_0 * t;             // 插值角
+        double sin_theta = std::sin(theta);
+        double sin_theta_0 = std::sin(theta_0);
+    
+        double s0 = std::cos(theta) - dot * sin_theta / sin_theta_0;
+        double s1 = sin_theta / sin_theta_0;
+    
+        return Quaternion(
+            (q1.x * s0) + (q2.x * s1),
+            (q1.y * s0) + (q2.y * s1),
+            (q1.z * s0) + (q2.z * s1),
+            (q1.w * s0) + (q2.w * s1)
+        );
+    }
+    
+    
     
     
     
@@ -322,14 +376,22 @@ inline tf2::Quaternion eulerToQuaternion(double roll, double pitch, double yaw) 
     return q;
 }
 
+
 class TfTree {
 public:
+    using Time = std::chrono::steady_clock::time_point;
+
     void setTransform(const std::string& parent, const std::string& child, const Transform& tf) {
         std::unique_lock lock(mutex_);
-        nodes_[child] = FrameNode{parent, tf};
+        FrameNode& node = nodes_[child];
+        node.parent_frame = parent;
+        node.transforms[tf.timestamp] = tf; // 支持多个时间点
     }
 
-    bool getTransform(const std::string& source_frame, const std::string& target_frame, Transform& out) const {
+    bool getTransform(const std::string& source_frame,
+                      const std::string& target_frame,
+                      const Time& time,
+                      Transform& out) const {
         std::shared_lock lock(mutex_);
         if (source_frame == target_frame) {
             out = Transform(); // Identity
@@ -345,8 +407,8 @@ public:
                 --i; --j;
             }
 
-            Transform tf_src_to_common = accumulatePath(path_source, i + 1, false);
-            Transform tf_common_to_target = accumulatePath(path_target, j + 1, true);
+            Transform tf_src_to_common = accumulatePath(path_source, i + 1, time, false);
+            Transform tf_common_to_target = accumulatePath(path_target, j + 1, time, true);
 
             out = Transform::compose(tf_common_to_target, tf_src_to_common);
             return true;
@@ -355,17 +417,19 @@ public:
         }
     }
 
-    // Transform transform(const Transform& input, const std::string& source_frame, const std::string& target_frame) const {
-    //     Transform tf_map;
-    //     if (!getTransform(source_frame, target_frame, tf_map)) {
-    //         throw std::runtime_error("No transform from " + source_frame + " to " + target_frame);
-    //     }
-    //     return Transform::compose(tf_map, input);
-    // }
+    // 复用已有接口
+    bool getTransform(const std::string& source_frame,
+                      const std::string& target_frame,
+                      Transform& out) const {
+        return getTransform(source_frame, target_frame, std::chrono::steady_clock::now(), out);
+    }
 
-    Transform transform(const Position& pos, const std::string& source_frame, const std::string& target_frame) const {
+    Transform transform(const Position& pos,
+                        const std::string& source_frame,
+                        const std::string& target_frame,
+                        const Time& time = std::chrono::steady_clock::now()) const {
         Transform tf;
-        if (!getTransform(source_frame, target_frame, tf)) {
+        if (!getTransform(source_frame, target_frame, time, tf)) {
             throw std::runtime_error("Cannot find transform from " + source_frame + " to " + target_frame);
         }
 
@@ -375,9 +439,12 @@ public:
         return Transform(Position(result[0], result[1], result[2]), tf.orientation);
     }
 
-    Transform transform(const tf2::Quaternion& ori, const std::string& source_frame, const std::string& target_frame) const {
+    Transform transform(const tf2::Quaternion& ori,
+                        const std::string& source_frame,
+                        const std::string& target_frame,
+                        const Time& time = std::chrono::steady_clock::now()) const {
         Transform tf;
-        if (!getTransform(source_frame, target_frame, tf)) {
+        if (!getTransform(source_frame, target_frame, time, tf)) {
             throw std::runtime_error("Cannot find transform from " + source_frame + " to " + target_frame);
         }
 
@@ -402,9 +469,12 @@ public:
         return Transform(tf.position, out_q);
     }
 
-    Transform transform(const Transform& input, const std::string& source_frame, const std::string& target_frame) const {
+    Transform transform(const Transform& input,
+                        const std::string& source_frame,
+                        const std::string& target_frame,
+                        const Time& time = std::chrono::steady_clock::now()) const {
         Transform tf;
-        if (!getTransform(source_frame, target_frame, tf)) {
+        if (!getTransform(source_frame, target_frame, time, tf)) {
             throw std::runtime_error("Cannot find transform from " + source_frame + " to " + target_frame);
         }
 
@@ -416,7 +486,7 @@ public:
 private:
     struct FrameNode {
         std::string parent_frame;
-        Transform transform;
+        std::map<Time, Transform> transforms;
     };
 
     std::unordered_map<std::string, FrameNode> nodes_;
@@ -424,7 +494,7 @@ private:
 
     std::vector<std::string> getPathToRoot(const std::string& frame) const {
         std::vector<std::string> path;
-        std::unordered_set<std::string> visited;
+        std::set<std::string> visited;
 
         std::string current = frame;
         while (nodes_.count(current)) {
@@ -437,20 +507,54 @@ private:
         return path;
     }
 
-    Transform accumulatePath(const std::vector<std::string>& path, int end_idx, bool reverse = false) const {
+    Transform accumulatePath(const std::vector<std::string>& path,
+                             int end_idx,
+                             const Time& time,
+                             bool reverse = false) const {
         Transform result;
         if (!reverse) {
             for (int i = 0; i < end_idx; ++i) {
                 const auto& f = path[i];
-                result = Transform::compose(nodes_.at(f).transform, result);
+                const FrameNode& node = nodes_.at(f);
+                Transform tf = lookupTransformAtTime(node, time);
+                result = Transform::compose(tf, result);
             }
         } else {
             for (int i = end_idx - 1; i >= 0; --i) {
                 const auto& f = path[i];
-                result = Transform::compose(invert(nodes_.at(f).transform), result);
+                const FrameNode& node = nodes_.at(f);
+                Transform tf = lookupTransformAtTime(node, time);
+                result = Transform::compose(invert(tf), result);
             }
         }
         return result;
+    }
+
+    Transform interpolate(const Transform& a, const Transform& b, double alpha) const {
+        tf2::Quaternion q = a.orientation.slerp(b.orientation, alpha);
+        Position p = a.position * (1.0 - alpha) + b.position * alpha;
+        return Transform(p, q);
+    }
+
+    Transform lookupTransformAtTime(const FrameNode& node, const Time& time) const {
+        const auto& transforms = node.transforms;
+
+        auto it_after = transforms.lower_bound(time);
+        if (it_after == transforms.begin()) {
+            return it_after->second;  // time <= 最早时间
+        }
+
+        if (it_after == transforms.end()) {
+            return std::prev(it_after)->second;  // time > 最新时间
+        }
+
+        auto it_before = std::prev(it_after);
+        const Time& t0 = it_before->first;
+        const Time& t1 = it_after->first;
+
+        double alpha = std::chrono::duration<double>(time - t0).count()
+                     / std::chrono::duration<double>(t1 - t0).count();
+        return interpolate(it_before->second, it_after->second, alpha);
     }
 
     Transform invert(const Transform& tf) const {
@@ -458,5 +562,6 @@ private:
         return Transform::fromMatrix(inv);
     }
 };
+
 
 #endif // TF2_HPP
