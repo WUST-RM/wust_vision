@@ -255,7 +255,10 @@ void Serial::imu_cbk(ReceiveImuData & imu_data)
     Transform gimbal_tf(Position(0, 0, 0), q);
 
     tf_tree_.setTransform("gimbal_odom", "gimbal_link", gimbal_tf);
+    if(debug_mode_)
+    {
     dumpImuToFile(imu_data, "/tmp/imu_status.txt");
+    }
 }
 
 

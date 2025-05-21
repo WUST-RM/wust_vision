@@ -5,6 +5,7 @@
 
 // std
 #include <cfloat>
+#include <iostream>
 #include <memory>
 #include <string>
 #include <algorithm>  // 如果需要转换大小写
@@ -53,6 +54,7 @@ void Tracker::update(const Armors &armors_msg) noexcept {
   Eigen::VectorXd ekf_prediction = ekf->predict();
   bool matched = false;
   target_state = ekf_prediction;
+  std::vector<Armor> another_armors;
 
   if (!armors_msg.armors.empty()) {
     Armor same_id_armor;
@@ -62,7 +64,8 @@ void Tracker::update(const Armors &armors_msg) noexcept {
     double yaw_diff = DBL_MAX;
 
 
-    for ( auto &armor : armors_msg.armors) {
+    for ( auto &armor : armors_msg.armors) 
+  {
    
     
       if (retypetotracker(armor.number) == retype) {
@@ -86,10 +89,61 @@ void Tracker::update(const Armors &armors_msg) noexcept {
             tracked_armors_num = ArmorsNum::NORMAL_4;
           }
         }else {
+          another_armors.push_back(armor);
           position_diff_ = position_diff;
         }
       }
     }
+    //几何法热加载----fail！！！！！！！
+    // if (!another_armors.empty()) {
+    //   double min_pose_diff = DBL_MAX;
+    //   double yaw_diff_best = 0;
+    //   Armor closest_armor;
+      
+    //   Eigen::Vector3d tracked_pos(tracked_armor.target_pos.x,
+    //                               tracked_armor.target_pos.y,
+    //                               tracked_armor.target_pos.z);
+    //   double tracked_yaw = tracked_armor.yaw;
+    
+    //   // 可调参数：位置差和朝向差的权重
+    //   constexpr double position_weight = 1.0;
+    //   constexpr double yaw_weight = 0.5;
+    
+    //   for (const auto &armor : another_armors) {
+    //     Eigen::Vector3d other_pos(armor.target_pos.x,
+    //                               armor.target_pos.y,
+    //                               armor.target_pos.z);
+    //     double position_diff = (tracked_pos - other_pos).norm();
+    
+    //     double other_yaw = armor.yaw;
+    //     double diff = other_yaw - tracked_yaw;
+    //     while (diff > M_PI) diff -= 2 * M_PI;
+    //     while (diff < -M_PI) diff += 2 * M_PI;
+          
+    //     double yaw_diff_a = std::abs(diff); 
+        
+    
+    //     // 综合 pose 差
+    //     double pose_diff = position_weight * position_diff + yaw_weight * yaw_diff_a;
+    
+    //     if (pose_diff < min_pose_diff) {
+    //       min_pose_diff = pose_diff;
+    //       yaw_diff_best  = yaw_diff_a;
+    //       closest_armor = armor;
+       
+    //     }
+       
+    //   }
+    //   if(yaw_diff_best>=1.55&&yaw_diff_best<=1.60 )
+    //   {
+    //       updateBestYawdiff(closest_armor, tracked_armor);
+    //   }
+    
+    
+    
+
+    // }
+    
 
     if (min_position_diff < max_match_distance_ && yaw_diff < max_match_yaw_diff_) {
       matched = true;
@@ -98,10 +152,12 @@ void Tracker::update(const Armors &armors_msg) noexcept {
       measurement = Eigen::Vector4d(p.x, p.y, p.z, measured_yaw);
       target_state = ekf->update(measurement);
     } else if (same_id_armors_count == 1 && yaw_diff > max_match_yaw_diff_) {
+      
       handleArmorJump(same_id_armor);
+      
       yaw_diff_=yaw_diff;
     }else {
-      WUST_DEBUG(tracker_logger)<<"No matched armor found!";
+     // WUST_DEBUG(tracker_logger)<<"No matched armor found!";
     }
   }
 
@@ -162,7 +218,25 @@ void Tracker::initEKF(const Armor &a) noexcept {
   ekf->setState(target_state);
 }
 
+
 void Tracker::handleArmorJump(const Armor &current_armor) noexcept {
+  using clock = std::chrono::steady_clock;
+  auto now = clock::now();
+
+  // 记录跳变时间
+  armor_jump_timestamps_.emplace_back(now);
+
+  // 清理超过 1 秒的时间点
+  while (!armor_jump_timestamps_.empty() &&
+         std::chrono::duration_cast<std::chrono::duration<double>>(now - armor_jump_timestamps_.front()).count() > 1.0) {
+    armor_jump_timestamps_.pop_front();
+  }
+
+  // 跳变频率
+  double jump_frequency = static_cast<double>(armor_jump_timestamps_.size());
+  WUST_DEBUG(tracker_logger) << fmt::format("Armor Jump Frequency: {:.1f} Hz", jump_frequency);
+
+  // -------- 原始逻辑保持不变 --------
   double last_yaw = target_state(6);
   double yaw = orientationToYaw(current_armor.target_ori);
 
@@ -175,7 +249,7 @@ void Tracker::handleArmorJump(const Armor &current_armor) noexcept {
       d_zc = d_zc == 0 ? -d_za : 0;
       target_state(9) = d_zc;
     }
-    WUST_DEBUG(tracker_logger)<<"Armor Jump!";
+    //WUST_DEBUG(tracker_logger) << "Armor Jump!";
   }
 
   Eigen::Vector3d current_p(current_armor.target_pos.x, current_armor.target_pos.y, current_armor.target_pos.z);
@@ -195,6 +269,44 @@ void Tracker::handleArmorJump(const Armor &current_armor) noexcept {
 
   ekf->setState(target_state);
 }
+void Tracker::updateBestYawdiff(const Armor &armor1, const Armor &armor2)
+{
+  // 位置向量
+  Eigen::Vector3d p1(armor1.target_pos.x, armor1.target_pos.y, armor1.target_pos.z);
+  Eigen::Vector3d p2(armor2.target_pos.x, armor2.target_pos.y, armor2.target_pos.z);
+
+  // 获取 armor2 的朝向（假设为真值）
+  double yaw2 = orientationToYaw(armor2.target_ori);
+
+  // 从 armor2 朝向的 yaw 反向延长一定距离，用 armor1 的位置反推
+  // 方向向量：反向 unit vector（向后）
+  Eigen::Vector2d yaw_dir(-cos(yaw2), -sin(yaw2));
+
+  // armor1 和 armor2 之间的距离
+  Eigen::Vector2d p1_2d = p1.head<2>();
+  Eigen::Vector2d p2_2d = p2.head<2>();
+
+  // 估计圆心的位置
+  // 做法：从 p2 出发，沿反 yaw2 方向延长一段距离 r，使其接近 p1
+  // 解一个一元方程：||p1 - (p2 + r * dir)|| 最小 -> 最佳 r
+  double r_opt = (p1_2d - p2_2d).dot(yaw_dir);  // 最佳延长距离（投影）
+
+  Eigen::Vector2d center = p2_2d + r_opt * yaw_dir;
+
+  // 计算两个半径
+  double r1 = (p1_2d - center).norm();
+  double r2 = (p2_2d - center).norm();
+
+  // 输出调试信息
+  WUST_INFO(tracker_logger) << fmt::format("rotation center: ({:.2f}, {:.2f})", center.x(), center.y());
+  WUST_INFO(tracker_logger) << fmt::format("radius1: {:.2f}, radius2: {:.2f}", r1, r2);
+
+  // 可选：保存结果
+  // rotation_center_ = Eigen::Vector3d(center.x(), center.y(), (p1.z() + p2.z()) / 2.0);
+  // radius1_ = r1;
+  // radius2_ = r2;
+}
+
 
 double Tracker::orientationToYaw(const tf2::Quaternion &q) noexcept {
   double roll, pitch, yaw;

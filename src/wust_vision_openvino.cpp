@@ -9,6 +9,7 @@
 #include <functional>
 #include <string>
 #include "common/tf.hpp"
+#include "common/tools.hpp"
 #include "control/armor_solver.hpp"
 #include "type/type.hpp"
 #include <csignal>
@@ -44,8 +45,8 @@ void  WustVision::init()
 { 
   YAML::Node config = YAML::LoadFile("/home/hy/wust_vision/config/config_openvino.yaml");
   debug_mode_ = config["debug"]["debug_mode"].as<bool>();
-  show_armor_  = config["debug"]["show_armor"].as<bool>();
-  show_target_ = config["debug"]["show_target"].as<bool>();
+  debug_w = config["debug"]["debug_w"].as<int>(640);
+  debug_h = config["debug"]["debug_h"].as<int>(480);
   debug_show_dt_  = config["debug"]["debug_show_dt"].as<double>(0.05);
   use_calculation_ = config["use_calculation"].as<bool>();
   auto classify_model_path = config["classify_model_path"].as<std::string>();
@@ -511,10 +512,7 @@ void WustVision::DetectCallback(
       this->armorsCallback(armors,src_img);
   });
 
-  // if(debug_mode_&&show_armor_)
-  // {
-  // drawresult(src_img, objs,timestamp_nanosec);
-  // }
+
   
   
   
@@ -574,9 +572,10 @@ void WustVision::timerCallback()
     
 
   
-    if(debug_mode_&&show_target_)
-    {
-  
+
+
+  if(debug_mode_)
+  {
     Armors armor_data=visualizeTargetProjection(target);
  
     for (auto& armor : armor_data.armors) {
@@ -594,7 +593,7 @@ void WustVision::timerCallback()
     }
   Target_info target_info;
   target_info.select_id=gimbal_cmd.select_id;
-  //std::cout<<"select_id:"<<gimbal_cmd.select_id<<std::endl;
+
   
   if(!measure_tool_->reprojectArmorsCorners(armor_data,target_info ))return;
        
@@ -606,18 +605,16 @@ void WustVision::timerCallback()
   }
    
   dumpTargetToFile(target,"/tmp/target_status.txt");
-  drawreprojec(imgframe_, target_info,target,state,gimbal_cmd);
-
-}
-if(debug_mode_&&show_armor_)
-   {
+ 
     Armors armors;
   {
     std::lock_guard<std::mutex> lock(armors_gobal_mutex_);
     armors=armors_gobal;
   }
-  drawresult(imgframe_, armors);
+
+  draw_debug_overlay(imgframe_, &armors, &target_info, &target,state, gimbal_cmd);
   }
+  
 }
 void WustVision::processImage(const ImageFrame& frame) {
   

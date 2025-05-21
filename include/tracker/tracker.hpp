@@ -25,6 +25,7 @@
 
 // third party
 #include <Eigen/Eigen>
+#include <vector>
 
 // project
 #include "tracker/extended_kalman_filter.hpp"
@@ -52,6 +53,7 @@ public:
   int lost_thres ;
 
   Armor tracked_armor;
+  
   ArmorNumber tracked_id;
   ArmorsNum tracked_armors_num;
   std::string type;
@@ -70,6 +72,7 @@ private:
 
   double orientationToYaw(const tf2::Quaternion &q) noexcept;
   static Eigen::Vector3d getArmorPositionFromState(const Eigen::VectorXd &x) noexcept;
+  void updateBestYawdiff(const Armor &armor1,const Armor &armor2);
 
   double max_match_distance_;
   double max_match_yaw_diff_;
@@ -80,6 +83,8 @@ private:
   double last_yaw_;
 
   std::string tracker_logger = "tracker";
+  std::deque<std::chrono::steady_clock::time_point> armor_jump_timestamps_;
+
 };
 
 #endif  // ARMOR_SOLVER_TRACKER_HPP_

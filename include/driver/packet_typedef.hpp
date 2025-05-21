@@ -403,7 +403,7 @@ struct SendRobotCmdData
     struct
     {
      
-      int detect_color;
+      int detect_color;//0 red 1 blue
     } __attribute__((packed)) debug;
   } __attribute__((packed)) data;
 

@@ -245,40 +245,59 @@ void HikCamera::hikCaptureLoop() {
         while (!stop_signal_) {
             int n_ret = MV_CC_GetImageBuffer(camera_handle_, &out_frame, 1000);
             if (n_ret == MV_OK) {
-                // 成功获取图像，处理并重置错误状态
+           
                 in_fail_state = false;
 
-                // 帧计数和手动计算帧率（作为备用方案）
+             
+                auto arrival_time = std::chrono::steady_clock::now();
+
+           
+                MVCC_FLOATVALUE exp_value;
+                float exposure_us = 0.0f;
+                if (MV_CC_GetFloatValue(camera_handle_, "ExposureTime", &exp_value) == MV_OK) {
+                    exposure_us = exp_value.fCurValue;
+                } else {
+                    WUST_WARN(hik_logger) << "Failed to get ExposureTime from SDK; defaulting to 0";
+                }
+
+           
+                auto half_exposure = std::chrono::microseconds(static_cast<int64_t>(exposure_us / 2.0f));
+
+         
+                auto midpoint_time = arrival_time - half_exposure;
+
+
                 ++frame_counter;
-                auto current_time = std::chrono::steady_clock::now();
+                auto current_time = arrival_time;
                 auto frame_interval = std::chrono::duration_cast<std::chrono::milliseconds>(
                     current_time - last_frame_time
                 ).count();
                 last_frame_time = current_time;
 
-                // 处理图像帧
+           
                 ImageFrame frame;
-                frame.width = out_frame.stFrameInfo.nWidth;
-                frame.height = out_frame.stFrameInfo.nHeight;
-                frame.step = frame.width * 3;
-                frame.timestamp = current_time;
+                frame.width     = out_frame.stFrameInfo.nWidth;
+                frame.height    = out_frame.stFrameInfo.nHeight;
+                frame.step      = frame.width * 3;
+            
+                frame.timestamp = midpoint_time;
                 frame.data.resize(frame.width * frame.height * 3);
 
-                convert_param_.pDstBuffer = frame.data.data();
-                convert_param_.nDstBufferSize = static_cast<int>(frame.data.size());
-                convert_param_.pSrcData = out_frame.pBufAddr;
-                convert_param_.nSrcDataLen = out_frame.stFrameInfo.nFrameLen;
-                convert_param_.enSrcPixelType = out_frame.stFrameInfo.enPixelType;
+                convert_param_.pDstBuffer      = frame.data.data();
+                convert_param_.nDstBufferSize  = static_cast<int>(frame.data.size());
+                convert_param_.pSrcData        = out_frame.pBufAddr;
+                convert_param_.nSrcDataLen     = out_frame.stFrameInfo.nFrameLen;
+                convert_param_.enSrcPixelType  = out_frame.stFrameInfo.enPixelType;
 
                 MV_CC_ConvertPixelType(camera_handle_, &convert_param_);
                 image_queue_.push(frame);
                 MV_CC_FreeImageBuffer(camera_handle_, &out_frame);
 
-                // 帧率检测（每秒执行一次）
+
                 if (std::chrono::duration_cast<std::chrono::seconds>(
                     current_time - last_frame_rate_check
                 ).count() >= 1) {
-                    // 方案1：优先使用SDK提供的帧率（更准确）
+            
                     MVCC_FLOATVALUE f_value;
                     int fr_ret = MV_CC_GetFloatValue(camera_handle_, "ResultingFrameRate", &f_value);
                     float actual_fps = 0.0f;
@@ -287,30 +306,30 @@ void HikCamera::hikCaptureLoop() {
                         actual_fps = f_value.fCurValue;
                         //WUST_DEBUG(hik_logger) << "SDK Reported FPS: " << actual_fps;
                     }
-                    //方案2：使用手动计算的帧率（备用）
+            
                     else {
-                        actual_fps = frame_counter / 1.0f; // 每秒帧数
+                        actual_fps = frame_counter / 1.0f; 
                         WUST_DEBUG(hik_logger) << "Calculated FPS: " << actual_fps;
-                   }
+                    }
 
-                    // 重置计数器
+                
                     frame_counter = 0;
                     last_frame_rate_check = current_time;
 
-                    // 低帧率检测逻辑
+                 
                     if (actual_fps < last_frame_rate_ * 0.5f) {
                         if (!in_low_frame_rate_state_) {
                             low_frame_rate_start_time_ = current_time;
                             in_low_frame_rate_state_ = true;
                             WUST_WARN(hik_logger) << "Low FPS detected: " << actual_fps
-                                                << " (Threshold: " << last_frame_rate_ * 0.5f << ")";
+                                                  << " (Threshold: " << last_frame_rate_ * 0.5f << ")";
                         }
-                        // 持续5秒低帧率则重启
+           
                         else if (std::chrono::duration_cast<std::chrono::seconds>(
                             current_time - low_frame_rate_start_time_
                         ).count() >= 5) {
                             WUST_ERROR(hik_logger) << "Low FPS persisted for 5s (" << actual_fps
-                                                << "). Restarting camera...";
+                                                  << "). Restarting camera...";
                             if (restartCamera()) {
                                 in_low_frame_rate_state_ = false;
                                 WUST_INFO(hik_logger) << "Camera restarted successfully";
@@ -320,7 +339,7 @@ void HikCamera::hikCaptureLoop() {
                             }
                         }
                     }
-                    // 帧率恢复正常
+                
                     else if (in_low_frame_rate_state_) {
                         WUST_INFO(hik_logger) << "FPS recovered to normal: " << actual_fps;
                         in_low_frame_rate_state_ = false;
@@ -328,7 +347,7 @@ void HikCamera::hikCaptureLoop() {
                 }
 
             } else {
-                // 硬件错误处理
+           
                 if (!in_fail_state) {
                     fail_start_time = std::chrono::steady_clock::now();
                     in_fail_state = true;
@@ -337,7 +356,7 @@ void HikCamera::hikCaptureLoop() {
                 if (std::chrono::duration_cast<std::chrono::seconds>(
                     std::chrono::steady_clock::now() - fail_start_time
                 ).count() > 5) {
-                    if (!restartCamera()&&!stop_signal_) {
+                    if (!restartCamera() && !stop_signal_) {
                         WUST_ERROR(hik_logger) << "Failed to restart camera after hardware failure.";
                         break;
                     }

@@ -51,9 +51,8 @@ public:
     
     std::string vision_logger="openvino_vision";
     std::atomic<bool> run_loop_{false};
-    bool debug_mode_ = false;
-    bool show_armor_ = false;
-    bool show_target_ = false;
+    
+
     std::atomic<bool> timer_running_{false};
     std::thread timer_thread_;
     std::unique_ptr<Tracker> tracker_;
