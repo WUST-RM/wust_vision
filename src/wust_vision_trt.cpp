@@ -75,7 +75,7 @@ void WustVision::stop() {
 
 void WustVision::init()
 {
-    YAML::Node config = YAML::LoadFile("/home/hy/wust_vision/config/config_trt.yaml");
+    YAML::Node config = YAML::LoadFile("/home/nvidia/wust_vision/config/config_trt.yaml");
     debug_mode_ = config["debug"]["debug_mode"].as<bool>();
     debug_w = config["debug"]["debug_w"].as<int>(640);
     debug_h = config["debug"]["debug_h"].as<int>(480);
@@ -209,7 +209,7 @@ void WustVision::initTracker(const YAML::Node& config)
     r_yaw_ = config["ekf"]["r_yaw"].as<double>(0.02);
 
     // EKF 状态预测函数
-    auto f = Predict(0.005);  // dt 固定为 5ms
+    auto f = Predict(0.01);  // dt 固定为 5ms
 
     // EKF 观测函数
     auto h = Measure();

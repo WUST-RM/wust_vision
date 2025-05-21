@@ -305,15 +305,11 @@ std::vector<ArmorObject> AdaptedTRTModule::postprocess(
   std::vector<int> strides = {8, 16, 32};
   std::vector<GridAndStride> grid_strides;
   generate_grids_and_stride(strides, grid_strides);
-  // RCLCPP_INFO(
-  //   rclcpp::get_logger("postprocess.num_detections"), "num_detections: %d ", num_detections);
-
+ 
   for (int i = 0; i < num_detections; ++i) {
     const float * det = output + i * 21;
     float conf = det[8];
-    // for (int j = 0; j < 21; ++j) {
-    //   RCLCPP_INFO(rclcpp::get_logger("postprocess.conf"), "det[%d]: %f ", j, det[j]);
-    // }
+   
     if (conf < params_.conf_threshold) continue;
 
     // 解析坐标

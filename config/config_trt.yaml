@@ -2,13 +2,13 @@ use_calculation: false
 
 debug:
   debug_mode: true
-  debug_w: 1440
-  debug_h: 1080
+  debug_w: 640
+  debug_h: 480
   debug_show_dt: 0.01
 
 max_infer_running: 4
 
-model_path: "/home/hy/wust_vision/model/opt-1208-001.onnx"
+model_path: "/home/nvidia/wust_vision/model/opt-1208-001.onnx"
 model:
   input_w: 416
   input_h: 416
@@ -20,8 +20,8 @@ model:
 
 camera:
   serial: ""
-  camera_info_path: "/home/hy/wust_vision/config/camera_info.yaml"
-  acquisition_frame_rate: 165
+  camera_info_path: "/home/nvidia/wust_vision/config/camera_info.yaml"
+  acquisition_frame_rate: 120
   exposure_time: 3500
   gain: 12.0
   adc_bit_depth: "Bits_8"
@@ -31,8 +31,8 @@ detect_color: 0
 
 tracker:
   target_frame: "odom"
-  max_match_distance: 0.5
-  max_match_yaw_diff: 0.7
+  max_match_distance: 0.6
+  max_match_yaw_diff: 0.4
   tracking_thres: 5
   lost_time_thres: 0.2
   ekf:
