@@ -1,5 +1,7 @@
 #!/bin/bash
 
+trap "echo 'Exiting...'; exit 0" SIGINT SIGTERM
+
 sleep 5
 
 while true; do
