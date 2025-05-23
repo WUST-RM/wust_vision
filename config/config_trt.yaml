@@ -1,12 +1,12 @@
 use_calculation: false
 
 debug:
-  debug_mode: true
+  debug_mode: false
   debug_w: 640
   debug_h: 480
   debug_show_dt: 0.01
 
-max_infer_running: 4
+max_infer_running: 4  
 
 model_path: "/home/nvidia/wust_vision/model/opt-1208-001.onnx"
 model:
@@ -17,7 +17,13 @@ model:
   conf_threshold: 0.25
   nms_threshold: 0.3
   top_k: 128
-
+light:
+  expand_ratio_w: 1.1
+  expand_ratio_h: 1.1
+  binary_thres: 85
+  min_ratio: 0.02
+  max_ratio: 0.45
+  max_angle: 40.0
 camera:
   serial: ""
   camera_info_path: "/home/nvidia/wust_vision/config/camera_info.yaml"

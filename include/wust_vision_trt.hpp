@@ -14,7 +14,7 @@ public:
     WustVision();
     ~WustVision();
     void init();
-    void imageConsumer(ThreadSafeQueue<ImageFrame>& queue, ThreadPool& pool);
+ 
     void processImage(const ImageFrame& frame);
     void printStats();
     void DetectCallback(
@@ -35,7 +35,7 @@ public:
 
 
     HikCamera camera_;
-    ThreadSafeQueue<ImageFrame> image_queue_;
+ 
     std::unique_ptr<AdaptedTRTModule> detector_;
     std::unique_ptr<ThreadPool> thread_pool_;
     bool is_inited_ = false;

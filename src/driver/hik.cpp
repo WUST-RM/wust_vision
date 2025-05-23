@@ -1,290 +1,335 @@
-// driver/hik.cpp
 #include "driver/hik.hpp"
 #include "common/logger.hpp"
+#include <iostream>
+#include <opencv2/highgui.hpp>
 #include <stdexcept>
 #include <chrono>
 
-HikCamera::HikCamera() = default;
+HikCamera::HikCamera() : camera_handle_(nullptr), fail_count_(0), is_video_mode_(false) { }
 
 HikCamera::~HikCamera() {
     stopCamera();
-    if (capture_thread_.joinable())
+    if (capture_thread_.joinable()) {
         capture_thread_.join();
-
+    }
     if (camera_handle_) {
         MV_CC_StopGrabbing(camera_handle_);
         MV_CC_CloseDevice(camera_handle_);
         MV_CC_DestroyHandle(&camera_handle_);
     }
-    if (video_cap_.isOpened())
+    if (video_cap_.isOpened()) {
         video_cap_.release();
-
+    }
     WUST_INFO(hik_logger) << "Camera destroyed!";
 }
 
+// 初始化相机：枚举设备、创建句柄、打开设备、获取图像信息等
 bool HikCamera::initializeCamera(const std::string& video_path) {
-    if (stop_signal_) return false;
-
     if (!video_path.empty()) {
-        // —— 视频回放模式 —— //
+        // 视频模式初始化
         is_video_mode_ = true;
         video_cap_.open(video_path);
         if (!video_cap_.isOpened()) {
             WUST_ERROR(hik_logger) << "Failed to open video file: " << video_path;
             return false;
         }
-        // 读取视频分辨率和帧率
-        img_info_.nWidthValue  = static_cast<int>(video_cap_.get(cv::CAP_PROP_FRAME_WIDTH));
-        img_info_.nHeightValue = static_cast<int>(video_cap_.get(cv::CAP_PROP_FRAME_HEIGHT));
-        video_fps_ = video_cap_.get(cv::CAP_PROP_FPS);
-        if (video_fps_ <= 0) video_fps_ = 30.0;
-        WUST_INFO(hik_logger) << "Video mode initialized: "
-                              << img_info_.nWidthValue << "×" << img_info_.nHeightValue
-                              << " @" << video_fps_ << "fps";
-        return true;
+         // 获取视频基本信息
+         img_info_.nWidthValue = static_cast<int>(video_cap_.get(cv::CAP_PROP_FRAME_WIDTH));
+         img_info_.nHeightValue = static_cast<int>(video_cap_.get(cv::CAP_PROP_FRAME_HEIGHT));
+         video_fps_ = video_cap_.get(cv::CAP_PROP_FPS);
+         if (video_fps_ <= 0) video_fps_ = 30;
+         
+         WUST_INFO(hik_logger) << "Video mode initialized: "
+                             << img_info_.nWidthValue << "x" << img_info_.nHeightValue
+                             << " @" << video_fps_ << "fps";
+         return true;
     }
-
-    // —— 硬件模式 —— //
-    MV_CC_DEVICE_INFO_LIST dev_list;
-    while (!stop_signal_) {
-        int ret = MV_CC_EnumDevices(MV_USB_DEVICE, &dev_list);
-        if (ret != MV_OK) {
-            WUST_WARN(hik_logger) << "EnumDevices failed, retrying...";
+    MV_CC_DEVICE_INFO_LIST device_list;
+    while (true) {
+        int n_ret = MV_CC_EnumDevices(MV_USB_DEVICE, &device_list);
+        if (n_ret != MV_OK) {
+            WUST_WARN(hik_logger) << "Failed to enumerate devices, retrying...";
             std::this_thread::sleep_for(std::chrono::seconds(1));
-            continue;
-        }
-        if (dev_list.nDeviceNum == 0) {
+        } else if (device_list.nDeviceNum == 0) {
             WUST_WARN(hik_logger) << "No camera found, retrying...";
             std::this_thread::sleep_for(std::chrono::seconds(1));
-            continue;
+        } else {
+            WUST_INFO(hik_logger) << "Found " << device_list.nDeviceNum << " cameras!";
+            break;
         }
-        break;
     }
-    if (stop_signal_) return false;
 
-    // 创建并打开设备
-    int ret = MV_CC_CreateHandle(&camera_handle_, dev_list.pDeviceInfo[0]);
-    if (ret != MV_OK) {
-        WUST_ERROR(hik_logger) << "CreateHandle failed: " << ret;
-        return false;
-    }
-    ret = MV_CC_OpenDevice(camera_handle_);
-    if (ret != MV_OK) {
-        WUST_ERROR(hik_logger) << "OpenDevice failed: " << ret;
+    int n_ret = MV_CC_CreateHandle(&camera_handle_, device_list.pDeviceInfo[0]);
+    if (n_ret != MV_OK) {
+        WUST_ERROR(hik_logger) << "Failed to create camera handle!";
         return false;
     }
 
-    // 获取图像信息
-    ret = MV_CC_GetImageInfo(camera_handle_, &img_info_);
-    if (ret != MV_OK) {
-        WUST_ERROR(hik_logger) << "GetImageInfo failed: " << ret;
+    n_ret = MV_CC_OpenDevice(camera_handle_);
+    if (n_ret != MV_OK) {
+        WUST_ERROR(hik_logger) << "Failed to open camera device!";
         return false;
     }
 
-    // 预设像素转换参数
-    convert_param_.nWidth         = img_info_.nWidthValue;
-    convert_param_.nHeight        = img_info_.nHeightValue;
+    n_ret = MV_CC_GetImageInfo(camera_handle_, &img_info_);
+    if (n_ret != MV_OK) {
+        WUST_ERROR(hik_logger) << "Failed to get camera image info!";
+        return false;
+    }
+
+    // 为转换后的图像数据预留内存
+    convert_param_.nWidth = img_info_.nWidthValue;
+    convert_param_.nHeight = img_info_.nHeightValue;
     convert_param_.enDstPixelType = PixelType_Gvsp_RGB8_Packed;
+  
 
     return true;
 }
 
-void HikCamera::setParameters(double frame_rate,
-                              double exposure_time,
-                              double gain,
-                              const std::string& adc_bit_depth,
-                              const std::string& pixel_format)
-{
+// 设置相机参数：帧率、曝光、增益、ADC位深及像素格式（这里硬编码参数，可按需修改）
+void HikCamera::setParameters(double acquisition_frame_rate,
+    double exposure_time,
+    double gain,
+    const std::string& adc_bit_depth,
+    const std::string& pixel_format)
+{   
     if (is_video_mode_) {
         WUST_WARN(hik_logger) << "Video mode ignores parameter settings";
         return;
     }
+    MVCC_FLOATVALUE f_value;
 
-    // 开启并设置采集帧率
+    // 设置采集帧率
     MV_CC_SetBoolValue(camera_handle_, "AcquisitionFrameRateEnable", true);
-    MV_CC_SetFloatValue(camera_handle_, "AcquisitionFrameRate", frame_rate);
-    WUST_INFO(hik_logger) << "AcquisitionFrameRate: " << frame_rate;
+    MV_CC_SetFloatValue(camera_handle_, "AcquisitionFrameRate", acquisition_frame_rate);
+    WUST_INFO(hik_logger) << "Acquisition frame rate: " << acquisition_frame_rate;
 
-    // 设置曝光
+    // 设置曝光时间（单位：微秒）
     MV_CC_SetFloatValue(camera_handle_, "ExposureTime", exposure_time);
-    WUST_INFO(hik_logger) << "ExposureTime: " << exposure_time;
+    WUST_INFO(hik_logger) << "Exposure time: " << exposure_time;
 
     // 设置增益
+    MV_CC_GetFloatValue(camera_handle_, "Gain", &f_value);
     MV_CC_SetFloatValue(camera_handle_, "Gain", gain);
     WUST_INFO(hik_logger) << "Gain: " << gain;
 
     // 设置 ADC 位深
-    int ret = MV_CC_SetEnumValueByString(camera_handle_, "ADCBitDepth", adc_bit_depth.c_str());
-    if (ret == MV_OK)
-        WUST_INFO(hik_logger) << "ADCBitDepth: " << adc_bit_depth;
-    else
-        WUST_ERROR(hik_logger) << "Set ADCBitDepth failed: " << ret;
+    int status = MV_CC_SetEnumValueByString(camera_handle_, "ADCBitDepth", adc_bit_depth.c_str());
+    if (status == MV_OK) {
+        WUST_INFO(hik_logger) << "ADC Bit Depth set to " << adc_bit_depth;
+    } else {
+        WUST_ERROR(hik_logger) << "Failed to set ADC Bit Depth, status = " << status;
+    }
 
     // 设置像素格式
-    ret = MV_CC_SetEnumValueByString(camera_handle_, "PixelFormat", pixel_format.c_str());
-    if (ret == MV_OK)
-        WUST_INFO(hik_logger) << "PixelFormat: " << pixel_format;
-    else
-        WUST_ERROR(hik_logger) << "Set PixelFormat failed: " << ret;
+    status = MV_CC_SetEnumValueByString(camera_handle_, "PixelFormat", pixel_format.c_str());
+    if (status == MV_OK) {
+        WUST_INFO(hik_logger) << "Pixel Format set to " << pixel_format;
+    } else {
+        WUST_ERROR(hik_logger) << "Failed to set Pixel Format, status = " << status;
+    }
 
-    // 记录参数，重启时用
-    last_frame_rate_     = static_cast<float>(frame_rate);
-    last_exposure_time_  = static_cast<float>(exposure_time);
-    last_gain_           = static_cast<float>(gain);
-    last_adc_bit_depth_  = adc_bit_depth;
-    last_pixel_format_   = pixel_format;
+    last_frame_rate_ = acquisition_frame_rate;
+    last_exposure_time_ = exposure_time;
+    last_gain_ = gain;
+    last_adc_bit_depth_ = adc_bit_depth;
+    last_pixel_format_ = pixel_format;
 }
 
+
+// 启动图像采集，采集线程不断获取图像帧并推入队列
 void HikCamera::startCamera() {
-    stop_signal_ = false;
-
     if (is_video_mode_) {
-        // 视频回放线程
+        WUST_INFO(hik_logger) << "Starting video capture loop";
         capture_thread_ = std::thread(&HikCamera::videoCaptureLoop, this);
-        WUST_INFO(hik_logger) << "Video capture thread started";
-        return;
-    }
-
-    // 硬件模式下注册回调并启动异步抓图
-    int ret = MV_CC_RegisterImageCallBack(
-        camera_handle_,
-        &HikCamera::onImageCallback,
-        this
-    );
-    if (ret != MV_OK) {
-        WUST_ERROR(hik_logger) << "RegisterImageCallBackEx failed: " << ret;
-        return;
-    }
-
-    ret = MV_CC_StartGrabbing(camera_handle_);
-    if (ret != MV_OK) {
-        WUST_ERROR(hik_logger) << "StartGrabbing failed: " << ret;
-        return;
-    }
-
-    WUST_INFO(hik_logger) << "Asynchronous hardware capture started";
-}
-
-void HikCamera::stopCamera() {
-    stop_signal_ = true;
-    if (!is_video_mode_) {
-        MV_CC_StopGrabbing(camera_handle_);
-        // 可选：反注册回调
-        MV_CC_RegisterImageCallBackEx(camera_handle_, nullptr, nullptr);
-    }
-}
-
-void __stdcall HikCamera::onImageCallback(
-    unsigned char* pData,
-    MV_FRAME_OUT_INFO* pFrameInfo,
-    void* pUser
-) {
-    auto self = reinterpret_cast<HikCamera*>(pUser);
-    if (self && !self->stop_signal_) {
-        try {
-            self->handleFrame(pData, pFrameInfo);
-        } catch (const std::exception& e) {
-            WUST_ERROR("hik_camera") << "Exception in onImageCallback: " << e.what();
-        } catch (...) {
-            WUST_ERROR("hik_camera") << "Unknown exception in onImageCallback";
+    } else {
+        int n_ret = MV_CC_StartGrabbing(camera_handle_);
+        if (n_ret != MV_OK) {
+            WUST_ERROR(hik_logger) << "Failed to start camera grabbing!";
         }
+        MVCC_INTVALUE stParam = {0};
+        if (MV_CC_GetIntValue(camera_handle_, "Width", &stParam) == MV_OK) {
+            expected_width_ = stParam.nCurValue;
+        }
+        if (MV_CC_GetIntValue(camera_handle_, "Height", &stParam) == MV_OK) {
+            expected_height_ = stParam.nCurValue;
+        }
+        capture_thread_ = std::thread(&HikCamera::hikCaptureLoop, this);
     }
 }
-
-void HikCamera::handleFrame(unsigned char* pData, MV_FRAME_OUT_INFO* pFrameInfo) {
-    // 1. 时间戳校正：到达时间减半曝光
-    auto arrival = std::chrono::steady_clock::now();
-    MVCC_FLOATVALUE exp_val{0};
-    float exp_us = 0.f;
-    if (MV_CC_GetFloatValue(camera_handle_, "ExposureTime", &exp_val) == MV_OK) {
-        exp_us = exp_val.fCurValue;
-    }
-    auto timestamp = arrival - std::chrono::microseconds(int64_t(exp_us/2.f));
-
-    // 2. 构建 ImageFrame
-    ImageFrame frame;
-    frame.width     = pFrameInfo->nWidth;
-    frame.height    = pFrameInfo->nHeight;
-    frame.step      = frame.width * 3;
-    frame.timestamp = timestamp;
-    frame.data.resize(frame.width * frame.height * 3);
-
-    // 3. 像素格式转换
-    convert_param_.pDstBuffer      = frame.data.data();
-    convert_param_.nDstBufferSize  = int(frame.data.size());
-    convert_param_.pSrcData        = pData;
-    convert_param_.nSrcDataLen     = pFrameInfo->nFrameLen;
-    convert_param_.enSrcPixelType  = pFrameInfo->enPixelType;
-    MV_CC_ConvertPixelType(camera_handle_, &convert_param_);
-
-    // 4. 推入线程安全队列
-    image_queue_.push(std::move(frame));
-
-    // 5. （可选）帧率监测、低帧率重启逻辑可在这里实现
-}
-
 void HikCamera::videoCaptureLoop() {
     WUST_INFO(hik_logger) << "Starting video capture loop!";
-    cv::Mat mat;
-    auto frame_interval = std::chrono::milliseconds(int(1000.0 / video_fps_));
+    cv::Mat frame;
+    auto frame_interval = std::chrono::milliseconds(
+        static_cast<int>(1000 / (video_fps_ > 0 ? video_fps_ : 30))
+    );
 
     while (!stop_signal_) {
-        auto t0 = std::chrono::steady_clock::now();
-
-        if (!video_cap_.read(mat)) {
-            // 播放结束，循环播放
+        auto start_time = std::chrono::steady_clock::now();
+        
+        if (!video_cap_.read(frame)) {
+            // 循环播放
             video_cap_.set(cv::CAP_PROP_POS_FRAMES, 0);
             continue;
         }
 
-        // BGR -> RGB
-        cv::cvtColor(mat, mat, cv::COLOR_BGR2RGB);
+        // 转换OpenCV Mat到ImageFrame
+        ImageFrame img_frame;
+        img_frame.timestamp = std::chrono::steady_clock::now();
+        img_frame.width = frame.cols;
+        img_frame.height = frame.rows;
+        img_frame.step = frame.step;
 
-        ImageFrame f;
-        f.timestamp = std::chrono::steady_clock::now();
-        f.width     = mat.cols;
-        f.height    = mat.rows;
-        f.step      = mat.step;
-        f.data.assign(mat.datastart, mat.dataend);
-        image_queue_.push(std::move(f));
+        // 转换BGR到RGB格式
+        cv::cvtColor(frame, frame, cv::COLOR_BGR2RGB);
+        img_frame.data.assign(frame.data, frame.data + frame.total() * frame.elemSize());
 
-        auto dt = std::chrono::steady_clock::now() - t0;
-        if (dt < frame_interval) {
-            std::this_thread::sleep_for(frame_interval - dt);
+        if (on_frame_callback_) {
+       // on_frame_callback_(frame);
+        }
+
+        // 控制帧率
+        auto process_time = std::chrono::steady_clock::now() - start_time;
+        if (process_time < frame_interval) {
+            std::this_thread::sleep_for(frame_interval - process_time);
         }
     }
 }
 
 bool HikCamera::restartCamera() {
-    // 停止并销毁
+    if (is_video_mode_) {
+        WUST_INFO(hik_logger) << "Restarting video playback...";
+        video_cap_.set(cv::CAP_PROP_POS_FRAMES, 0);
+        return true;
+    }
+    WUST_WARN(hik_logger) << "Restarting camera from scratch...";
+
     MV_CC_StopGrabbing(camera_handle_);
     MV_CC_CloseDevice(camera_handle_);
     MV_CC_DestroyHandle(&camera_handle_);
     camera_handle_ = nullptr;
+
     std::this_thread::sleep_for(std::chrono::seconds(1));
 
-    // 重新初始化
-    if (!initializeCamera("") && !stop_signal_) {
-        WUST_ERROR(hik_logger) << "Re-initialize camera failed!";
+    if (!initializeCamera("")) {
+        WUST_ERROR(hik_logger) << "Failed to re-initialize camera.";
         return false;
     }
-    // 重新设置参数
-    setParameters(last_frame_rate_,
-                  last_exposure_time_,
-                  last_gain_,
-                  last_adc_bit_depth_,
-                  last_pixel_format_);
 
-    // 重新启动抓图
-    int ret = MV_CC_StartGrabbing(camera_handle_);
-    if (ret != MV_OK) {
-        WUST_ERROR(hik_logger) << "StartGrabbing after restart failed: " << ret;
+    setParameters(last_frame_rate_, last_exposure_time_, last_gain_, last_adc_bit_depth_, last_pixel_format_);
+
+    int n_ret = MV_CC_StartGrabbing(camera_handle_);
+    if (n_ret != MV_OK) {
+        WUST_ERROR(hik_logger) << "Failed to start grabbing after restart.";
         return false;
     }
+
     WUST_INFO(hik_logger) << "Camera restarted successfully!";
     return true;
 }
 
-ThreadSafeQueue<ImageFrame>& HikCamera::getImageQueue() {
-    return image_queue_;
+
+
+void HikCamera::hikCaptureLoop() {
+    MV_FRAME_OUT out_frame;
+    WUST_INFO(hik_logger) << "Starting image capture loop!";
+
+    auto fail_start_time = std::chrono::steady_clock::now();
+    bool in_fail_state = false;
+
+    in_low_frame_rate_state_ = false;
+    auto last_frame_rate_check = std::chrono::steady_clock::now();
+    int frame_counter = 0;
+
+    try {
+        while (!stop_signal_) {
+            int n_ret = MV_CC_GetImageBuffer(camera_handle_, &out_frame, 1);
+            if (n_ret == MV_OK) {
+                in_fail_state = false;
+                ++frame_counter;
+                
+
+                ImageFrame frame;
+                frame.width = out_frame.stFrameInfo.nWidth;
+                frame.height = out_frame.stFrameInfo.nHeight;
+                frame.step = frame.width * 3;
+               
+                frame.data.resize(frame.width * frame.height * 3);
+
+                convert_param_.pDstBuffer = frame.data.data();
+                convert_param_.nDstBufferSize = static_cast<int>(frame.data.size());
+                convert_param_.pSrcData = out_frame.pBufAddr;
+                convert_param_.nSrcDataLen = out_frame.stFrameInfo.nFrameLen;
+                convert_param_.enSrcPixelType = out_frame.stFrameInfo.enPixelType;
+
+                MV_CC_ConvertPixelType(camera_handle_, &convert_param_);
+                auto current_time = std::chrono::steady_clock::now();
+                frame.timestamp = current_time;
+         
+                if (on_frame_callback_) {
+                    on_frame_callback_(frame);
+                }
+
+                MV_CC_FreeImageBuffer(camera_handle_, &out_frame);
+                continue;
+                if (std::chrono::duration_cast<std::chrono::seconds>(
+                        current_time - last_frame_rate_check).count() >= 1) {
+                    float actual_fps = static_cast<float>(frame_counter);
+                    frame_counter = 0;
+                    last_frame_rate_check = current_time;
+
+                    if (actual_fps < last_frame_rate_ * 0.5f) {
+                        if (!in_low_frame_rate_state_) {
+                            low_frame_rate_start_time_ = current_time;
+                            in_low_frame_rate_state_ = true;
+                            WUST_WARN(hik_logger) << "Low FPS detected: " << actual_fps;
+                        } else if (std::chrono::duration_cast<std::chrono::seconds>(
+                                       current_time - low_frame_rate_start_time_).count() >= 5) {
+                            WUST_ERROR(hik_logger) << "Low FPS persisted for 5s. Restarting camera...";
+                            if (restartCamera()) {
+                                in_low_frame_rate_state_ = false;
+                                WUST_INFO(hik_logger) << "Camera restarted successfully";
+                            } else {
+                                WUST_ERROR(hik_logger) << "Restart failed, exiting capture loop.";
+                                break;
+                            }
+                        }
+                    } else if (in_low_frame_rate_state_) {
+                        in_low_frame_rate_state_ = false;
+                        WUST_INFO(hik_logger) << "FPS recovered to normal: " << actual_fps;
+                    }
+                }
+
+            } else {
+                if (!in_fail_state) {
+                    fail_start_time = std::chrono::steady_clock::now();
+                    in_fail_state = true;
+                }
+
+                if (std::chrono::duration_cast<std::chrono::seconds>(
+                        std::chrono::steady_clock::now() - fail_start_time).count() > 5) {
+                    if (!restartCamera()) {
+                        WUST_ERROR(hik_logger) << "Failed to restart camera after hardware failure.";
+                        break;
+                    }
+                    fail_start_time = std::chrono::steady_clock::now();
+                    in_fail_state = false;
+                }
+            }
+        }
+    } catch (const std::exception& e) {
+        WUST_ERROR(hik_logger) << "Exception in capture loop: " << e.what();
+        stop_signal_ = true;
+    } catch (...) {
+        WUST_ERROR(hik_logger) << "Unknown exception in capture loop!";
+        stop_signal_ = true;
+    }
+    WUST_INFO(hik_logger) << "Exiting image capture loop.";
+}
+
+
+
+void HikCamera::stopCamera() {
+    stop_signal_ = true;
+    
 }

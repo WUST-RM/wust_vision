@@ -715,6 +715,7 @@ void draw_debug_overlay(const imgframe &src_img,
         static int brightness_slider = 200;
 
         if (src_img.img.empty()) return;
+        
 
         if (!window_initialized) {
         cv::namedWindow("debug_overlay", cv::WINDOW_NORMAL);
@@ -728,6 +729,7 @@ void draw_debug_overlay(const imgframe &src_img,
         double elapsed_ms = std::chrono::duration<double, std::milli>(now - last_show_time).count();
         if (elapsed_ms < min_interval_ms) return;
         last_show_time = now;
+        
 
         // 图像亮度调整
         double brightness_factor = brightness_slider / 100.0;

@@ -49,7 +49,7 @@ public:
   };
 
   // 构造函数：加载 ONNX 模型并构建 TensorRT 引擎
-  explicit AdaptedTRTModule(const std::string & onnx_path, const Params & params);
+  explicit AdaptedTRTModule(const std::string & onnx_path, const Params & params, double expand_ratio_w, double expand_ratio_h, int binary_thres, LightParams light_params);
 
   // 析构函数：释放资源
   ~AdaptedTRTModule();
@@ -62,6 +62,13 @@ public:
         const cv::Mat resized_img, Eigen::Matrix3f transform_matrix, int64_t timestamp_nanosec,
         const cv::Mat & src_img);
    void setCallback(DetectorCallback callback);
+   bool extractImage(const cv::Mat & src, ArmorObject & armor);
+   std::vector<Light> findLights(const cv::Mat &rbg_img,
+        const cv::Mat &binary_img,ArmorObject & armor) noexcept;
+    
+    bool isLight(const Light &possible_light) noexcept;
+    
+    void detect(ArmorObject & armor);
   
 private:
   // TensorRT 引擎初始化
@@ -87,6 +94,11 @@ private:
   std::unique_ptr<ThreadPool> thread_pool_;
   DetectorCallback infer_callback_;
   nvinfer1::IRuntime* runtime_ = nullptr;
+  double expand_ratio_w_;
+  double expand_ratio_h_;
+  int binary_thres_;
+  LightParams light_params_;
+
   
 };
 
