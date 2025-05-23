@@ -8,6 +8,9 @@ debug:
 
 max_infer_running: 4
 
+classify_model_path: "/home/hy/wust_vision/model/lenet.onnx"
+classify_label_path: "/home/hy/wust_vision/model/label.txt"
+
 model_path: "/home/hy/wust_vision/model/opt-1208-001.onnx"
 model:
   input_w: 416

@@ -84,6 +84,8 @@ void WustVision::init()
     use_calculation_ = config["use_calculation"].as<bool>();
     // 模型参数
     const std::string model_path = config["model_path"].as<std::string>();
+    auto classify_model_path = config["classify_model_path"].as<std::string>();
+  auto classify_label_path = config["classify_label_path"].as<std::string>();
     AdaptedTRTModule::Params params;
     params.input_w = config["model"]["input_w"].as<int>();
     params.input_h = config["model"]["input_h"].as<int>();
@@ -124,7 +126,7 @@ void WustVision::init()
         return;
     }
 
-    detector_ = std::make_unique<AdaptedTRTModule>(model_path, params,expand_ratio_h,expand_ratio_w,binary_thres,l_params);
+    detector_ = std::make_unique<AdaptedTRTModule>(model_path, params,expand_ratio_h,expand_ratio_w,binary_thres,l_params,classify_model_path,classify_label_path);
     detector_->setCallback(std::bind(
         &WustVision::DetectCallback, this, std::placeholders::_1,
         std::placeholders::_2, std::placeholders::_3));
