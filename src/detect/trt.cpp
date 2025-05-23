@@ -156,67 +156,128 @@ static void nms_merge_sorted_bboxes(
     }
   }
 }
-bool AdaptedTRTModule::extractImage(const cv::Mat & src, ArmorObject & armor)
-{
-  // 光条长度和装甲板尺寸参数
-  const int light_length = 12;
-  const int warp_height = 28;
-  const int small_armor_width = 32;
-  const int large_armor_width = 54;
-  const cv::Size roi_size(20, 28);
+bool AdaptedTRTModule::extractImage(const cv::Mat & src, ArmorObject & armor) {
+  // Constants
+  static const int light_length = 12;
+  static const int warp_height = 28;
+  static const int small_armor_width = 32;
+  static const int large_armor_width = 54;
+  static const cv::Size roi_size(20, 28);
+  static const cv::Size input_size(28, 28);
 
-  // 判断装甲板类型
-  bool is_large = (armor.number == ArmorNumber::NO1 || armor.number == ArmorNumber::BASE);
-
-  // 检查装甲板点合法性
-  for (const auto& pt : armor.pts) {
-    if (pt.x < 0 || pt.y < 0 || pt.x >= src.cols || pt.y >= src.rows) {
-      //std::cerr << "[extractImage] Invalid armor.pts!" << std::endl;
-      //armor.is_ok = false;
+  if (src.empty() || src.cols < 10 || src.rows < 10) {
+     // std::cerr << "[extractImage] Source image is empty or too small" << std::endl;
       return false;
-    }
   }
 
-  // 计算外接矩形并扩展
-  std::vector<cv::Point2f> pts_vec(std::begin(armor.pts), std::end(armor.pts));
-  cv::Rect bbox = cv::boundingRect(pts_vec);
+  // 过滤 armor.pts，确保所有点在图像边界内，且坐标合理
+  std::vector<cv::Point2f> valid_pts;
+  for (const auto& pt : armor.pts) {
+      if (pt.x >= 0 && pt.x < src.cols && pt.y >= 0 && pt.y < src.rows &&
+          std::isfinite(pt.x) && std::isfinite(pt.y)) {
+          valid_pts.push_back(pt);
+      } else {
+         // std::cerr << "[extractImage] Invalid pt detected and skipped: (" << pt.x << ", " << pt.y << ")" << std::endl;
+      }
+  }
+  if (valid_pts.size() < 4) {
+      //std::cerr << "[extractImage] Not enough valid points after filtering: " << valid_pts.size() << std::endl;
+      return false;
+  }
 
-  int new_width = static_cast<int>(bbox.width * expand_ratio_w_);
-  int new_height = static_cast<int>(bbox.height * expand_ratio_h_);
-  int new_x = std::max(static_cast<int>(bbox.x - (new_width - bbox.width) / 2), 0);
-  int new_y = std::max(static_cast<int>(bbox.y - (new_height - bbox.height) / 2), 0);
+  cv::Rect bbox = cv::boundingRect(valid_pts);
 
+  // 增加bbox尺寸和坐标合理性校验，避免异常
+  if (bbox.width <= 0 || bbox.height <= 0 || 
+      bbox.x < 0 || bbox.y < 0 ||
+      bbox.x + bbox.width > src.cols || bbox.y + bbox.height > src.rows) {
+   //   std::cerr << "[extractImage] Invalid bounding box: " << bbox << std::endl;
+      return false;
+  }
+
+  float expand_ratio_w = 2.0f;
+  float expand_ratio_h = 1.5f;
+  int new_width = static_cast<int>(bbox.width * expand_ratio_w);
+  int new_height = static_cast<int>(bbox.height * expand_ratio_h);
+  int new_x = static_cast<int>(bbox.x - (new_width - bbox.width) / 2);
+  int new_y = static_cast<int>(bbox.y - (new_height - bbox.height) / 2);
+
+  // 边界检查和裁剪
+  new_x = std::max(0, new_x);
+  new_y = std::max(0, new_y);
   if (new_x + new_width > src.cols) new_width = src.cols - new_x;
   if (new_y + new_height > src.rows) new_height = src.rows - new_y;
-
-  // ROI 合法性检查
-  if (new_width <= 0 || new_height <= 0 || new_x >= src.cols || new_y >= src.rows) {
-    // std::cerr << "[extractImage] Invalid ROI: new_x=" << new_x << ", new_y=" << new_y
-    //           << ", new_width=" << new_width << ", new_height=" << new_height << std::endl;
-    //armor.is_ok = false;
-
-    return false; 
+  if (new_width <= 0 || new_height <= 0) {
+     // std::cerr << "[extractImage] Expanded ROI is invalid after clamp: "
+    //            << new_width << "x" << new_height << std::endl;
+      return false;
   }
 
+  cv::Rect expanded_rect(new_x, new_y, new_width, new_height);
   armor.new_x = new_x;
   armor.new_y = new_y;
 
-  // 裁剪图像
-  cv::Rect expanded_rect(new_x, new_y, new_width, new_height);
   cv::Mat litroi_color = src(expanded_rect).clone();
-  cv::Mat litroi;
-  cv::cvtColor(litroi_color, litroi, cv::COLOR_RGB2GRAY);
+  if (litroi_color.empty()) {
+     // std::cerr << "[extractImage] ROI color image is empty" << std::endl;
+      return false;
+  }
 
-  // 保存图像数据
-  armor.whole_gray_img = litroi.clone();
-  cv::threshold(litroi, litroi, binary_thres_, 255, cv::THRESH_BINARY | cv::THRESH_OTSU);
+  cv::Mat litroi_gray;
+  cv::cvtColor(litroi_color, litroi_gray, cv::COLOR_RGB2GRAY);
 
-  armor.whole_binary_img = litroi;
   armor.whole_rgb_img = litroi_color;
+  armor.whole_gray_img = litroi_gray;
 
-  //armor.is_ok = true;
+  cv::Mat litroi_bin;
+  cv::threshold(litroi_gray, litroi_bin, binary_thres_, 255, cv::THRESH_BINARY | cv::THRESH_OTSU);
+  armor.whole_binary_img = litroi_bin;
+
+  // Perspective warp
+  // 注意这里用 armor.pts 的原始点，如果不确定有效性，也可替换为 valid_pts 对应点
+  cv::Point2f lights_vertices[4] = {armor.pts[0], armor.pts[1], armor.pts[2], armor.pts[3]};
+  int top_light_y = (warp_height - light_length) / 2 - 1;
+  int bottom_light_y = top_light_y + light_length;
+  int warp_width = (armor.number == ArmorNumber::NO1 || armor.number == ArmorNumber::BASE) ? small_armor_width : large_armor_width;
+
+  cv::Point2f target_vertices[4] = {
+      cv::Point(0, bottom_light_y),
+      cv::Point(0, top_light_y),
+      cv::Point(warp_width - 1, top_light_y),
+      cv::Point(warp_width - 1, bottom_light_y),
+  };
+
+  cv::Mat warp_mat = cv::getPerspectiveTransform(lights_vertices, target_vertices);
+  cv::Mat number_image;
+  cv::warpPerspective(src, number_image, warp_mat, cv::Size(warp_width, warp_height));
+
+  if (number_image.empty() || number_image.cols < roi_size.width || number_image.rows < roi_size.height) {
+    //  std::cerr << "[extractImage] Warped number image is invalid" << std::endl;
+      return false;
+  }
+
+  // 截取 ROI 并处理
+  cv::Rect number_roi((warp_width - roi_size.width) / 2, 0, roi_size.width, roi_size.height);
+  if ((number_roi.x + number_roi.width > number_image.cols) || 
+      (number_roi.y + number_roi.height > number_image.rows)) {
+     // std::cerr << "[extractImage] ROI for number image is out of bounds" << std::endl;
+      return false;
+  }
+
+  number_image = number_image(number_roi).clone();
+  cv::cvtColor(number_image, number_image, cv::COLOR_RGB2GRAY);
+  cv::threshold(number_image, number_image, 0, 255, cv::THRESH_BINARY | cv::THRESH_OTSU);
+  cv::resize(number_image, number_image, input_size);
+
+  cv::Mat flipped_image;
+  cv::flip(number_image, flipped_image, 0);
+  armor.number_img = flipped_image;
+
   return true;
 }
+
+
+
 
   bool AdaptedTRTModule::isLight(const Light &light) noexcept {
     // The ratio of light (short side / long side)
@@ -379,8 +440,8 @@ bool AdaptedTRTModule::extractImage(const cv::Mat & src, ArmorObject & armor)
     
   }
 // 构造函数：初始化参数并构建引擎
-AdaptedTRTModule::AdaptedTRTModule(const std::string & onnx_path, const Params & params, double expand_ratio_w, double expand_ratio_h, int binary_thres, LightParams light_params)
-: params_(params), engine_(nullptr), context_(nullptr), output_buffer_(nullptr), runtime_(nullptr),expand_ratio_h_(expand_ratio_h),expand_ratio_w_(expand_ratio_w),binary_thres_(binary_thres),light_params_(light_params)
+AdaptedTRTModule::AdaptedTRTModule(const std::string & onnx_path, const Params & params, double expand_ratio_w, double expand_ratio_h, int binary_thres, LightParams light_params,std::string classify_model_path,std::string classify_label_path)
+: params_(params), engine_(nullptr), context_(nullptr), output_buffer_(nullptr), runtime_(nullptr),expand_ratio_h_(expand_ratio_h),expand_ratio_w_(expand_ratio_w),binary_thres_(binary_thres),light_params_(light_params),classify_label_path_(classify_label_path),classify_model_path_(classify_model_path)
 {
   buildEngine(onnx_path);
   TRT_ASSERT(context_ = engine_->createExecutionContext());
@@ -510,7 +571,13 @@ bool AdaptedTRTModule::processCallback(
   // 后处理
   objs_result=postprocess(
     objs_tmp, scores, rects, output_buffer_, output_sz_ / 21, transform_matrix); 
-  
+  if(objs_result.size() > 10)
+  {
+    if (this->infer_callback_) {
+        this->infer_callback_(objs_result, timestamp_nanosec, src_img);
+        return true;
+      }
+  }
 
 
   for (auto & armor : objs_result) {
@@ -526,6 +593,7 @@ bool AdaptedTRTModule::processCallback(
       
      if( extractImage(src_img, armor))
      {
+      classifyNumber(armor);
       detect(armor);
      }
       
@@ -546,6 +614,90 @@ bool AdaptedTRTModule::processCallback(
 
   return true; 
 }
+void AdaptedTRTModule::initNumberClassifier()
+{
+  // 加载数字识别模型
+  const std::string model_path = classify_model_path_;
+  number_net_ = cv::dnn::readNetFromONNX(model_path);
+
+  // 检查模型是否成功加载
+  if (number_net_.empty()) {
+    std::cerr << "Failed to load number classifier model from " << model_path << std::endl;
+    std::exit(EXIT_FAILURE);  // 模型加载失败，退出程序
+  } else {
+    std::cout << "Successfully loaded number classifier model from " << model_path << std::endl;
+  }
+
+  // 加载标签
+  const std::string label_path = classify_label_path_;
+  std::ifstream label_file(label_path);
+  std::string line;
+
+  // 清空之前的标签
+  class_names_.clear();
+
+  // 读取标签文件
+  while (std::getline(label_file, line)) {
+    class_names_.push_back(line);
+  }
+
+  // 检查标签是否成功加载
+  if (class_names_.empty()) {
+    std::cerr << "Failed to load labels from " << label_path << std::endl;
+    std::exit(EXIT_FAILURE);  // 标签加载失败，退出程序
+  } else {
+    std::cout << "Successfully loaded " << class_names_.size() << " labels from " << label_path
+              << std::endl;
+  }
+}
+bool AdaptedTRTModule::classifyNumber(ArmorObject & armor)  {
+  // Normalize
+
+  static thread_local std::unique_ptr<cv::dnn::Net> thread_net;
+    if (!thread_net) {
+    thread_net = std::make_unique<cv::dnn::Net>(cv::dnn::readNetFromONNX(classify_model_path_));
+    if (thread_net->empty()) {
+      std::cerr << "Failed to load thread-local number classifier model." << std::endl;
+      return false;
+    }
+  }
+  cv::Mat image = armor.number_img.clone();
+  image=image/255.0;
+
+  // Create blob from image
+  cv::Mat blob;
+  cv::dnn::blobFromImage(image, blob);
+  
+  // Set the input blob for the neural network
+ // mutex_.lock();
+  thread_net->setInput(blob);
+
+  // Forward pass the image blob through the model
+  cv::Mat outputs = thread_net->forward().clone();
+ // mutex_.unlock();
+
+  // Decode the output
+  double confidence;
+  cv::Point class_id_point;
+  minMaxLoc(outputs.reshape(1, 1), nullptr, &confidence, nullptr, &class_id_point);
+  int label_id = class_id_point.x;
+
+  armor.confidence = confidence;
+    static const std::map<int, ArmorNumber> label_to_armor_number = {
+    {0, ArmorNumber::NO1}, {1, ArmorNumber::NO2}, {2, ArmorNumber::NO3},
+    {3, ArmorNumber::NO4}, {4, ArmorNumber::NO5}, {5, ArmorNumber::OUTPOST},
+    {6, ArmorNumber::SENTRY}, {7, ArmorNumber::BASE}
+  };
+    if (label_id < 8 && label_to_armor_number.find(label_id) != label_to_armor_number.end()) {
+    armor.number = label_to_armor_number.at(label_id);
+    return true;
+  } else {
+    armor.confidence = 0;
+    return false;
+  }
+  
+}
+
 
 // 后处理函数
 std::vector<ArmorObject> AdaptedTRTModule::postprocess(
@@ -682,4 +834,3 @@ void AdaptedTRTModule::pushInput(const cv::Mat& rgb_img, int64_t timestamp_nanos
       
     });
   }
-

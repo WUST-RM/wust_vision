@@ -84,6 +84,8 @@ void WustVision::init()
     use_calculation_ = config["use_calculation"].as<bool>();
     // 模型参数
     const std::string model_path = config["model_path"].as<std::string>();
+    auto classify_model_path = config["classify_model_path"].as<std::string>();
+  auto classify_label_path = config["classify_label_path"].as<std::string>();
     AdaptedTRTModule::Params params;
     params.input_w = config["model"]["input_w"].as<int>();
     params.input_h = config["model"]["input_h"].as<int>();
@@ -95,6 +97,12 @@ void WustVision::init()
     float expand_ratio_w = config["light"]["expand_ratio_w"].as<float>();
     float expand_ratio_h = config["light"]["expand_ratio_h"].as<float>();
     int binary_thres = config["light"]["binary_thres"].as<int>();
+    gimbal2camera_x_  = config["tf"]["gimbal2camera_x"].as<double>();
+    gimbal2camera_y_  = config["tf"]["gimbal2camera_y"].as<double>();
+    gimbal2camera_z_  = config["tf"]["gimbal2camera_z"].as<double>();
+    gimbal2camera_roll_ = config["tf"]["gimbal2camera_roll"].as<double>();
+    gimbal2camera_pitch_ = config["tf"]["gimbal2camera_pitch"].as<double>();
+    gimbal2camera_yaw_ = config["tf"]["gimbal2camera_yaw"].as<double>();
 
     LightParams l_params = {
       .min_ratio =  config["light"]["min_ratio"].as<double>(),
@@ -118,7 +126,7 @@ void WustVision::init()
         return;
     }
 
-    detector_ = std::make_unique<AdaptedTRTModule>(model_path, params,expand_ratio_h,expand_ratio_w,binary_thres,l_params);
+    detector_ = std::make_unique<AdaptedTRTModule>(model_path, params,expand_ratio_h,expand_ratio_w,binary_thres,l_params,classify_model_path,classify_label_path);
     detector_->setCallback(std::bind(
         &WustVision::DetectCallback, this, std::placeholders::_1,
         std::placeholders::_2, std::placeholders::_3));
@@ -178,7 +186,8 @@ void WustVision::initTF()
     // camera 相对于 odom，设置 odom -> camera 的变换
     tf_tree_.setTransform("odom", "gimbal_odom", createTf(0, 0, 0, tf2::Quaternion(0, 0, 0, 1)));
     tf_tree_.setTransform("gimbal_odom", "gimbal_link", createTf(0, 0, 0, tf2::Quaternion(0, 0, 0, 1)));
-    tf_tree_.setTransform("gimbal_link", "camera", createTf(0, 0, 0, tf2::Quaternion(0, 0, 0, 1)));
+    tf2::Quaternion origimbal2camera = eulerToQuaternion(gimbal2camera_roll_, gimbal2camera_pitch_, gimbal2camera_yaw_);
+    tf_tree_.setTransform("gimbal_link", "camera", createTf(gimbal2camera_x_, gimbal2camera_y_, gimbal2camera_z_, origimbal2camera));
 
     // camera_optical_frame 相对于 camera，设置 camera -> camera_optical_frame 的旋转变换
     double yaw = -M_PI / 2;
@@ -697,5 +706,3 @@ int main() {
 
     return 0;
 }
-
-
