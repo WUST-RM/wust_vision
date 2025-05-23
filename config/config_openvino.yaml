@@ -4,7 +4,7 @@ debug:
   debug_mode: true
   debug_w: 1440
   debug_h: 1080
-  debug_show_dt: 0.1
+  debug_show_dt: 0.05
 
 max_infer_running: 4
 
@@ -33,12 +33,20 @@ camera:
   camera_info_path: "/home/hy/wust_vision/config/camera_info.yaml"
   serial: "" 
   acquisition_frame_rate: 160
-  exposure_time: 2500
+  exposure_time: 3500
   gain: 12.0
   adc_bit_depth: "Bits_8"
   pixel_format: "BayerRG8"
 
 detect_color: 0
+tf:
+  gimbal2camera_x:  0.0
+  gimbal2camera_y:  0.0
+  gimbal2camera_z:  0.0
+  gimbal2camera_roll: 0.0
+  gimbal2camera_pitch: 0.0
+  gimbal2camera_yaw: 0.0
+
 
 tracker:
   target_frame: "odom"

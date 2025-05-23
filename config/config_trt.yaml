@@ -18,6 +18,14 @@ model:
   nms_threshold: 0.3
   top_k: 128
 
+light:
+  expand_ratio_w: 1.1
+  expand_ratio_h: 1.1
+  binary_thres: 85
+  min_ratio: 0.02
+  max_ratio: 0.45
+  max_angle: 40.0
+
 camera:
   serial: ""
   camera_info_path: "/home/hy/wust_vision/config/camera_info.yaml"
@@ -29,23 +37,31 @@ camera:
 
 detect_color: 0
 
+tf:
+  gimbal2camera_x:  0.0
+  gimbal2camera_y:  0.0
+  gimbal2camera_z:  0.0
+  gimbal2camera_roll: 0.0
+  gimbal2camera_pitch: 0.0
+  gimbal2camera_yaw: 0.0
+
 tracker:
   target_frame: "odom"
   max_match_distance: 0.5
   max_match_yaw_diff: 0.7
   tracking_thres: 5
-  lost_time_thres: 0.2
+  lost_time_thres: 0.1
   ekf:
-    s2qx: 10.0
-    s2qy: 10.0
+    s2qx: 7.0
+    s2qy: 7.0
     s2qz: 1.0
-    s2qyaw: 20.0
-    s2qr: 80.0
+    s2qyaw: 30.0
+    s2qr: 50.0
     s2qd_zc: 800.0
     r_x: 0.0046302163
     r_y: 0.0322467810
     r_z: 0.2659587660
-    r_yaw: 0.1651087658
+    r_yaw: 0.3651087658
 solver:
       prediction_delay: 0.0
       controller_delay: 0.0

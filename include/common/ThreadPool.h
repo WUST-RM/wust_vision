@@ -158,5 +158,17 @@ private:
     int max_task_duration_ms_;
     std::thread controller_;
 };
+inline void SetRealtimePriority(int priority = 90) {
+    pthread_t this_thread = pthread_self();
+    struct sched_param schedParams;
+    schedParams.sched_priority = priority;
 
+    int ret = pthread_setschedparam(this_thread, SCHED_FIFO, &schedParams);
+    if (ret != 0) {
+        std::cerr << "Failed to set real-time priority. Error code: " << ret << std::endl;
+        perror("pthread_setschedparam");
+    } else {
+        std::cout << "Real-time priority set successfully to " << priority << std::endl;
+    }
+}
 #endif  // ARMOR_DETECTOR_OPENVINO__THREADPOOL_H

@@ -919,7 +919,7 @@ std::string formatTargetInfo(const Target& target) {
     oss << "\n-- Yaw Info --\n";
     oss << "Yaw      : " << target.yaw << "\n";
     oss << "v_yaw    : " << target.v_yaw << "\n";
-    oss << "Yaw Diff : " << target.yaw_diff/M_PI*180 << "\n";
+    oss << "Yaw Diff : " << target.yaw_diff << "\n";
 
     oss << "\n-- Radii  --\n";
     oss << "Radius 1       : " << target.radius_1 << "\n";

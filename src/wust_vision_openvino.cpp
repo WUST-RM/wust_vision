@@ -56,6 +56,12 @@ void  WustVision::init()
   float conf_threshold = config["model"]["conf_threshold"].as<float>();
   int top_k = config["model"]["top_k"].as<int>();
   float nms_threshold = config["model"]["nms_threshold"].as<float>();
+  gimbal2camera_x_  = config["tf"]["gimbal2camera_x"].as<double>();
+  gimbal2camera_y_  = config["tf"]["gimbal2camera_y"].as<double>();
+  gimbal2camera_z_  = config["tf"]["gimbal2camera_z"].as<double>();
+  gimbal2camera_roll_ = config["tf"]["gimbal2camera_roll"].as<double>();
+  gimbal2camera_pitch_ = config["tf"]["gimbal2camera_pitch"].as<double>();
+  gimbal2camera_yaw_ = config["tf"]["gimbal2camera_yaw"].as<double>();
 
   float expand_ratio_w = config["light"]["expand_ratio_w"].as<float>();
   float expand_ratio_h = config["light"]["expand_ratio_h"].as<float>();
@@ -105,6 +111,15 @@ void  WustVision::init()
       config["camera"]["gain"].as<double>(),
       config["camera"]["adc_bit_depth"].as<std::string>(),
       config["camera"]["pixel_format"].as<std::string>());
+      camera_.setFrameCallback([this](const ImageFrame& frame){
+        if(is_inited_)
+        {
+          thread_pool_->enqueue([frame = std::move(frame), this]() {
+                processImage(frame);
+            });
+        }
+        
+        });
 
   camera_.startCamera();
   startTimer();
@@ -127,7 +142,7 @@ if (video_writer_.isOpened()) {
 } 
   serial_.stopThread();
 
-  camera_.getImageQueue().shutdown();  
+ 
 
     if (thread_pool_) {
         thread_pool_->waitUntilEmpty(); 
@@ -167,7 +182,8 @@ void WustVision::initTF()
     // camera 相对于 odom，设置 odom -> camera 的变换
     tf_tree_.setTransform("odom", "gimbal_odom", createTf(0, 0, 0, tf2::Quaternion(0, 0, 0, 1)));
     tf_tree_.setTransform("gimbal_odom", "gimbal_link", createTf(0, 0, 0, tf2::Quaternion(0, 0, 0, 1)));
-    tf_tree_.setTransform("gimbal_link", "camera", createTf(0, 0, 0, tf2::Quaternion(0, 0, 0, 1)));
+    tf2::Quaternion origimbal2camera = eulerToQuaternion(gimbal2camera_roll_, gimbal2camera_pitch_, gimbal2camera_yaw_);
+    tf_tree_.setTransform("gimbal_link", "camera", createTf(gimbal2camera_x_, gimbal2camera_y_, gimbal2camera_z_, origimbal2camera));
 
     // camera_optical_frame 相对于 camera，设置 camera -> camera_optical_frame 的旋转变换
     double yaw = -M_PI / 2;
@@ -641,27 +657,6 @@ void WustVision::processImage(const ImageFrame& frame) {
  
 }
 
-void WustVision::imageConsumer(ThreadSafeQueue<ImageFrame>& queue, ThreadPool& pool) {
-  while (is_inited_) {
-      ImageFrame frame;
-
-
-      while (queue.size() > 1) {
-          queue.try_pop(frame);
-      }
-
- 
-      if (!queue.wait_and_pop(frame) && queue.is_shutdown()) {
-          WUST_INFO(vision_logger) << "Queue is shutdown, exiting consumer thread.";
-          break;
-      }
-
-     
-      pool.enqueue([frame = std::move(frame), this]() {
-          processImage(frame);
-      });
-  }
-}
 
 
 void WustVision::printStats()
@@ -687,22 +682,39 @@ void WustVision::printStats()
 
 
 WustVision* global_vision = nullptr;
+std::mutex mtx;
+std::condition_variable c;
+bool exit_flag = false;
+
 void signalHandler(int signum) {
-  WUST_INFO("main") << "Interrupt signal (" << signum << ") received.";
-  if (global_vision) {
-      global_vision->stop();  
-  }
+    WUST_INFO("main") << "Interrupt signal (" << signum << ") received.";
+    if (global_vision) {
+        global_vision->stop();  
+    }
+    {
+        std::lock_guard<std::mutex> lk(mtx);
+        exit_flag = true;
+    }
+    c.notify_one();
 }
+
 int main() {
     WustVision vision;
     global_vision = &vision;
 
     std::signal(SIGINT, signalHandler);
 
-    std::thread consumer_thread([&vision]() {
-        vision.imageConsumer(vision.camera_.getImageQueue(), *vision.thread_pool_);
-    });
+   
 
-    consumer_thread.join();
+    
+    {
+        std::unique_lock<std::mutex> lk(mtx);
+        c.wait(lk, []{ return exit_flag; });
+    }
+
+   
+    
+
     return 0;
 }
+

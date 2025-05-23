@@ -64,6 +64,10 @@ public:
     double r_x_, r_y_, r_z_, r_yaw_;
     double lost_time_thres_;
     
+
+
+    double gimbal2camera_x_, gimbal2camera_y_, gimbal2camera_z_, gimbal2camera_yaw_, gimbal2camera_roll_, gimbal2camera_pitch_;
+    
     
     std::string target_frame_;
     std::chrono::steady_clock::time_point last_time_;

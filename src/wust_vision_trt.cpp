@@ -56,7 +56,7 @@ void WustVision::stop() {
     }
     
   
-    camera_.getImageQueue().shutdown();  
+   
   
       if (thread_pool_) {
           thread_pool_->waitUntilEmpty(); 
@@ -92,6 +92,21 @@ void WustVision::init()
     params.conf_threshold = config["model"]["conf_threshold"].as<float>();
     params.nms_threshold = config["model"]["nms_threshold"].as<float>();
     params.top_k = config["model"]["top_k"].as<int>();
+    float expand_ratio_w = config["light"]["expand_ratio_w"].as<float>();
+    float expand_ratio_h = config["light"]["expand_ratio_h"].as<float>();
+    int binary_thres = config["light"]["binary_thres"].as<int>();
+    gimbal2camera_x_  = config["tf"]["gimbal2camera_x"].as<double>();
+    gimbal2camera_y_  = config["tf"]["gimbal2camera_y"].as<double>();
+    gimbal2camera_z_  = config["tf"]["gimbal2camera_z"].as<double>();
+    gimbal2camera_roll_ = config["tf"]["gimbal2camera_roll"].as<double>();
+    gimbal2camera_pitch_ = config["tf"]["gimbal2camera_pitch"].as<double>();
+    gimbal2camera_yaw_ = config["tf"]["gimbal2camera_yaw"].as<double>();
+
+    LightParams l_params = {
+      .min_ratio =  config["light"]["min_ratio"].as<double>(),
+      .max_ratio =  config["light"]["max_ratio"].as<double>(),
+      .max_angle =  config["light"]["max_angle"].as<double>()
+      };
 
     // 相机参数
     const std::string camera_info_path = config["camera"]["camera_info_path"].as<std::string>();
@@ -109,7 +124,7 @@ void WustVision::init()
         return;
     }
 
-    detector_ = std::make_unique<AdaptedTRTModule>(model_path, params);
+    detector_ = std::make_unique<AdaptedTRTModule>(model_path, params,expand_ratio_h,expand_ratio_w,binary_thres,l_params);
     detector_->setCallback(std::bind(
         &WustVision::DetectCallback, this, std::placeholders::_1,
         std::placeholders::_2, std::placeholders::_3));
@@ -128,6 +143,15 @@ void WustVision::init()
         config["camera"]["gain"].as<double>(),
         config["camera"]["adc_bit_depth"].as<std::string>(),
         config["camera"]["pixel_format"].as<std::string>());
+    camera_.setFrameCallback([this](const ImageFrame& frame){
+    if(is_inited_)
+    {
+      thread_pool_->enqueue([frame = std::move(frame), this]() {
+            processImage(frame);
+        });
+    }
+    
+    });
 
     camera_.startCamera();
     startTimer();
@@ -139,7 +163,7 @@ void WustVision::startTimer()
     timer_running_ = true;
 
     timer_thread_ = std::thread([this]() {
-        const auto interval = std::chrono::microseconds(5000);  // 5ms = 200Hz
+        const auto interval = std::chrono::microseconds(10000);  // 5ms = 200Hz
         auto next_time = std::chrono::steady_clock::now() + interval;
 
         while (timer_running_) {
@@ -160,7 +184,8 @@ void WustVision::initTF()
     // camera 相对于 odom，设置 odom -> camera 的变换
     tf_tree_.setTransform("odom", "gimbal_odom", createTf(0, 0, 0, tf2::Quaternion(0, 0, 0, 1)));
     tf_tree_.setTransform("gimbal_odom", "gimbal_link", createTf(0, 0, 0, tf2::Quaternion(0, 0, 0, 1)));
-    tf_tree_.setTransform("gimbal_link", "camera", createTf(0, 0, 0, tf2::Quaternion(0, 0, 0, 1)));
+    tf2::Quaternion origimbal2camera = eulerToQuaternion(gimbal2camera_roll_, gimbal2camera_pitch_, gimbal2camera_yaw_);
+    tf_tree_.setTransform("gimbal_link", "camera", createTf(gimbal2camera_x_, gimbal2camera_y_, gimbal2camera_z_, origimbal2camera));
 
     // camera_optical_frame 相对于 camera，设置 camera -> camera_optical_frame 的旋转变换
     double yaw = -M_PI / 2;
@@ -209,7 +234,7 @@ void WustVision::initTracker(const YAML::Node& config)
     r_yaw_ = config["ekf"]["r_yaw"].as<double>(0.02);
 
     // EKF 状态预测函数
-    auto f = Predict(0.005);  // dt 固定为 5ms
+    auto f = Predict(0.01);  // dt 固定为 5ms
 
     // EKF 观测函数
     auto h = Measure();
@@ -265,7 +290,7 @@ void WustVision::initTracker(const YAML::Node& config)
 void WustVision::armorsCallback(Armors armors_,const cv::Mat& src_img) {
     transformArmorData(armors_);
     if (armors_.timestamp <= last_time_) {
-        WUST_WARN(vision_logger) << "Received out-of-order armor data, discarded.";
+       // WUST_WARN(vision_logger) << "Received out-of-order armor data, discarded.";
         return;
     }
     if(debug_mode_)
@@ -407,7 +432,7 @@ void WustVision::DetectCallback(
 {   std::lock_guard<std::mutex> lock(callback_mutex_);
     detect_finish_count_++;
     if(objs.size()>=10){
-    WUST_WARN(vision_logger)<<"Detected "<<objs.size()<<" objects"<<"too much";
+    //WUST_WARN(vision_logger)<<"Detected "<<objs.size()<<" objects"<<"too much";
     infer_running_count_--;
     return;}
     if (measure_tool_ == nullptr) {
@@ -495,6 +520,8 @@ void WustVision::DetectCallback(
 //   }   
 
     infer_running_count_--;
+    
+    
 
    thread_pool_->enqueue([this, armors = std::move(armors), src_img]() {
       this->armorsCallback(armors,src_img);
@@ -603,15 +630,12 @@ void WustVision::timerCallback()
   }
 }
 void WustVision::processImage(const ImageFrame& frame) {
-  
-    
 
     img_recv_count_++;
         if (infer_running_count_.load() >= max_infer_running_) {
-       WUST_WARN(vision_logger)<<"Infer running too much ("<<infer_running_count_.load()<<"), dropping frame";
+       //WUST_WARN(vision_logger)<<"Infer running too much ("<<infer_running_count_.load()<<"), dropping frame";
        return;    
         }
-
 
     cv::Mat img = convertToMat(frame);
     infer_running_count_++;
@@ -620,10 +644,7 @@ void WustVision::processImage(const ImageFrame& frame) {
         frame.timestamp.time_since_epoch())
         .count();
     detector_->pushInput(img, timestamp_nanosec);
-    
-   
 
-   
 }
 void WustVision::printStats()
 {
@@ -645,49 +666,42 @@ void WustVision::printStats()
     last_stat_time_steady_ = now;
   }
 }
-void WustVision::imageConsumer(ThreadSafeQueue<ImageFrame>& queue, ThreadPool& pool) {
-    while (is_inited_) {
-        ImageFrame frame;
-  
-  
-        while (queue.size() > 1) {
-            queue.try_pop(frame);
-        }
-  
-   
-        if (!queue.wait_and_pop(frame) && queue.is_shutdown()) {
-            WUST_INFO(vision_logger) << "Queue is shutdown, exiting consumer thread.";
-            break;
-        }
-  
-       
-        pool.enqueue([frame = std::move(frame), this]() {
-            processImage(frame);
-        });
-    }
-  }
-  
-  
+
 
 WustVision* global_vision = nullptr;
+std::mutex mtx;
+std::condition_variable c;
+bool exit_flag = false;
+
 void signalHandler(int signum) {
-  WUST_INFO("main") << "Interrupt signal (" << signum << ") received.";
-  if (global_vision) {
-      global_vision->stop();  
-  }
+    WUST_INFO("main") << "Interrupt signal (" << signum << ") received.";
+    if (global_vision) {
+        global_vision->stop();  
+    }
+    {
+        std::lock_guard<std::mutex> lk(mtx);
+        exit_flag = true;
+    }
+    c.notify_one();
 }
-int main() 
-{ 
+
+int main() {
     WustVision vision;
     global_vision = &vision;
 
     std::signal(SIGINT, signalHandler);
-    std::thread consumer_thread([&vision]() {
-        vision.imageConsumer(vision.camera_.getImageQueue(), *vision.thread_pool_);
-    });
 
-    consumer_thread.join();
+   
+
     
-}
+    {
+        std::unique_lock<std::mutex> lk(mtx);
+        c.wait(lk, []{ return exit_flag; });
+    }
 
+   
+    
+
+    return 0;
+}
 

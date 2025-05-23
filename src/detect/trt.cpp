@@ -19,6 +19,7 @@
 #include "NvOnnxParser.h"
 #include "common/logger.hpp"
 #include "cuda_runtime_api.h"
+#include "common/gobal.hpp"
 
 
 // #include <logger.h>
@@ -155,10 +156,231 @@ static void nms_merge_sorted_bboxes(
     }
   }
 }
+bool AdaptedTRTModule::extractImage(const cv::Mat & src, ArmorObject & armor)
+{
+  // 光条长度和装甲板尺寸参数
+  const int light_length = 12;
+  const int warp_height = 28;
+  const int small_armor_width = 32;
+  const int large_armor_width = 54;
+  const cv::Size roi_size(20, 28);
 
+  // 判断装甲板类型
+  bool is_large = (armor.number == ArmorNumber::NO1 || armor.number == ArmorNumber::BASE);
+
+  // 检查装甲板点合法性
+  for (const auto& pt : armor.pts) {
+    if (pt.x < 0 || pt.y < 0 || pt.x >= src.cols || pt.y >= src.rows) {
+      //std::cerr << "[extractImage] Invalid armor.pts!" << std::endl;
+      //armor.is_ok = false;
+      return false;
+    }
+  }
+
+  // 计算外接矩形并扩展
+  std::vector<cv::Point2f> pts_vec(std::begin(armor.pts), std::end(armor.pts));
+  cv::Rect bbox = cv::boundingRect(pts_vec);
+
+  int new_width = static_cast<int>(bbox.width * expand_ratio_w_);
+  int new_height = static_cast<int>(bbox.height * expand_ratio_h_);
+  int new_x = std::max(static_cast<int>(bbox.x - (new_width - bbox.width) / 2), 0);
+  int new_y = std::max(static_cast<int>(bbox.y - (new_height - bbox.height) / 2), 0);
+
+  if (new_x + new_width > src.cols) new_width = src.cols - new_x;
+  if (new_y + new_height > src.rows) new_height = src.rows - new_y;
+
+  // ROI 合法性检查
+  if (new_width <= 0 || new_height <= 0 || new_x >= src.cols || new_y >= src.rows) {
+    // std::cerr << "[extractImage] Invalid ROI: new_x=" << new_x << ", new_y=" << new_y
+    //           << ", new_width=" << new_width << ", new_height=" << new_height << std::endl;
+    //armor.is_ok = false;
+
+    return false; 
+  }
+
+  armor.new_x = new_x;
+  armor.new_y = new_y;
+
+  // 裁剪图像
+  cv::Rect expanded_rect(new_x, new_y, new_width, new_height);
+  cv::Mat litroi_color = src(expanded_rect).clone();
+  cv::Mat litroi;
+  cv::cvtColor(litroi_color, litroi, cv::COLOR_RGB2GRAY);
+
+  // 保存图像数据
+  armor.whole_gray_img = litroi.clone();
+  cv::threshold(litroi, litroi, binary_thres_, 255, cv::THRESH_BINARY | cv::THRESH_OTSU);
+
+  armor.whole_binary_img = litroi;
+  armor.whole_rgb_img = litroi_color;
+
+  //armor.is_ok = true;
+  return true;
+}
+
+  bool AdaptedTRTModule::isLight(const Light &light) noexcept {
+    // The ratio of light (short side / long side)
+    float ratio = light.width / light.length;
+    bool ratio_ok = light_params_.min_ratio < ratio && ratio < light_params_.max_ratio;
+  
+    bool angle_ok = light.tilt_angle < light_params_.max_angle;
+  
+    bool is_light = ratio_ok && angle_ok;
+  
+  
+    return is_light;
+  }
+  std::vector<Light> AdaptedTRTModule::findLights(const cv::Mat &rgb_img,
+    const cv::Mat &binary_img, ArmorObject &armor) noexcept
+  {
+      using std::vector;
+      vector<vector<cv::Point>> contours;
+      vector<cv::Vec4i> hierarchy;
+  
+  
+      cv::findContours(binary_img, contours, hierarchy, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_NONE);
+  
+      vector<Light> all_lights;
+  
+      for (const auto &contour : contours) {
+          if (contour.size() < 6) continue;
+  
+          auto light = Light(contour);
+          if (isLight(light)) {
+              all_lights.emplace_back(light);
+          }
+      }
+  
+      std::sort(all_lights.begin(), all_lights.end(), [](const Light &l1, const Light &l2) {
+          return l1.center.x < l2.center.x;
+      });
+  
+      // 更新 armor 内的信息
+      armor.lights = all_lights;
+      if (armor.lights.empty()) return all_lights;
+    if (armor.whole_gray_img.empty()) {return all_lights;
+    
+    }
+      double zero_x = armor.new_x;
+      double zero_y = armor.new_y;
+      for (auto& light : armor.lights) {
+        
+        light.top.x += zero_x;
+        light.top.y += zero_y;
+        light.center.x += zero_x;
+        light.center.y += zero_y;
+
+        light.bottom.x += zero_x;
+        light.bottom.y += zero_y;
+        light.axis.x += zero_x;
+        light.axis.y += zero_y;
+
+
+    }
+      std::vector<std::pair<const Light*, double>> light_distances;
+      cv::Point2f armor_center = (armor.pts[0] + armor.pts[1] + armor.pts[2] + armor.pts[3]) * 0.25;
+      for (const auto& light : armor.lights) {
+          double dist = cv::norm(light.center - armor_center);
+          light_distances.emplace_back(&light, dist);
+      }
+
+      // Step 3: 按距离排序，选择最近两个灯条
+      std::sort(light_distances.begin(), light_distances.end(), [](const auto& a, const auto& b) {
+          return a.second < b.second;
+      });
+      if (light_distances.size() >= 2) {
+          const Light* l1 = light_distances[0].first;
+          const Light* l2 = light_distances[1].first;
+      
+          
+      }
+
+
+      // Step 4: 构建 candidates，只保留两个灯条的 top/bottom
+      std::vector<cv::Point2f> candidates;
+      for (int i = 0; i < std::min(2, (int)light_distances.size()); ++i) {
+          const auto* light = light_distances[i].first;
+          candidates.push_back(light->top);
+          candidates.push_back(light->bottom);
+          
+      }
+
+
+      double w = cv::norm(armor.pts[0] - armor.pts[1]);
+      double h = cv::norm(armor.pts[0] - armor.pts[3]);
+      double size_scale = w + h;
+
+      std::vector<cv::Point2f> selected_pts(4, cv::Point2f(-1, -1));
+      std::vector<int> selected_indices(4, -1); 
+
+  
+      for (int i = 0; i < 4; ++i) {
+          double min_dist = DBL_MAX;
+          int best_match = -1;
+
+          double test_result = cv::pointPolygonTest(armor.pts, armor.pts[i], false);
+          double dist_threshold = (test_result >= 0) ? (0.15 * size_scale) : (0.25 * size_scale);
+
+          for (size_t j = 0; j < candidates.size(); ++j) {
+              double dist = cv::norm(armor.pts[i] - candidates[j]);
+              if (dist < min_dist) {
+                  min_dist = dist;
+                  best_match = static_cast<int>(j);
+              }
+          }
+
+          if (best_match != -1 && min_dist < dist_threshold) {
+              selected_pts[i] = candidates[best_match];
+              selected_indices[i] = best_match;
+          }
+      }
+
+
+      for (const auto& pt : selected_pts) {
+          if (pt.x >= 0 && pt.y >= 0) {
+              auto it = std::find(candidates.begin(), candidates.end(), pt);
+              if (it != candidates.end()) candidates.erase(it);
+          }
+          armor.pts_binary.push_back(pt);
+      }
+
+
+      armor.is_ok = true;
+      for (const auto& pt : armor.pts_binary) {
+          if (pt.x < 0 || pt.y < 0) {
+              armor.is_ok = false;
+              break;
+          }
+      }
+
+
+      if (std::count_if(armor.pts_binary.begin(), armor.pts_binary.end(), [](const cv::Point2f& p) {
+          return p.x >= 0 && p.y >= 0;
+      }) != 4) {
+          armor.is_ok = false;
+      }
+
+
+      if (!armor.is_ok) {
+          armor.pts_binary.clear();
+          
+      }
+
+
+      //armor.is_ok = !armor.lights.empty();
+  
+      return all_lights;
+  }
+    void AdaptedTRTModule::detect(ArmorObject & armor)
+  { 
+    findLights(armor.whole_rgb_img,armor.whole_binary_img,armor);
+   
+
+    
+  }
 // 构造函数：初始化参数并构建引擎
-AdaptedTRTModule::AdaptedTRTModule(const std::string & onnx_path, const Params & params)
-: params_(params), engine_(nullptr), context_(nullptr), output_buffer_(nullptr), runtime_(nullptr)
+AdaptedTRTModule::AdaptedTRTModule(const std::string & onnx_path, const Params & params, double expand_ratio_w, double expand_ratio_h, int binary_thres, LightParams light_params)
+: params_(params), engine_(nullptr), context_(nullptr), output_buffer_(nullptr), runtime_(nullptr),expand_ratio_h_(expand_ratio_h),expand_ratio_w_(expand_ratio_w),binary_thres_(binary_thres),light_params_(light_params)
 {
   buildEngine(onnx_path);
   TRT_ASSERT(context_ = engine_->createExecutionContext());
@@ -263,6 +485,13 @@ bool AdaptedTRTModule::processCallback(
 
   // cv::Mat blob =
   //   cv::dnn::blobFromImage(resized, 1.0 / 255.0, cv::Size(), cv::Scalar(0, 0, 0), true);
+//   auto end = std::chrono::steady_clock::now();
+//     std::chrono::steady_clock::time_point timestamp_timepoint = 
+//     std::chrono::steady_clock::time_point(std::chrono::nanoseconds(timestamp_nanosec));
+// auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - timestamp_timepoint);
+
+// WUST_INFO("TRT") << "Detect time: " << duration.count() << " ms";
+
   cv::Mat blob =
     cv::dnn::blobFromImage(resized_img, 1., cv::Size(INPUT_W, INPUT_H), cv::Scalar(0, 0, 0), true);
   // 拷贝数据到显存
@@ -281,8 +510,30 @@ bool AdaptedTRTModule::processCallback(
   // 后处理
   objs_result=postprocess(
     objs_tmp, scores, rects, output_buffer_, output_sz_ / 21, transform_matrix); 
+  
 
 
+  for (auto & armor : objs_result) {
+      if(armor.color == ArmorColor::NONE||armor.color == ArmorColor::PURPLE)
+      {
+        continue;
+      }
+      if (detect_color_ == 0 && armor.color != ArmorColor::RED) {
+        continue;
+      } else if (detect_color_ == 1 && armor.color != ArmorColor::BLUE) {
+        continue;
+      }
+      
+     if( extractImage(src_img, armor))
+     {
+      detect(armor);
+     }
+      
+     
+     
+      
+    
+    }  
   
 
     
@@ -305,15 +556,11 @@ std::vector<ArmorObject> AdaptedTRTModule::postprocess(
   std::vector<int> strides = {8, 16, 32};
   std::vector<GridAndStride> grid_strides;
   generate_grids_and_stride(strides, grid_strides);
-  // RCLCPP_INFO(
-  //   rclcpp::get_logger("postprocess.num_detections"), "num_detections: %d ", num_detections);
-
+ 
   for (int i = 0; i < num_detections; ++i) {
     const float * det = output + i * 21;
     float conf = det[8];
-    // for (int j = 0; j < 21; ++j) {
-    //   RCLCPP_INFO(rclcpp::get_logger("postprocess.conf"), "det[%d]: %f ", j, det[j]);
-    // }
+   
     if (conf < params_.conf_threshold) continue;
 
     // 解析坐标
@@ -435,4 +682,3 @@ void AdaptedTRTModule::pushInput(const cv::Mat& rgb_img, int64_t timestamp_nanos
       
     });
   }
-

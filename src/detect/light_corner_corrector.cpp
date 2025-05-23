@@ -48,22 +48,22 @@ void LightCornerCorrector::correctCorners(ArmorObject& armor) noexcept {
         }
 
       
-        SymmetryAxis axis = findSymmetryAxis(armor.whole_gray_img, light);
+        // SymmetryAxis axis = findSymmetryAxis(armor.whole_gray_img, light);
         
 
-        light.center = axis.centroid;
-        light.axis = axis.direction;
+        // light.center = axis.centroid;
+        // light.axis = axis.direction;
       
 
         
-        if (cv::Point2f t = findCorner(armor.whole_gray_img, light, axis, "top"); t.x > 0) {
-            light.top = t;
+        // if (cv::Point2f t = findCorner(armor.whole_gray_img, light, axis, "top"); t.x > 0) {
+        //     light.top = t;
         
-        }
-        if (cv::Point2f b = findCorner(armor.whole_gray_img, light, axis, "bottom"); b.x > 0) {
-            light.bottom = b;
+        // }
+        // if (cv::Point2f b = findCorner(armor.whole_gray_img, light, axis, "bottom"); b.x > 0) {
+        //     light.bottom = b;
        
-        }
+        // }
         light.top.x += zero_x;
         light.top.y += zero_y;
         light.center.x += zero_x;

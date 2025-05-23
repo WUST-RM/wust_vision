@@ -81,7 +81,7 @@ void Tracker::update(const Armors &armors_msg) noexcept {
           min_position_diff = position_diff;
           yaw_diff = std::abs(orientationToYaw(armor.target_ori) - ekf_prediction(6));
           tracked_armor = armor;
-
+          yaw_diff_=yaw_diff;
           
         if (tracked_id == ArmorNumber::OUTPOST) {
             tracked_armors_num = ArmorsNum::OUTPOST_3;
@@ -155,7 +155,7 @@ void Tracker::update(const Armors &armors_msg) noexcept {
       
       handleArmorJump(same_id_armor);
       
-      yaw_diff_=yaw_diff;
+      
     }else {
      // WUST_DEBUG(tracker_logger)<<"No matched armor found!";
     }
@@ -220,27 +220,12 @@ void Tracker::initEKF(const Armor &a) noexcept {
 
 
 void Tracker::handleArmorJump(const Armor &current_armor) noexcept {
-  using clock = std::chrono::steady_clock;
-  auto now = clock::now();
-
-  // 记录跳变时间
-  armor_jump_timestamps_.emplace_back(now);
-
-  // 清理超过 1 秒的时间点
-  while (!armor_jump_timestamps_.empty() &&
-         std::chrono::duration_cast<std::chrono::duration<double>>(now - armor_jump_timestamps_.front()).count() > 1.0) {
-    armor_jump_timestamps_.pop_front();
-  }
-
-  // 跳变频率
-  double jump_frequency = static_cast<double>(armor_jump_timestamps_.size());
-  WUST_DEBUG(tracker_logger) << fmt::format("Armor Jump Frequency: {:.1f} Hz", jump_frequency);
 
   // -------- 原始逻辑保持不变 --------
   double last_yaw = target_state(6);
   double yaw = orientationToYaw(current_armor.target_ori);
 
-  if (std::abs(yaw - last_yaw) > 0.4) {
+  if (std::abs(yaw - last_yaw) > 0.3) {
     target_state(6) = yaw;
 
     if (tracked_armors_num == ArmorsNum::NORMAL_4) {
@@ -249,7 +234,7 @@ void Tracker::handleArmorJump(const Armor &current_armor) noexcept {
       d_zc = d_zc == 0 ? -d_za : 0;
       target_state(9) = d_zc;
     }
-    //WUST_DEBUG(tracker_logger) << "Armor Jump!";
+    WUST_DEBUG(tracker_logger) << "Armor Jump!";
   }
 
   Eigen::Vector3d current_p(current_armor.target_pos.x, current_armor.target_pos.y, current_armor.target_pos.z);
