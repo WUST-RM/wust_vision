@@ -166,12 +166,34 @@ bool AdaptedTRTModule::extractImage(const cv::Mat & src, ArmorObject & armor) {
   static const cv::Size input_size(28, 28);
 
   if (src.empty() || src.cols < 10 || src.rows < 10) {
-     // std::cerr << "Source image is empty or too small" << std::endl;
+     // std::cerr << "[extractImage] Source image is empty or too small" << std::endl;
       return false;
   }
 
-  std::vector<cv::Point2f> pts_vec(std::begin(armor.pts), std::end(armor.pts));
-  cv::Rect bbox = cv::boundingRect(pts_vec);
+  // 过滤 armor.pts，确保所有点在图像边界内，且坐标合理
+  std::vector<cv::Point2f> valid_pts;
+  for (const auto& pt : armor.pts) {
+      if (pt.x >= 0 && pt.x < src.cols && pt.y >= 0 && pt.y < src.rows &&
+          std::isfinite(pt.x) && std::isfinite(pt.y)) {
+          valid_pts.push_back(pt);
+      } else {
+         // std::cerr << "[extractImage] Invalid pt detected and skipped: (" << pt.x << ", " << pt.y << ")" << std::endl;
+      }
+  }
+  if (valid_pts.size() < 4) {
+      //std::cerr << "[extractImage] Not enough valid points after filtering: " << valid_pts.size() << std::endl;
+      return false;
+  }
+
+  cv::Rect bbox = cv::boundingRect(valid_pts);
+
+  // 增加bbox尺寸和坐标合理性校验，避免异常
+  if (bbox.width <= 0 || bbox.height <= 0 || 
+      bbox.x < 0 || bbox.y < 0 ||
+      bbox.x + bbox.width > src.cols || bbox.y + bbox.height > src.rows) {
+   //   std::cerr << "[extractImage] Invalid bounding box: " << bbox << std::endl;
+      return false;
+  }
 
   float expand_ratio_w = 2.0f;
   float expand_ratio_h = 1.5f;
@@ -180,14 +202,14 @@ bool AdaptedTRTModule::extractImage(const cv::Mat & src, ArmorObject & armor) {
   int new_x = static_cast<int>(bbox.x - (new_width - bbox.width) / 2);
   int new_y = static_cast<int>(bbox.y - (new_height - bbox.height) / 2);
 
-  // 边界检查
+  // 边界检查和裁剪
   new_x = std::max(0, new_x);
   new_y = std::max(0, new_y);
   if (new_x + new_width > src.cols) new_width = src.cols - new_x;
   if (new_y + new_height > src.rows) new_height = src.rows - new_y;
-
   if (new_width <= 0 || new_height <= 0) {
-     // std::cerr << "Expanded ROI is invalid" << std::endl;
+     // std::cerr << "[extractImage] Expanded ROI is invalid after clamp: "
+    //            << new_width << "x" << new_height << std::endl;
       return false;
   }
 
@@ -195,10 +217,9 @@ bool AdaptedTRTModule::extractImage(const cv::Mat & src, ArmorObject & armor) {
   armor.new_x = new_x;
   armor.new_y = new_y;
 
-  // 截取 ROI 区域
   cv::Mat litroi_color = src(expanded_rect).clone();
   if (litroi_color.empty()) {
-      //std::cerr << "ROI color image is empty" << std::endl;
+     // std::cerr << "[extractImage] ROI color image is empty" << std::endl;
       return false;
   }
 
@@ -213,6 +234,7 @@ bool AdaptedTRTModule::extractImage(const cv::Mat & src, ArmorObject & armor) {
   armor.whole_binary_img = litroi_bin;
 
   // Perspective warp
+  // 注意这里用 armor.pts 的原始点，如果不确定有效性，也可替换为 valid_pts 对应点
   cv::Point2f lights_vertices[4] = {armor.pts[0], armor.pts[1], armor.pts[2], armor.pts[3]};
   int top_light_y = (warp_height - light_length) / 2 - 1;
   int bottom_light_y = top_light_y + light_length;
@@ -230,7 +252,7 @@ bool AdaptedTRTModule::extractImage(const cv::Mat & src, ArmorObject & armor) {
   cv::warpPerspective(src, number_image, warp_mat, cv::Size(warp_width, warp_height));
 
   if (number_image.empty() || number_image.cols < roi_size.width || number_image.rows < roi_size.height) {
-     // std::cerr << "Warped number image is invalid" << std::endl;
+    //  std::cerr << "[extractImage] Warped number image is invalid" << std::endl;
       return false;
   }
 
@@ -238,7 +260,7 @@ bool AdaptedTRTModule::extractImage(const cv::Mat & src, ArmorObject & armor) {
   cv::Rect number_roi((warp_width - roi_size.width) / 2, 0, roi_size.width, roi_size.height);
   if ((number_roi.x + number_roi.width > number_image.cols) || 
       (number_roi.y + number_roi.height > number_image.rows)) {
-     // std::cerr << "ROI for number image is out of bounds" << std::endl;
+     // std::cerr << "[extractImage] ROI for number image is out of bounds" << std::endl;
       return false;
   }
 
@@ -246,12 +268,15 @@ bool AdaptedTRTModule::extractImage(const cv::Mat & src, ArmorObject & armor) {
   cv::cvtColor(number_image, number_image, cv::COLOR_RGB2GRAY);
   cv::threshold(number_image, number_image, 0, 255, cv::THRESH_BINARY | cv::THRESH_OTSU);
   cv::resize(number_image, number_image, input_size);
+
   cv::Mat flipped_image;
   cv::flip(number_image, flipped_image, 0);
   armor.number_img = flipped_image;
 
   return true;
 }
+
+
 
 
   bool AdaptedTRTModule::isLight(const Light &light) noexcept {
@@ -546,7 +571,13 @@ bool AdaptedTRTModule::processCallback(
   // 后处理
   objs_result=postprocess(
     objs_tmp, scores, rects, output_buffer_, output_sz_ / 21, transform_matrix); 
-  
+  if(objs_result.size() > 10)
+  {
+    if (this->infer_callback_) {
+        this->infer_callback_(objs_result, timestamp_nanosec, src_img);
+        return true;
+      }
+  }
 
 
   for (auto & armor : objs_result) {

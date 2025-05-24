@@ -14,7 +14,9 @@
 #include <iostream>
 #include <chrono>
 #include <queue>
-#include "common/ThreadSafeQueue.hpp"
+
+
+#include "common/logger.hpp"  
 
 class ThreadPool {
 public:
@@ -56,7 +58,7 @@ public:
 
             if (tasks_.size() >= max_pending_tasks_) {
                 tasks_.pop_front();
-                std::cerr << "[ThreadPool] Warning: Dropped oldest pending task\n";
+                WUST_WARN("ThreadPool") << "Warning: Dropped oldest pending task";
             }
 
             TaskItem task;
@@ -114,7 +116,7 @@ private:
 
             auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
             if (duration > max_task_duration_ms_) {
-                std::cerr << "[ThreadPool] Warning: Task took too long: " << duration << " ms\n";
+                WUST_WARN("ThreadPool") << "Warning: Task took too long: " << duration << " ms";
             }
 
             {
@@ -137,8 +139,8 @@ private:
 
                 if (pending > max_pending_tasks_ * 0.8) {
                     max_pending_tasks_ = std::max<size_t>(10, max_pending_tasks_ * 0.8);
-                    std::cerr << "[ThreadPool] Warning: Queue overloaded, shrink to "
-                              << max_pending_tasks_ << "\n";
+                    WUST_WARN("ThreadPool") << "Warning: Queue overloaded, shrink to "
+                              << max_pending_tasks_;
                 } else if (pending < max_pending_tasks_ * 0.3) {
                     max_pending_tasks_ = std::min<size_t>(500, max_pending_tasks_ + 5);
                 }
@@ -158,6 +160,7 @@ private:
     int max_task_duration_ms_;
     std::thread controller_;
 };
+
 inline void SetRealtimePriority(int priority = 90) {
     pthread_t this_thread = pthread_self();
     struct sched_param schedParams;
@@ -165,10 +168,11 @@ inline void SetRealtimePriority(int priority = 90) {
 
     int ret = pthread_setschedparam(this_thread, SCHED_FIFO, &schedParams);
     if (ret != 0) {
-        std::cerr << "Failed to set real-time priority. Error code: " << ret << std::endl;
+        WUST_ERROR("ThreadPool") << "Failed to set real-time priority. Error code: " << ret;
         perror("pthread_setschedparam");
     } else {
-        std::cout << "Real-time priority set successfully to " << priority << std::endl;
+        WUST_INFO("ThreadPool") << "Real-time priority set successfully to " << priority;
     }
 }
+
 #endif  // ARMOR_DETECTOR_OPENVINO__THREADPOOL_H

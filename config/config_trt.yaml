@@ -1,5 +1,12 @@
 use_calculation: false
 
+logger:
+  log_level: "DEBUG"
+  log_path: "/home/hy/wust_log"
+  use_simplelog: false
+  use_logfile: true
+  use_logcli:  true
+
 debug:
   debug_mode: true
   debug_w: 1440
@@ -54,6 +61,12 @@ tracker:
   max_match_yaw_diff: 0.7
   tracking_thres: 5
   lost_time_thres: 0.1
+  obs_vyaw_buffer_thres: 5
+  obs_yaw_stationary_thresh: 1.0
+  pred_yaw_stationary_thresh: 0.5
+  min_valid_velocity_thresh: 0.01
+  max_inconsistent_count: 3
+  rotation_inconsistent_cooldown_limit: 5
   ekf:
     s2qx: 7.0
     s2qy: 7.0

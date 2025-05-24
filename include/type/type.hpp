@@ -151,7 +151,7 @@ struct Armor
   tf2::Quaternion target_ori;
   float distance_to_image_center;
   float yaw;
-
+  std::chrono::steady_clock::time_point timestamp;
 };
 struct Armors
 {

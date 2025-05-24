@@ -79,6 +79,12 @@ void WustVision::init()
     debug_mode_ = config["debug"]["debug_mode"].as<bool>();
     debug_w = config["debug"]["debug_w"].as<int>(640);
     debug_h = config["debug"]["debug_h"].as<int>(480);
+    std::string log_level_ = config["logger"]["log_level"].as<std::string>("INFO");
+    std::string log_path_ = config["logger"]["log_path"].as<std::string>("wust_log");
+    bool use_logcli = config["logger"]["use_logcli"].as<bool>();
+    bool use_logfile= config["logger"]["use_logfile"].as<bool>();
+    bool use_simplelog= config["logger"]["use_simplelog"].as<bool>();
+    initLogger(log_level_, log_path_,use_logcli,use_logfile,use_simplelog);
    
     debug_show_dt_  = config["debug"]["debug_show_dt"].as<double>(0.05);
     use_calculation_ = config["use_calculation"].as<bool>();
@@ -217,6 +223,12 @@ void WustVision::initTracker(const YAML::Node& config)
     double max_match_distance = config["max_match_distance"].as<double>(0.2);
     double max_match_yaw_diff = config["max_match_yaw_diff"].as<double>(1.0);
     tracker_ = std::make_unique<Tracker>(max_match_distance, max_match_yaw_diff);
+    tracker_->buffer_size_ = config["obs_vyaw_buffer_thres"].as<int>(5);
+    tracker_->obs_yaw_stationary_thresh  = config["obs_yaw_stationary_thresh"].as<float>(1.0);
+    tracker_->pred_yaw_stationary_thresh = config["pred_yaw_stationary_thresh"].as<float>(0.5);
+    tracker_->min_valid_velocity = config["min_valid_velocity_thresh"].as<float>(0.01);
+    tracker_->max_inconsistent_count_ = config["max_inconsistent_count"].as<int>(3);
+    tracker_->rotation_inconsistent_cooldown_limit_  = config["rotation_inconsistent_cooldown_limit"].as<int>(5);
 
     // 跟踪判定参数
     tracker_->tracking_thres = config["tracking_thres"].as<int>(5);
@@ -236,7 +248,7 @@ void WustVision::initTracker(const YAML::Node& config)
     r_yaw_ = config["ekf"]["r_yaw"].as<double>(0.02);
 
     // EKF 状态预测函数
-    auto f = Predict(0.01);  // dt 固定为 5ms
+    auto f = Predict(0.005);  // dt 固定为 5ms
 
     // EKF 观测函数
     auto h = Measure();
@@ -288,7 +300,6 @@ void WustVision::initTracker(const YAML::Node& config)
     // 初始化 EKF 滤波器
     tracker_->ekf = std::make_unique<RobotStateEKF>(f, h, u_q, u_r, p0);
 }
-
 void WustVision::armorsCallback(Armors armors_,const cv::Mat& src_img) {
     transformArmorData(armors_);
     if (armors_.timestamp <= last_time_) {
@@ -564,6 +575,9 @@ void WustVision::timerCallback()
         std::lock_guard<std::mutex> lock(armor_target_mutex_);
         target = armor_target; 
     }
+    auto now = std::chrono::steady_clock::now();
+    auto latency_nano = std::chrono::duration_cast<std::chrono::nanoseconds>(now - target.timestamp).count();
+    latency_ms = static_cast<double>(latency_nano) / 1e6;
     GimbalCmd gimbal_cmd;
     if(target.id!=ArmorNumber::UNKNOWN)
     {
@@ -630,6 +644,7 @@ void WustVision::timerCallback()
 
   draw_debug_overlay(imgframe_, &armors, &target_info, &target,state, gimbal_cmd);
   }
+  
 }
 void WustVision::processImage(const ImageFrame& frame) {
 
@@ -661,7 +676,7 @@ void WustVision::printStats()
 
   auto elapsed = duration_cast<duration<double>>(now - last_stat_time_steady_);
   if (elapsed.count() >= 1.0) {
-   WUST_INFO(vision_logger)<< "Received: " << img_recv_count_ << ", Detected: " << detect_finish_count_ << ", FPS: " << detect_finish_count_ / elapsed.count();
+   WUST_INFO(vision_logger)<< "Received: " << img_recv_count_ << ", Detected: " << detect_finish_count_ << ", FPS: " << detect_finish_count_ / elapsed.count()<< " Latency: " << latency_ms << "ms";
 
     img_recv_count_ = 0;
     detect_finish_count_ = 0;

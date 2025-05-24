@@ -16,7 +16,7 @@ public:
     void init();
    
     void processImage(const ImageFrame& frame);
-    void imageConsumer(ThreadSafeQueue<ImageFrame>& queue, ThreadPool& pool);
+   
    
     void printStats();
     void DetectCallback(
@@ -36,7 +36,7 @@ public:
 
 
     HikCamera camera_;
-    ThreadSafeQueue<ImageFrame> image_queue_;
+    
     std::thread image_thread_;
     std::unique_ptr<ThreadPool> thread_pool_;
     std::unique_ptr<OpenVino> detector_;
@@ -47,7 +47,7 @@ public:
     std::atomic<int> infer_running_count_{0};
     int max_infer_running_ ; 
     std::mutex callback_mutex_;
-    
+    double latency_ms;
     
     std::string vision_logger="openvino_vision";
     std::atomic<bool> run_loop_{false};
