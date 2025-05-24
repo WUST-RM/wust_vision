@@ -6,7 +6,7 @@ export MVCAM_GENICAM_CLPROTOCOL=/opt/MVS/lib/CLProtocol
 export ALLUSERSPROFILE=/opt/MVS/MVFG
 
 export LD_LIBRARY_PATH=/opt/MVS/lib/64:/opt/MVS/lib/32:$LD_LIBRARY_PATH
-export LD_LIBRARY_PATH=/home/hy/TensorRT-8.5.2.2/lib:$LD_LIBRARY_PATH
+
 
 blue="\033[1;34m"
 yellow="\033[1;33m"
@@ -64,7 +64,7 @@ if [ "$1" == "build" ]; then
     exit 0
 fi
 
-sudo cp ./wust_vision_trt /usr/local/bin/
+#sudo cp ./wust_vision_trt /usr/local/bin/
 if [ $? -ne 0 ]; then
     echo -e "${red}\n--- Failed to copy wust_vision_trt to /usr/local/bin ---${reset}"
     exit 1

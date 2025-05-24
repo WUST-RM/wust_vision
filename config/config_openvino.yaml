@@ -1,20 +1,26 @@
 use_calculation: false
 
+logger:
+  log_level: "DEBUG"
+  log_path: "/home/nuc/wust_log"
+  use_simplelog: false
+  use_logfile: false
+  use_logcli:  true
 debug:
   debug_mode: true
-  debug_w: 1440
-  debug_h: 1080
+  debug_w: 640
+  debug_h: 480
   debug_show_dt: 0.05
 
-max_infer_running: 4
+max_infer_running: 5
 
-classify_model_path: "/home/hy/wust_vision/model/lenet.onnx"
-classify_label_path: "/home/hy/wust_vision/model/label.txt"
+classify_model_path: "/home/nuc/wust_vision/model/lenet.onnx"
+classify_label_path: "/home/nuc/wust_vision/model/label.txt"
 
 
 model:
-  model_path: "/home/hy/wust_vision/model/opt-1208-001.onnx"
-  device_type: "GPU"  
+  model_path: "/home/nuc/wust_vision/model/opt-1208-001.onnx"
+  device_type: "AUTO"  
   conf_threshold: 0.25
   top_k: 128
   nms_threshold: 0.3
@@ -30,15 +36,17 @@ light:
 
 
 camera:
-  camera_info_path: "/home/hy/wust_vision/config/camera_info.yaml"
+  camera_info_path: "/home/nuc/wust_vision/config/camera_info.yaml"
   serial: "" 
-  acquisition_frame_rate: 160
+  acquisition_frame_rate: 140
   exposure_time: 3500
   gain: 12.0
   adc_bit_depth: "Bits_8"
   pixel_format: "BayerRG8"
 
 detect_color: 0
+
+
 tf:
   gimbal2camera_x:  0.0
   gimbal2camera_y:  0.0
@@ -54,6 +62,12 @@ tracker:
   max_match_yaw_diff: 0.7
   tracking_thres: 5
   lost_time_thres: 0.2
+  obs_vyaw_buffer_thres: 5
+  obs_yaw_stationary_thresh: 1.0
+  pred_yaw_stationary_thresh: 0.5
+  min_valid_velocity_thresh: 0.01
+  max_inconsistent_count: 3
+  rotation_inconsistent_cooldown_limit: 5
   ekf:
     s2qx: 10.0
     s2qy: 10.0

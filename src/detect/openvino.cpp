@@ -609,6 +609,7 @@ bool OpenVino::processCallback(
   {
     // BGR->RGB, u8(0-255)->f32(0.0-1.0), HWC->NCHW
     // note: TUP's model no need to normalize
+   // auto start =std::chrono::high_resolution_clock::now();
     cv::Mat blob =
       cv::dnn::blobFromImage(resized_img, 1., cv::Size(INPUT_W, INPUT_H), cv::Scalar(0, 0, 0), true);
   
@@ -672,7 +673,8 @@ bool OpenVino::processCallback(
         }
       }
     }
-  
+    // auto end =std::chrono::high_resolution_clock::now();
+    // WUST_INFO("openvino") << "infer time:" << std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count() << "ms" ;
   
     for (auto & armor : objs_result) {
       if(armor.color == ArmorColor::NONE||armor.color == ArmorColor::PURPLE)

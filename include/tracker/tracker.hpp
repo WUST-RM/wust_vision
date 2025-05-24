@@ -32,10 +32,15 @@
 #include "type/type.hpp"
 #include "tracker/motion_model.hpp"
 enum class ArmorsNum { NORMAL_4 = 4, OUTPOST_3 = 3 };
+inline double normalizeAngle(double angle) {
+  while (angle > M_PI) angle -= 2 * M_PI;
+  while (angle < -M_PI) angle += 2 * M_PI;
+  return angle;
+}
 
 class Tracker {
 public:
-  Tracker(double max_match_distance, double max_match_yaw);
+  Tracker(double max_match_distance, double max_match_yaw );
 
   void init(const Armors &armors_msg) noexcept;
   void update(const Armors &armors_msg) noexcept;
@@ -65,6 +70,12 @@ public:
   double d_zc;
   float yaw_diff_;
   float position_diff_;
+  int buffer_size_ = 5;
+  float obs_yaw_stationary_thresh = 0.8;   
+  float pred_yaw_stationary_thresh = 0.5; 
+  float min_valid_velocity = 0.01;
+  int max_inconsistent_count_ = 3;
+  int rotation_inconsistent_cooldown_limit_ = 5;  
 
 private:
   void initEKF(const Armor &a) noexcept;
@@ -81,6 +92,26 @@ private:
   int lost_count_;
 
   double last_yaw_;
+
+
+  std::chrono::steady_clock::time_point last_track_time_;
+  std::deque<float> yaw_velocity_buffer_;
+  
+  
+  int track_update_count_ = 0;
+  bool if_have_last_track_ = false;
+  double last_track_yaw_;
+  
+  
+  int rotation_inconsistent_count_ = 0;
+  
+  
+  int rotation_inconsistent_cooldown_ = 0;
+  
+  
+  
+
+
 
   std::string tracker_logger = "tracker";
   std::deque<std::chrono::steady_clock::time_point> armor_jump_timestamps_;
