@@ -103,6 +103,11 @@ public:
     bool reprojectArmorCorners_raw(
       const Armor & armor,
       std::vector<cv::Point2f> & image_points);
+  void processDetectedArmors(
+        const std::vector<ArmorObject>& objs,
+        int detect_color,
+        Armors& armors_out);
+
 
 
     static std::vector<cv::Point3f> SMALL_ARMOR_3D_POINTS;

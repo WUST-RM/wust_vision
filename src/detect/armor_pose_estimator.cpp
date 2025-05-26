@@ -19,7 +19,7 @@
 #include "yaml-cpp/yaml.h"
 #include "common/utils.hpp"
 #include <iostream>
-
+#include "common/gobal.hpp"
 
 ArmorPoseEstimator::ArmorPoseEstimator(const std::string &camera_info_path)
 {
@@ -34,12 +34,6 @@ ArmorPoseEstimator::ArmorPoseEstimator(const std::string &camera_info_path)
   pnp_solver_->setObjectPoints(
       "large", ArmorObject::buildObjectPoints<cv::Point3f>(LARGE_ARMOR_WIDTH,
                                                     LARGE_ARMOR_HEIGHT));
-  pnp_solver_->setObjectPoints(
-  "small_net", ArmorObject::buildObjectPoints<cv::Point3f>(SMALL_ARMOR_WIDTH_NET,
-                  SMALL_ARMOR_HEIGHT_NET));
-  pnp_solver_->setObjectPoints(
-  "large_net", ArmorObject::buildObjectPoints<cv::Point3f>(LARGE_ARMOR_WIDTH_NET,
-                  LARGE_ARMOR_HEIGHT_NET));
   ba_solver_ = std::make_unique<BaSolver>(camera_k, camera_d);
 
   R_gimbal_camera_ = Eigen::Matrix3d::Identity();
@@ -57,46 +51,32 @@ ArmorPoseEstimator::extractArmorPoses(const std::vector<ArmorObject> &armors,
     {
       continue;
     }
+    if (detect_color_ == 0 && armor.color != ArmorColor::RED) {
+            continue;
+} else if (detect_color_ == 1 && armor.color != ArmorColor::BLUE) {
+            continue;
+        }
     std::vector<cv::Mat> rvecs, tvecs;
     Armor armor_;
     ArmorObject temp_armor = armor;
     std::string temp_type ;
-    std::string temp_typeA;
     int temp_number;
   if (temp_armor.number == ArmorNumber::NO1 || temp_armor.number == ArmorNumber::BASE) {
     temp_type = "large";
-    if(temp_armor.is_ok)
-    {
-    temp_typeA = "large";
     temp_number = 0;
-    }else {
-    temp_typeA = "large_net";
-    temp_number = 2;
-    }
-
   }else {
     temp_type = "small";
-  
-  if(temp_armor.is_ok)
-  {
-  temp_typeA = "small";
-  temp_number = 1;
-  }else {
-  temp_typeA = "small_net";
-  temp_number = 3;
-  }
+    temp_number = 1;
   }
 
     // Use PnP to get the initial pose information
-    if (pnp_solver_->solvePnPGeneric(
+  if (pnp_solver_->solvePnPGeneric(
             armor.landmarks(), rvecs, tvecs,
-            (temp_typeA))) 
-  {if(armor.is_ok)
-    {
-    sortPnPResult(armor, rvecs, tvecs ,temp_typeA);
-    }else {
-    sortPnPResultNet(armor, rvecs, tvecs ,temp_typeA);
-    }
+            (temp_type))) 
+  {
+     
+    sortPnPResult(armor, rvecs, tvecs ,temp_type);
+    
       cv::Mat rmat;
       cv::Rodrigues(rvecs[0], rmat);
 
@@ -106,7 +86,7 @@ ArmorPoseEstimator::extractArmorPoses(const std::vector<ArmorObject> &armors,
       double armor_roll =
           rotationMatrixToRPY(R_gimbal_camera_ * R)[0] * 180 / M_PI;
       Eigen::Quaterniond q1(R);
-      //std::cout << "armor_roll: " << armor_roll << std::endl;
+
       if ( armor_roll < 105) {
         
         //Use BA alogorithm to optimize the pose from PnP
@@ -133,6 +113,7 @@ ArmorPoseEstimator::extractArmorPoses(const std::vector<ArmorObject> &armors,
       // Fill basic info
       armor_.type = temp_type;
       armor_.number = armor.number;
+      
 
       // Fill pose
       armor_.pos.x = t(0);
@@ -142,6 +123,11 @@ ArmorPoseEstimator::extractArmorPoses(const std::vector<ArmorObject> &armors,
       armor_.ori.y = new_q.y();
       armor_.ori.z = new_q.z();
       armor_.ori.w = new_q.w();
+      armor_.distance_to_image_center =
+          pnp_solver_->calculateDistanceToCenter(armor.center);
+      
+  
+      
       Eigen::Vector3d rpy = rotationMatrixToRPY(q.toRotationMatrix());
       // std::cout << "Roll: " << rpy.x() * 180 / M_PI << " degrees" << std::endl;
       // std::cout << "Pitch: " << rpy.y() * 180 / M_PI << " degrees" << std::endl;
@@ -224,59 +210,7 @@ void ArmorPoseEstimator::sortPnPResult(const ArmorObject &armor,
       (angle < 0 && rpy1[2] < 0 && rpy2[2] > 0)) {
     std::swap(rvec1, rvec2);
     std::swap(tvec1, tvec2);
-   //FYT_DEBUG("armor_detector", "PnP Solution 2 Selected");
+
     //std::cout<<"armor_detector"<<"PnP Solution 2 Selected"<<std::endl;
   }
 }
-void ArmorPoseEstimator::sortPnPResultNet(const ArmorObject &armor,
-  std::vector<cv::Mat> &rvecs,
-  std::vector<cv::Mat> &tvecs,
-  std::string coord_frame_name) const {
-constexpr float PROJECT_ERR_THRES = 3.0;
-constexpr float MAX_ROLL_DEG = 10.0;
-constexpr float MAX_YAW_DIFF_DEG = 90.0;
-
-// 获取 PnP 解
-cv::Mat &rvec1 = rvecs.at(0);
-cv::Mat &tvec1 = tvecs.at(0);
-cv::Mat &rvec2 = rvecs.at(1);
-cv::Mat &tvec2 = tvecs.at(1);
-
-// 转换为旋转矩阵 → Eigen
-cv::Mat R1_cv, R2_cv;
-cv::Rodrigues(rvec1, R1_cv);
-cv::Rodrigues(rvec2, R2_cv);
-Eigen::Matrix3d R1 = utils::cvToEigen(R1_cv);
-Eigen::Matrix3d R2 = utils::cvToEigen(R2_cv);
-
-// 转换为云台坐标系下的姿态角
-auto rpy1 = rotationMatrixToRPY(R_gimbal_camera_ * R1);
-auto rpy2 = rotationMatrixToRPY(R_gimbal_camera_ * R2);
-
-// 计算重投影误差
-double error1 = pnp_solver_->calculateReprojectionError(
-armor.landmarks(), rvec1, tvec1, coord_frame_name);
-double error2 = pnp_solver_->calculateReprojectionError(
-armor.landmarks(), rvec2, tvec2, coord_frame_name);
-
-// 如果误差差距过大，选择误差小的
-if (error2 / error1 > PROJECT_ERR_THRES) return;
-if (error1 / error2 > PROJECT_ERR_THRES) {
-std::swap(rvec1, rvec2);
-std::swap(tvec1, tvec2);
-return;
-}
-
-// 限制 roll 角度（避免过大的倾斜）
-if ((std::abs(rpy1[0]) > MAX_ROLL_DEG * M_PI / 180) ||
-(std::abs(rpy2[0]) > MAX_ROLL_DEG * M_PI / 180)) {
-return;
-}
-
-// 优先选择 yaw 更接近水平的（小角度），假设装甲板正面大致朝向相机
-if (std::abs(rpy2[2]) < std::abs(rpy1[2])) {
-std::swap(rvec1, rvec2);
-std::swap(tvec1, tvec2);
-}
-}
-

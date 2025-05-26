@@ -116,6 +116,7 @@ void LightCornerCorrector::correctCorners(ArmorObject& armor) noexcept {
             armor.lights[1] = *l1;
         }
     }
+    
 
     // Step 4: 构建 candidates，只保留两个灯条的 top/bottom
     std::vector<cv::Point2f> candidates;
@@ -165,7 +166,7 @@ void LightCornerCorrector::correctCorners(ArmorObject& armor) noexcept {
         }
         armor.pts_binary.push_back(pt);
     }
-
+    
 
     armor.is_ok = true;
     for (const auto& pt : armor.pts_binary) {
@@ -187,7 +188,12 @@ void LightCornerCorrector::correctCorners(ArmorObject& armor) noexcept {
         armor.pts_binary.clear();
         
     }
-
+    if(armor.is_ok)
+    {
+    armor.center = (armor.lights[0].center+armor.lights[1].center)/2;
+    }else {
+    armor.center =armor_center;
+    }
 
   }
    

@@ -392,10 +392,9 @@ void OpenVino::extractNumberImage(const cv::Mat & src, ArmorObject & armor)  {
   std::vector<cv::Point2f> pts_vec(std::begin(armor.pts), std::end(armor.pts));
   cv::Rect bbox = cv::boundingRect(pts_vec);
 
-  float expand_ratio_w = 2.0f;
-  float expand_ratio_h = 1.5f;
-  int new_width = static_cast<int>(bbox.width * expand_ratio_w);
-  int new_height = static_cast<int>(bbox.height * expand_ratio_h);
+
+  int new_width = static_cast<int>(bbox.width * expand_ratio_w_);
+  int new_height = static_cast<int>(bbox.height * expand_ratio_h_);
   int new_x = static_cast<int>(bbox.x - (new_width - bbox.width) / 2);
   int new_y = static_cast<int>(bbox.y - (new_height - bbox.height) / 2);
 

@@ -11,6 +11,8 @@ constexpr double SMALL_ARMOR_WIDTH = 133.0 / 1000.0; // 135
 constexpr double SMALL_ARMOR_HEIGHT = 50.0 / 1000.0; // 55
 constexpr double LARGE_ARMOR_WIDTH = 225.0 / 1000.0;
 constexpr double LARGE_ARMOR_HEIGHT = 50.0 / 1000.0; // 55
+
+
 constexpr double SMALL_ARMOR_WIDTH_NET = 135.0 / 1000.0; // 135
 constexpr double SMALL_ARMOR_HEIGHT_NET = 55.0 / 1000.0; // 55
 constexpr double LARGE_ARMOR_WIDTH_NET = 225.0 / 1000.0;
@@ -138,10 +140,11 @@ typedef struct ArmorObject
 
   std::vector<Light> lights;
 
-
+  cv::Point2f center;
   double new_x;
   double new_y;
   bool is_ok =false;
+  bool is_ok_yaw=false;
   static constexpr const int N_LANDMARKS = 6;
   static constexpr const int N_LANDMARKS_2 = N_LANDMARKS * 2;
 

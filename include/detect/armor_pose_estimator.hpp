@@ -48,10 +48,7 @@ private:
   // Select the best PnP solution according to the armor's direction in image, only available for SOLVEPNP_IPPE
   void sortPnPResult(const ArmorObject &armor, std::vector<cv::Mat> &rvecs,
                      std::vector<cv::Mat> &tvecs ,std::string coord_frame_name) const;
-  void sortPnPResultNet(const ArmorObject &armor,
-                      std::vector<cv::Mat> &rvecs,
-                      std::vector<cv::Mat> &tvecs,
-                      std::string coord_frame_name)const;
+
   // Convert a rotation matrix to RPY
   static Eigen::Vector3d rotationMatrixToRPY(const Eigen::Matrix3d &R);
 

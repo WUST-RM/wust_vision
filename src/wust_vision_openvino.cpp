@@ -130,6 +130,7 @@ void  WustVision::init()
         });
 
   camera_.startCamera();
+  control_rate = config["control_rate"].as<int>(100);
   startTimer();
 
   is_inited_ = true;
@@ -169,9 +170,9 @@ void WustVision::startTimer()
 {
     if (timer_running_) return;  
     timer_running_ = true;
-
-    timer_thread_ = std::thread([this]() {
-        const auto interval = std::chrono::microseconds(5000);  // 5ms = 200Hz
+    int ms_interval = 1000 / control_rate;
+    timer_thread_ = std::thread([this, &ms_interval]() {
+        const auto interval = std::chrono::microseconds(ms_interval);  
         auto next_time = std::chrono::steady_clock::now() + interval;
 
         while (timer_running_) {
@@ -200,7 +201,7 @@ void WustVision::initTF()
 
     tf2::Quaternion orientation;
     orientation.setRPY(roll, pitch, yaw);
-    std::cout<<orientation.x<<"a"<<orientation.y<<"a"<<orientation.z<<"a"<<orientation.w<<std::endl;
+  
    
 
     tf_tree_.setTransform("camera", "camera_optical_frame", createTf(0, 0, 0, orientation));
@@ -470,7 +471,7 @@ void WustVision::DetectCallback(
     imu_to_camera_ = eigen_quat.toRotationMatrix();  // Eigen::Matrix3d
     imu_to_camera_ = Sophus::SO3d::fitToSO3(eigen_quat.toRotationMatrix()).matrix();
 
-
+    
 
 
 
@@ -480,77 +481,10 @@ void WustVision::DetectCallback(
     
     return;
 }
-  armors.armors=armor_pose_estimator_->extractArmorPoses(objs, imu_to_camera_);
+armors.armors=armor_pose_estimator_->extractArmorPoses(objs, imu_to_camera_);
 
-  for (auto & obj : objs) {
-    if(obj.is_ok)
-    {
-      continue;
-    }
-  if (detect_color_ == 0 && obj.color != ArmorColor::RED) {
-      continue;
-  } else if (detect_color_ == 1 && obj.color != ArmorColor::BLUE) {
-      continue;
-  }
+//measure_tool_->processDetectedArmors(objs, detect_color_, armors);
 
-  if(!obj.is_ok)continue;
-
-  cv::Point3f target_position;
-  cv::Mat target_rvec;
-  std::string armor_type;
-
-  if (!measure_tool_->calcArmorTarget(obj, target_position, target_rvec, armor_type)) {
-      //WUST_WARN(vision_logger) << "Calculate target position failed";
-      continue;
-  }
-
-  
-  if (!cv::checkRange(cv::Mat(target_position))) {
-  //WUST_WARN(vision_logger) << "Invalid target position (NaN)";
-  continue;
-  }
-
-
- 
-  if (target_rvec.empty() || target_rvec.total() != 3 || target_rvec.rows * target_rvec.cols != 3 || !cv::checkRange(target_rvec)) {
-      //WUST_WARN(vision_logger) << "Invalid rotation vector (empty or NaN): " << target_rvec;
-      continue;
-  }
-
-  try {
-      cv::Mat rot_mat;
-      cv::Rodrigues(target_rvec, rot_mat);
-
-      tf2::Matrix3x3 tf_rot_mat(
-          rot_mat.at<double>(0, 0), rot_mat.at<double>(0, 1), rot_mat.at<double>(0, 2),
-          rot_mat.at<double>(1, 0), rot_mat.at<double>(1, 1), rot_mat.at<double>(1, 2),
-          rot_mat.at<double>(2, 0), rot_mat.at<double>(2, 1), rot_mat.at<double>(2, 2));
-      tf2::Quaternion tf_quaternion;
-      tf_rot_mat.getRotation(tf_quaternion);
-
-      if (!std::isfinite(tf_quaternion.x) || !std::isfinite(tf_quaternion.y) ||
-      !std::isfinite(tf_quaternion.z) || !std::isfinite(tf_quaternion.w)) {
-      WUST_WARN(vision_logger) << "Quaternion contains NaN or Inf";
-      continue;
-      }
-      Armor armor;
-      armor.pos={target_position.x,target_position.y,target_position.z};
-      armor.ori={tf_quaternion.x,tf_quaternion.y,tf_quaternion.z,tf_quaternion.w};
-
-      armor.number=obj.number;
-      armor.type=armor_type;
-      armor.distance_to_image_center=measure_tool_->calcDistanceToCenter(obj);
-      armors.armors.emplace_back(armor);
-
-      //WUST_INFO(vision_logger) << "Position: " << target_position << " Quaternion: " << tf_quaternion;
-
-  } catch (const cv::Exception& e) {
-      WUST_ERROR(vision_logger) << "cv::Rodrigues failed: " << e.what();
-      continue;
-  }
-}
-
-      
          
      
 
@@ -560,7 +494,7 @@ void WustVision::DetectCallback(
       this->armorsCallback(armors,src_img);
   });
 
-  //drawresult(src_img,objs,timestamp_nanosec);
+//  drawresult(src_img,objs,timestamp_nanosec);
   
   
   
@@ -580,7 +514,7 @@ void WustVision::transformArmorData(Armors& armors)
         double yaw=armor.yaw*180/M_PI;
         //std::cout<<"YAW:"<<yaw<<std::endl;
 
-        //WUST_DEBUG(vision_logger)<<"Z:"<<armor.yaw;
+       //  WUST_DEBUG(vision_logger)<<"Z:"<<armor.target_pos.z;
     } catch (const std::exception& e) {
         WUST_ERROR(vision_logger) << "Can't find transform from " << armors.frame_id << " to " << target_frame_ << ": " << e.what();
         return;

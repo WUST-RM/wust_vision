@@ -64,7 +64,7 @@ public:
     double s2qx_, s2qy_, s2qz_, s2qyaw_, s2qr_, s2qd_zc_;
     double r_x_, r_y_, r_z_, r_yaw_;
     double lost_time_thres_;
-    
+    int control_rate;
 
 
     double gimbal2camera_x_, gimbal2camera_y_, gimbal2camera_z_, gimbal2camera_yaw_, gimbal2camera_roll_, gimbal2camera_pitch_;

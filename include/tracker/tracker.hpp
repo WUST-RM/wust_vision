@@ -84,6 +84,7 @@ private:
   double orientationToYaw(const tf2::Quaternion &q) noexcept;
   static Eigen::Vector3d getArmorPositionFromState(const Eigen::VectorXd &x) noexcept;
   void updateBestYawdiff(const Armor &armor1,const Armor &armor2);
+  void updateYawStateConsistency(double measured_yaw);
 
   double max_match_distance_;
   double max_match_yaw_diff_;

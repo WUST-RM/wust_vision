@@ -36,6 +36,8 @@ light:
   max_ratio: 0.45
   max_angle: 40.0
 
+control_rate: 1000
+
 camera:
   serial: ""
   camera_info_path: "/home/hy/wust_vision/config/camera_info.yaml"
