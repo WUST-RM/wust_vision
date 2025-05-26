@@ -22,8 +22,10 @@ add_executable(${PROJECT_NAME}_openvino
   src/control/armor_solver.cpp
   src/control/manual_compensator.cpp
   src/common/calculation.cpp
-
-
+  src/detect/pnp_solver.cpp
+  src/detect/graph_optimizer.cpp
+  src/detect/armor_pose_estimator.cpp
+  src/detect/ba_solver.cpp
 )
 add_executable(${PROJECT_NAME}_trt
   src/driver/hik.cpp
@@ -42,7 +44,10 @@ add_executable(${PROJECT_NAME}_trt
   src/control/armor_solver.cpp
   src/control/manual_compensator.cpp
   src/common/calculation.cpp
-
+  src/detect/pnp_solver.cpp
+  src/detect/graph_optimizer.cpp
+  src/detect/armor_pose_estimator.cpp
+  src/detect/ba_solver.cpp
 
 
 )
@@ -57,7 +62,9 @@ link_directories(
   /usr/local/cuda-11.8/lib64
 )
 
-
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/cmake_modules)
+set(EXTERNAL_INCLUDE_DIRS ${G2O_INCLUDE_DIR})
+set(EXTERNAL_LIBS ${G2O_LIBRARIES})
 
 # 查找依赖
 find_package(OpenCV REQUIRED)
@@ -67,7 +74,7 @@ find_package(Eigen3 REQUIRED)
 find_package(CUDAToolkit REQUIRED)
 find_package(fmt REQUIRED)
 find_package(yaml-cpp REQUIRED)
-
+find_package(G2O REQUIRED)
 
 
 # 包含路径
@@ -77,7 +84,7 @@ target_include_directories(${PROJECT_NAME}_openvino PUBLIC
   ${EIGEN3_INCLUDE_DIRS}
   ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${CMAKE_CURRENT_SOURCE_DIR}/hikSDK/include
-
+  ${G2O_INCLUDE_DIRS}
   ${Python3_INCLUDE_DIRS}
 
 
@@ -88,7 +95,7 @@ target_include_directories(${PROJECT_NAME}_trt PUBLIC
   ${EIGEN3_INCLUDE_DIRS}
   ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${CMAKE_CURRENT_SOURCE_DIR}/hikSDK/include
-
+  ${G2O_INCLUDE_DIRS}
   ${Python3_INCLUDE_DIRS}
 
 
@@ -133,6 +140,12 @@ target_link_libraries(${PROJECT_NAME}_openvino
   fmt::fmt
   yaml-cpp
   ${Python3_LIBRARIES}
+  g2o_core
+  g2o_stuff
+  g2o_solver_csparse
+  g2o_types_sba
+  g2o_types_slam3d
+  g2o_solver_dense
 
   
 
@@ -156,7 +169,12 @@ target_link_libraries(${PROJECT_NAME}_trt
   fmt::fmt
   yaml-cpp
   ${Python3_LIBRARIES}
-
+  g2o_core
+  g2o_stuff
+  g2o_solver_csparse
+  g2o_types_sba
+  g2o_types_slam3d
+  g2o_solver_dense
 
  
 )

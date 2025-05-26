@@ -7,6 +7,7 @@
 #include "driver/serial.hpp"
 #include <opencv2/core/mat.hpp>
 #include "control/armor_solver.hpp"
+#include "detect/armor_pose_estimator.hpp"
 class WustVision {
 public:
     WustVision();
@@ -83,7 +84,8 @@ public:
     bool use_calculation_ = false;
 
     
-    
+    std::unique_ptr<ArmorPoseEstimator> armor_pose_estimator_;
+    Eigen::Matrix3d imu_to_camera_;
 
 
 };

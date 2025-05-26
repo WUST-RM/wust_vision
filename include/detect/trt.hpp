@@ -29,6 +29,7 @@
 #include "opencv2/opencv.hpp"
 #include "common/ThreadPool.h"
 #include "detect/mono_measure_tool.hpp"
+#include "detect/light_corner_corrector.hpp"
 
 // 定义检测框结构体，与 OpenVINO 模型输出对齐
 class AdaptedTRTModule

@@ -9,6 +9,7 @@
 #include "yaml-cpp/yaml.h"
 #include "common/gobal.hpp"
 #include "control/armor_solver.hpp"
+#include "detect/armor_pose_estimator.hpp"
 class  WustVision{
 public:
     WustVision();
@@ -72,5 +73,6 @@ public:
     std::unique_ptr<Solver> solver_;
     bool use_calculation_ = false;
 
-
+    std::unique_ptr<ArmorPoseEstimator> armor_pose_estimator_;
+    Eigen::Matrix3d imu_to_camera_;
 };

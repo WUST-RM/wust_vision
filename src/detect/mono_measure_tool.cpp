@@ -147,113 +147,113 @@ void MonoMeasureTool::calcViewAngle(cv::Point2f p, float & pitch, float & yaw)
   yaw = atan2((p.x - u0_), fx_);
 }
 
-// bool MonoMeasureTool::calcArmorTarget(
-//   const ArmorObject & obj, cv::Point3f & position, cv::Mat & rvec, std::string & armor_type)
-// {
-//   if(obj.is_ok)
-//   { 
+bool MonoMeasureTool::calcArmorTarget(
+  const ArmorObject & obj, cv::Point3f & position, cv::Mat & rvec, std::string & armor_type)
+{
+  if(obj.is_ok)
+  { 
     
-//     if (is_big_armor(obj)) {
-//       armor_type = "large";
-//       return solvePnp(obj.pts_binary, BIG_ARMOR_3D_POINTS, position, rvec, cv::SOLVEPNP_IPPE);
-//     } else {
-//       armor_type = "small";
-//       return solvePnp(obj.pts_binary, SMALL_ARMOR_3D_POINTS, position, rvec, cv::SOLVEPNP_IPPE);
-//     }
+    if (is_big_armor(obj)) {
+      armor_type = "large";
+      return solvePnp(obj.pts_binary, BIG_ARMOR_3D_POINTS, position, rvec, cv::SOLVEPNP_IPPE);
+    } else {
+      armor_type = "small";
+      return solvePnp(obj.pts_binary, SMALL_ARMOR_3D_POINTS, position, rvec, cv::SOLVEPNP_IPPE);
+    }
    
 
-//   }
-//   else {
-//   if (is_big_armor(obj)) {
-//     armor_type = "large";
-//     return solvePnp(obj.pts, BIG_ARMOR_3D_POINTS_NET, position, rvec, cv::SOLVEPNP_IPPE);
-//   } else {
-//     armor_type = "small";
-//     return solvePnp(obj.pts, SMALL_ARMOR_3D_POINTS_NET, position, rvec, cv::SOLVEPNP_IPPE);
-//  }
-// }
-// }
-bool MonoMeasureTool::calcArmorTarget(
-  const ArmorObject & obj,
-  cv::Point3f & position,
-  cv::Mat & rvec,
-  std::string & armor_type)
-{
-  // Determine armor size
-  const std::vector<cv::Point3f> *model_points = nullptr;
-  const std::vector<cv::Point2f> *image_points = nullptr;
-
-  if (obj.is_ok) {
-    image_points = &obj.pts_binary;
-    if (is_big_armor(obj)) {
-      armor_type = "large";
-      model_points = &BIG_ARMOR_3D_POINTS;
-    } else {
-      armor_type = "small";
-      model_points = &SMALL_ARMOR_3D_POINTS;
-    }
+  }
+  else {
+  if (is_big_armor(obj)) {
+    armor_type = "large";
+    return solvePnp(obj.pts, BIG_ARMOR_3D_POINTS_NET, position, rvec, cv::SOLVEPNP_IPPE);
   } else {
-    image_points = &obj.pts;
-    if (is_big_armor(obj)) {
-      armor_type = "large";
-      model_points = &BIG_ARMOR_3D_POINTS_NET;
-    } else {
-      armor_type = "small";
-      model_points = &SMALL_ARMOR_3D_POINTS_NET;
-    }
-  }
-
-  // Ensure camera parameters initialized
-  if (camera_intrinsic_.empty() || camera_distortion_.empty()) {
-    WUST_ERROR(mono_logger) << "Camera parameters not initialized.";
-    return false;
-  }
-
-  // Use solvePnPGeneric to get all candidate solutions
-  std::vector<cv::Mat> rvecs, tvecs;
-  bool generic_ok = cv::solvePnPGeneric(
-    *model_points, *image_points,
-    camera_intrinsic_, camera_distortion_,
-    rvecs, tvecs,
-    false, /* useExtrinsicGuess */
-    cv::SOLVEPNP_IPPE
-  );
-  if (!generic_ok || rvecs.empty()) {
-    WUST_WARN(mono_logger) << "solvePnPGeneric failed.";
-    return false;
-  }
-
-  // Select solution with minimum reprojection error
-  double best_err = std::numeric_limits<double>::max();
-  size_t best_idx = 0;
-  for (size_t i = 0; i < rvecs.size(); ++i) {
-    std::vector<cv::Point2f> reproj;
-    cv::projectPoints(
-      *model_points, rvecs[i], tvecs[i],
-      camera_intrinsic_, camera_distortion_, reproj
-    );
-    double err = 0.0;
-    for (size_t k = 0; k < reproj.size(); ++k) {
-      err += cv::norm(reproj[k] - (*image_points)[k]);
-    }
-    if (err < best_err) {
-      best_err = err;
-      best_idx = i;
-    }
-  }
-
-  // Retrieve best solution
-  rvec = rvecs[best_idx].clone();
-  cv::Mat tvec = tvecs[best_idx].clone();
-  position = cv::Point3f(tvec);
-
-  // Store for next-frame iterative refinement
-  prev_rvec_ = rvec;
-  prev_tvec_ = tvec;
-  has_prev_ = true;
-
-  return true;
+    armor_type = "small";
+    return solvePnp(obj.pts, SMALL_ARMOR_3D_POINTS_NET, position, rvec, cv::SOLVEPNP_IPPE);
+ }
 }
+}
+// bool MonoMeasureTool::calcArmorTarget(
+//   const ArmorObject & obj,
+//   cv::Point3f & position,
+//   cv::Mat & rvec,
+//   std::string & armor_type)
+// {
+//   // Determine armor size
+//   const std::vector<cv::Point3f> *model_points = nullptr;
+//   const std::vector<cv::Point2f> *image_points = nullptr;
+
+//   if (obj.is_ok) {
+//     image_points = &obj.pts_binary;
+//     if (is_big_armor(obj)) {
+//       armor_type = "large";
+//       model_points = &BIG_ARMOR_3D_POINTS;
+//     } else {
+//       armor_type = "small";
+//       model_points = &SMALL_ARMOR_3D_POINTS;
+//     }
+//   } else {
+//     image_points = &obj.pts;
+//     if (is_big_armor(obj)) {
+//       armor_type = "large";
+//       model_points = &BIG_ARMOR_3D_POINTS_NET;
+//     } else {
+//       armor_type = "small";
+//       model_points = &SMALL_ARMOR_3D_POINTS_NET;
+//     }
+//   }
+
+//   // Ensure camera parameters initialized
+//   if (camera_intrinsic_.empty() || camera_distortion_.empty()) {
+//     WUST_ERROR(mono_logger) << "Camera parameters not initialized.";
+//     return false;
+//   }
+
+//   // Use solvePnPGeneric to get all candidate solutions
+//   std::vector<cv::Mat> rvecs, tvecs;
+//   bool generic_ok = cv::solvePnPGeneric(
+//     *model_points, *image_points,
+//     camera_intrinsic_, camera_distortion_,
+//     rvecs, tvecs,
+//     false, /* useExtrinsicGuess */
+//     cv::SOLVEPNP_IPPE
+//   );
+//   if (!generic_ok || rvecs.empty()) {
+//     WUST_WARN(mono_logger) << "solvePnPGeneric failed.";
+//     return false;
+//   }
+
+//   // Select solution with minimum reprojection error
+//   double best_err = std::numeric_limits<double>::max();
+//   size_t best_idx = 0;
+//   for (size_t i = 0; i < rvecs.size(); ++i) {
+//     std::vector<cv::Point2f> reproj;
+//     cv::projectPoints(
+//       *model_points, rvecs[i], tvecs[i],
+//       camera_intrinsic_, camera_distortion_, reproj
+//     );
+//     double err = 0.0;
+//     for (size_t k = 0; k < reproj.size(); ++k) {
+//       err += cv::norm(reproj[k] - (*image_points)[k]);
+//     }
+//     if (err < best_err) {
+//       best_err = err;
+//       best_idx = i;
+//     }
+//   }
+
+//   // Retrieve best solution
+//   rvec = rvecs[best_idx].clone();
+//   cv::Mat tvec = tvecs[best_idx].clone();
+//   position = cv::Point3f(tvec);
+
+//   // Store for next-frame iterative refinement
+//   prev_rvec_ = rvec;
+//   prev_tvec_ = tvec;
+//   has_prev_ = true;
+
+//   return true;
+// }
 float MonoMeasureTool::calcDistanceToCenter(const ArmorObject & obj) 
 {
   cv::Point2f img_center(

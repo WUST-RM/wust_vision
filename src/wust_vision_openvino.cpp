@@ -7,6 +7,7 @@
 #include <opencv2/core/mat.hpp>
 #include <opencv2/highgui.hpp>
 #include <functional>
+#include <ostream>
 #include <string>
 #include "common/tf.hpp"
 #include "common/tools.hpp"
@@ -89,6 +90,7 @@ void  WustVision::init()
   
   const std::string camera_info_path = config["camera"]["camera_info_path"].as<std::string>();
   measure_tool_=std::make_unique<MonoMeasureTool>(camera_info_path);
+  armor_pose_estimator_=std::make_unique<ArmorPoseEstimator>(camera_info_path);
   
   initTF();
   
@@ -192,13 +194,17 @@ void WustVision::initTF()
     tf_tree_.setTransform("gimbal_link", "camera", createTf(gimbal2camera_x_, gimbal2camera_y_, gimbal2camera_z_, origimbal2camera));
 
     // camera_optical_frame 相对于 camera，设置 camera -> camera_optical_frame 的旋转变换
-    double yaw = -M_PI / 2;
+    double yaw = M_PI / 2;
     double roll = -M_PI / 2;
     double pitch = 0.0;
 
     tf2::Quaternion orientation;
     orientation.setRPY(roll, pitch, yaw);
+    std::cout<<orientation.x<<"a"<<orientation.y<<"a"<<orientation.z<<"a"<<orientation.w<<std::endl;
+   
+
     tf_tree_.setTransform("camera", "camera_optical_frame", createTf(0, 0, 0, orientation));
+
 }
 void WustVision::initSerial()
 {
@@ -451,9 +457,36 @@ void WustVision::DetectCallback(
 } Armors armors;
   armors.timestamp=std::chrono::time_point_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::time_point(std::chrono::nanoseconds(timestamp_nanosec)));
   armors.frame_id="camera_optical_frame";
+  try {
+    auto target_time = armors.timestamp; // 需要有一个转换函数
+    Transform tf;
+    if (!tf_tree_.getTransform(armors.frame_id, target_frame_, target_time, tf)) {
+        throw std::runtime_error("Transform not found.");
+    }
 
+    tf2::Quaternion tf_quat = tf.orientation;
+   // std::cout<<tf.orientation.x<<" "<<tf.orientation.y<<" "<<tf.orientation.z<<" "<<tf.orientation.w<<std::endl;
+    Eigen::Quaterniond eigen_quat(tf_quat.w, tf_quat.x, tf_quat.y, tf_quat.z);
+    imu_to_camera_ = eigen_quat.toRotationMatrix();  // Eigen::Matrix3d
+    imu_to_camera_ = Sophus::SO3d::fitToSO3(eigen_quat.toRotationMatrix()).matrix();
+
+
+
+
+
+
+   
+} catch (const std::exception& e) {
+    
+    return;
+}
+  armors.armors=armor_pose_estimator_->extractArmorPoses(objs, imu_to_camera_);
 
   for (auto & obj : objs) {
+    if(obj.is_ok)
+    {
+      continue;
+    }
   if (detect_color_ == 0 && obj.color != ArmorColor::RED) {
       continue;
   } else if (detect_color_ == 1 && obj.color != ArmorColor::BLUE) {
@@ -527,7 +560,7 @@ void WustVision::DetectCallback(
       this->armorsCallback(armors,src_img);
   });
 
-
+  //drawresult(src_img,objs,timestamp_nanosec);
   
   
   
@@ -537,13 +570,15 @@ void WustVision::transformArmorData(Armors& armors)
   for (auto& armor : armors.armors) {
     try {
       Transform tf(armor.pos, armor.ori, armors.timestamp);
-        auto pose_in_target_frame = tf_tree_.transform(tf, armors.frame_id, target_frame_, armors.timestamp);      
+        auto pose_in_target_frame = tf_tree_.transform(tf, armors.frame_id, target_frame_, armors.timestamp); 
+       // auto pose_in_target_frame = tf_tree_.transform(tf, target_frame_,armors.frame_id,  armors.timestamp);      
         armor.target_pos = pose_in_target_frame.position;
         armor.target_ori = pose_in_target_frame.orientation;
         
 
         armor.yaw=getRPYFromQuaternion(armor.target_ori).yaw;
-     
+        double yaw=armor.yaw*180/M_PI;
+        //std::cout<<"YAW:"<<yaw<<std::endl;
 
         //WUST_DEBUG(vision_logger)<<"Z:"<<armor.yaw;
     } catch (const std::exception& e) {
@@ -600,6 +635,7 @@ void WustVision::timerCallback()
       try {
         Transform tf(armor.pos, armor.ori);
         auto pose_in_target_frame = tf_tree_.transform(tf, armor_data.frame_id, "camera_optical_frame");
+        //auto pose_in_target_frame = tf_tree_.transform(tf, "camera_optical_frame", armor_data.frame_id, armor_data.timestamp);
         armor.target_pos = pose_in_target_frame.position;
         armor.target_ori = pose_in_target_frame.orientation;
       } catch (const std::exception& e) {

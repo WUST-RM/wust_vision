@@ -149,16 +149,26 @@ void Tracker::update(const Armors &armors_msg) noexcept {
                 rotation_inconsistent_count_++;
                 if (rotation_inconsistent_count_ >= max_inconsistent_count_) {
                   WUST_WARN(tracker_logger) << "yaw rotation mismatch: OBS-PRED change ";
-                  tracker_state = LOST;
+            
+                  // if (obs_state == 0 && pred_state != 0) {
+                  //   // 预测错误，观测为静止，应丢弃跟踪
+                     tracker_state = LOST;
+                  // } else {
+                    // 其他情况尝试更新状态修正
+                    // target_state(7) = yaw_velocity_avg;
+                    // ekf->setState(target_state);
+                 // }
+            
                   rotation_inconsistent_count_ = 0;
-                  rotation_inconsistent_cooldown_ = rotation_inconsistent_cooldown_limit_; 
+                  rotation_inconsistent_cooldown_ = rotation_inconsistent_cooldown_limit_;
                 }
               } else {
                 rotation_inconsistent_count_ = 0;
               }
             } else {
-              rotation_inconsistent_cooldown_--;  
+              rotation_inconsistent_cooldown_--;
             }
+            
           }
       
         

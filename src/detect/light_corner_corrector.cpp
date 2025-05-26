@@ -48,22 +48,22 @@ void LightCornerCorrector::correctCorners(ArmorObject& armor) noexcept {
         }
 
       
-        // SymmetryAxis axis = findSymmetryAxis(armor.whole_gray_img, light);
+        SymmetryAxis axis = findSymmetryAxis(armor.whole_gray_img, light);
         
 
-        // light.center = axis.centroid;
-        // light.axis = axis.direction;
+        light.center = axis.centroid;
+        light.axis = axis.direction;
       
 
         
-        // if (cv::Point2f t = findCorner(armor.whole_gray_img, light, axis, "top"); t.x > 0) {
-        //     light.top = t;
+        if (cv::Point2f t = findCorner(armor.whole_gray_img, light, axis, "top"); t.x > 0) {
+            light.top = t;
         
-        // }
-        // if (cv::Point2f b = findCorner(armor.whole_gray_img, light, axis, "bottom"); b.x > 0) {
-        //     light.bottom = b;
+        }
+        if (cv::Point2f b = findCorner(armor.whole_gray_img, light, axis, "bottom"); b.x > 0) {
+            light.bottom = b;
        
-        // }
+        }
         light.top.x += zero_x;
         light.top.y += zero_y;
         light.center.x += zero_x;
@@ -103,6 +103,20 @@ void LightCornerCorrector::correctCorners(ArmorObject& armor) noexcept {
     }
 
 
+    if (light_distances.size() >= 2) {
+        const Light* l1 = light_distances[0].first;
+        const Light* l2 = light_distances[1].first;
+    
+        // 判断哪个灯条在左侧，哪个在右侧
+        if (l1->center.x < l2->center.x) {
+            armor.lights[0] = *l1;  // 解引用指针，赋值对象
+            armor.lights[1] = *l2;
+        } else {
+            armor.lights[0] = *l2;
+            armor.lights[1] = *l1;
+        }
+    }
+
     // Step 4: 构建 candidates，只保留两个灯条的 top/bottom
     std::vector<cv::Point2f> candidates;
     for (int i = 0; i < std::min(2, (int)light_distances.size()); ++i) {
@@ -111,6 +125,7 @@ void LightCornerCorrector::correctCorners(ArmorObject& armor) noexcept {
         candidates.push_back(light->bottom);
         
     }
+ 
 
 
     double w = cv::norm(armor.pts[0] - armor.pts[1]);

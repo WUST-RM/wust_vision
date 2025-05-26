@@ -1,7 +1,7 @@
 use_calculation: false
 
 logger:
-  log_level: "DEBUG"
+  log_level: "INFO"
   log_path: "/home/hy/wust_log"
   use_simplelog: false
   use_logfile: false
@@ -41,7 +41,7 @@ camera:
   serial: "" 
   acquisition_frame_rate: 160
   exposure_time: 3500
-  gain: 12.0
+  gain: 7.0
   adc_bit_depth: "Bits_8"
   pixel_format: "BayerRG8"
 
@@ -58,14 +58,14 @@ tf:
 tracker:
   target_frame: "odom"
   max_match_distance: 0.5
-  max_match_yaw_diff: 0.7
+  max_match_yaw_diff: 0.5
   tracking_thres: 5
   lost_time_thres: 0.2
   obs_vyaw_buffer_thres: 5
   obs_yaw_stationary_thresh: 1.0
   pred_yaw_stationary_thresh: 0.5
   min_valid_velocity_thresh: 0.01
-  max_inconsistent_count: 3
+  max_inconsistent_count: 2
   rotation_inconsistent_cooldown_limit: 5
   ekf:
     s2qx: 10.0

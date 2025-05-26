@@ -6,6 +6,17 @@
 #include <string>
 #include <fmt/core.h>
 #include "common/tf.hpp"
+
+constexpr double SMALL_ARMOR_WIDTH = 133.0 / 1000.0; // 135
+constexpr double SMALL_ARMOR_HEIGHT = 50.0 / 1000.0; // 55
+constexpr double LARGE_ARMOR_WIDTH = 225.0 / 1000.0;
+constexpr double LARGE_ARMOR_HEIGHT = 50.0 / 1000.0; // 55
+constexpr double SMALL_ARMOR_WIDTH_NET = 135.0 / 1000.0; // 135
+constexpr double SMALL_ARMOR_HEIGHT_NET = 55.0 / 1000.0; // 55
+constexpr double LARGE_ARMOR_WIDTH_NET = 225.0 / 1000.0;
+constexpr double LARGE_ARMOR_HEIGHT_NET = 55.0 / 1000.0; // 55
+constexpr double FIFTTEN_DEGREE_RAD = 15 * CV_PI / 180;
+
 struct Light : public cv::RotatedRect {
     Light() = default;
     explicit Light(const std::vector<cv::Point> &contour)
@@ -131,8 +142,41 @@ typedef struct ArmorObject
   double new_x;
   double new_y;
   bool is_ok =false;
+  static constexpr const int N_LANDMARKS = 6;
+  static constexpr const int N_LANDMARKS_2 = N_LANDMARKS * 2;
 
   //std::unique_ptr<LightCornerCorrector> corner_corrector;
+  template <typename PointType>
+  static inline std::vector<PointType> buildObjectPoints(const double &w,
+                                                         const double &h) noexcept {
+    if constexpr (N_LANDMARKS == 4) {
+      return {PointType(0, w / 2, -h / 2),
+              PointType(0, w / 2, h / 2),
+              PointType(0, -w / 2, h / 2),
+              PointType(0, -w / 2, -h / 2)};
+    } else {
+      return {PointType(0, w / 2, -h / 2),
+              PointType(0, w / 2, 0),
+              PointType(0, w / 2, h / 2),
+              PointType(0, -w / 2, h / 2),
+              PointType(0, -w / 2, 0),
+              PointType(0, -w / 2, -h / 2)};
+    }
+  }
+
+  //Landmarks start from bottom left in clockwise order
+  std::vector<cv::Point2f> landmarks() const {
+    if constexpr (N_LANDMARKS == 4) {
+      return {lights[0].bottom, lights[0].top, lights[1].top, lights[1].bottom};
+    } else {
+      return {lights[0].bottom,
+              lights[0].center,
+              lights[0].top,
+              lights[1].top,
+              lights[1].center,
+              lights[1].bottom};
+    }
+  }
 
 } ArmorObject;
 
@@ -160,7 +204,8 @@ struct Armors
   std::string frame_id;
 };
 struct Target
-{ std::chrono::steady_clock::time_point timestamp;
+{ 
+  std::chrono::steady_clock::time_point timestamp;
   std::string frame_id;
   std::string type;
   bool tracking=false;

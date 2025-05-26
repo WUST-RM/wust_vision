@@ -1,7 +1,7 @@
 use_calculation: false
 
 logger:
-  log_level: "DEBUG"
+  log_level: "INFO"
   log_path: "/home/hy/wust_log"
   use_simplelog: false
   use_logfile: true

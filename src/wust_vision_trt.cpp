@@ -119,7 +119,7 @@ void WustVision::init()
     // 相机参数
     const std::string camera_info_path = config["camera"]["camera_info_path"].as<std::string>();
     measure_tool_ = std::make_unique<MonoMeasureTool>(camera_info_path);
-
+    armor_pose_estimator_=std::make_unique<ArmorPoseEstimator>(camera_info_path);
     initTF();
     initSerial();
     initTracker(config["tracker"]);
@@ -196,13 +196,17 @@ void WustVision::initTF()
     tf_tree_.setTransform("gimbal_link", "camera", createTf(gimbal2camera_x_, gimbal2camera_y_, gimbal2camera_z_, origimbal2camera));
 
     // camera_optical_frame 相对于 camera，设置 camera -> camera_optical_frame 的旋转变换
-    double yaw = -M_PI / 2;
+    double yaw = M_PI / 2;
     double roll = -M_PI / 2;
     double pitch = 0.0;
 
     tf2::Quaternion orientation;
     orientation.setRPY(roll, pitch, yaw);
+    std::cout<<orientation.x<<"a"<<orientation.y<<"a"<<orientation.z<<"a"<<orientation.w<<std::endl;
+   
+
     tf_tree_.setTransform("camera", "camera_optical_frame", createTf(0, 0, 0, orientation));
+
 }
 void WustVision::initSerial()
 {
@@ -440,111 +444,130 @@ Armors WustVision::visualizeTargetProjection(Target armor_target_)
     return armor_data;
   }
   
-void WustVision::DetectCallback(
+  void WustVision::DetectCallback(
     const std::vector<ArmorObject>& objs, int64_t timestamp_nanosec, const cv::Mat& src_img)
-{   std::lock_guard<std::mutex> lock(callback_mutex_);
+  {   
+    std::lock_guard<std::mutex> lock(callback_mutex_);
     detect_finish_count_++;
-    if(objs.size()>=10){
-    //WUST_WARN(vision_logger)<<"Detected "<<objs.size()<<" objects"<<"too much";
+    if(objs.size()>=6){
+    WUST_WARN(vision_logger)<<"Detected "<<objs.size()<<" objects"<<"too much";
     infer_running_count_--;
     return;}
     if (measure_tool_ == nullptr) {
     WUST_WARN(vision_logger)<<"NO camera info";
     return;
-  } 
-    Armors armors;
+  } Armors armors;
     armors.timestamp=std::chrono::time_point_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::time_point(std::chrono::nanoseconds(timestamp_nanosec)));
     armors.frame_id="camera_optical_frame";
+    try {
+      auto target_time = armors.timestamp; // 需要有一个转换函数
+      Transform tf;
+      if (!tf_tree_.getTransform(armors.frame_id, target_frame_, target_time, tf)) {
+          throw std::runtime_error("Transform not found.");
+      }
+  
+      tf2::Quaternion tf_quat = tf.orientation;
+     // std::cout<<tf.orientation.x<<" "<<tf.orientation.y<<" "<<tf.orientation.z<<" "<<tf.orientation.w<<std::endl;
+      Eigen::Quaterniond eigen_quat(tf_quat.w, tf_quat.x, tf_quat.y, tf_quat.z);
+      imu_to_camera_ = eigen_quat.toRotationMatrix();  // Eigen::Matrix3d
+      imu_to_camera_ = Sophus::SO3d::fitToSO3(eigen_quat.toRotationMatrix()).matrix();
+  
+  
+  
+  
+  
+  
+     
+  } catch (const std::exception& e) {
+      
+      return;
+  }
+    armors.armors=armor_pose_estimator_->extractArmorPoses(objs, imu_to_camera_);
+  
     for (auto & obj : objs) {
+      if(obj.is_ok)
+      {
+        continue;
+      }
     if (detect_color_ == 0 && obj.color != ArmorColor::RED) {
         continue;
     } else if (detect_color_ == 1 && obj.color != ArmorColor::BLUE) {
         continue;
     }
-
+  
+    if(!obj.is_ok)continue;
+  
     cv::Point3f target_position;
     cv::Mat target_rvec;
     std::string armor_type;
-
+  
     if (!measure_tool_->calcArmorTarget(obj, target_position, target_rvec, armor_type)) {
         //WUST_WARN(vision_logger) << "Calculate target position failed";
         continue;
     }
-
+  
     
     if (!cv::checkRange(cv::Mat(target_position))) {
     //WUST_WARN(vision_logger) << "Invalid target position (NaN)";
     continue;
     }
-
-
+  
+  
    
     if (target_rvec.empty() || target_rvec.total() != 3 || target_rvec.rows * target_rvec.cols != 3 || !cv::checkRange(target_rvec)) {
         //WUST_WARN(vision_logger) << "Invalid rotation vector (empty or NaN): " << target_rvec;
         continue;
     }
-
+  
     try {
         cv::Mat rot_mat;
         cv::Rodrigues(target_rvec, rot_mat);
-
+  
         tf2::Matrix3x3 tf_rot_mat(
             rot_mat.at<double>(0, 0), rot_mat.at<double>(0, 1), rot_mat.at<double>(0, 2),
             rot_mat.at<double>(1, 0), rot_mat.at<double>(1, 1), rot_mat.at<double>(1, 2),
             rot_mat.at<double>(2, 0), rot_mat.at<double>(2, 1), rot_mat.at<double>(2, 2));
         tf2::Quaternion tf_quaternion;
         tf_rot_mat.getRotation(tf_quaternion);
-
+  
         if (!std::isfinite(tf_quaternion.x) || !std::isfinite(tf_quaternion.y) ||
         !std::isfinite(tf_quaternion.z) || !std::isfinite(tf_quaternion.w)) {
         WUST_WARN(vision_logger) << "Quaternion contains NaN or Inf";
         continue;
         }
-
-
-        //WUST_INFO(vision_logger) << "Position: " << target_position << " Quaternion: " << tf_quaternion;
         Armor armor;
         armor.pos={target_position.x,target_position.y,target_position.z};
         armor.ori={tf_quaternion.x,tf_quaternion.y,tf_quaternion.z,tf_quaternion.w};
-
+  
         armor.number=obj.number;
         armor.type=armor_type;
         armor.distance_to_image_center=measure_tool_->calcDistanceToCenter(obj);
         armors.armors.emplace_back(armor);
-        //WUST_INFO(vision_logger)<<"yaw"<<armor.rpy_.yaw;
-
+  
+        //WUST_INFO(vision_logger) << "Position: " << target_position << " Quaternion: " << tf_quaternion;
+  
     } catch (const cv::Exception& e) {
         WUST_ERROR(vision_logger) << "cv::Rodrigues failed: " << e.what();
         continue;
     }
-}
-    
-//     for (auto& armor : armors.armors) {
-//       try {
-//           Transform tf(armor.pos, armor.ori);
-//           auto pose_intargetframe =tf_tree_.transform(tf, armors.frame_id, target_frame_);
-//           armor.target_pos = pose_intargetframe.position;
-//           armor.target_ori = pose_intargetframe.orientation;
-//           armor.yaw=getRPYFromQuaternion(armor.target_ori).yaw;
-//       } catch (const std::exception& e) {
-//           WUST_ERROR(vision_logger) << "Can't find transform from " << armors.frame_id << " to " << target_frame_ << ": " << e.what();
-//           return;
-//       }
-//   }   
-
+  }
+  
+        
+           
+       
+  
     infer_running_count_--;
+  
+     thread_pool_->enqueue([this, armors = std::move(armors), src_img]() {
+        this->armorsCallback(armors,src_img);
+    });
+  
+    //drawresult(src_img,objs,timestamp_nanosec);
     
     
+    
+  }
 
-   thread_pool_->enqueue([this, armors = std::move(armors), src_img]() {
-      this->armorsCallback(armors,src_img);
-  });
-//   if(debug_mode_&&show_armor_)
-//   {
-//   drawresult(src_img, objs,timestamp_nanosec);
-//   }
-    
-}
 void WustVision::transformArmorData(Armors& armors)
 {
   for (auto& armor : armors.armors) {
