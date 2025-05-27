@@ -447,7 +447,7 @@ void OpenVino::extractNumberImage(const cv::Mat & src, ArmorObject & armor)  {
   armor.number_img = flipped_image;
   armor.whole_binary_img = litroi;
   armor.whole_rgb_img = litroi_color;
-  // cv::imshow("number_image",flipped_image);
+  // cv::imshow("number_image",armor.whole_gray_img);
   // cv::waitKey(1);
   return ;
 }

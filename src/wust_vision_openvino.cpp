@@ -227,13 +227,15 @@ void WustVision::initTracker(const YAML::Node& config)
     // Tracker 基础参数
     double max_match_distance = config["max_match_distance"].as<double>(0.2);
     double max_match_yaw_diff = config["max_match_yaw_diff"].as<double>(1.0);
-    tracker_ = std::make_unique<Tracker>(max_match_distance, max_match_yaw_diff);
+    double max_match_z_diff = config["max_match_z_diff"].as<double>(0.1);
+    tracker_ = std::make_unique<Tracker>(max_match_distance, max_match_yaw_diff,max_match_z_diff);
     tracker_->buffer_size_ = config["obs_vyaw_buffer_thres"].as<int>(5);
     tracker_->obs_yaw_stationary_thresh  = config["obs_yaw_stationary_thresh"].as<float>(1.0);
     tracker_->pred_yaw_stationary_thresh = config["pred_yaw_stationary_thresh"].as<float>(0.5);
     tracker_->min_valid_velocity = config["min_valid_velocity_thresh"].as<float>(0.01);
     tracker_->max_inconsistent_count_ = config["max_inconsistent_count"].as<int>(3);
     tracker_->rotation_inconsistent_cooldown_limit_  = config["rotation_inconsistent_cooldown_limit"].as<int>(5);
+    tracker_->jump_thresh = config["jump_thresh"].as<double>(0.4);
 
     // 跟踪判定参数
     tracker_->tracking_thres = config["tracking_thres"].as<int>(5);
@@ -470,6 +472,7 @@ void WustVision::DetectCallback(
     Eigen::Quaterniond eigen_quat(tf_quat.w, tf_quat.x, tf_quat.y, tf_quat.z);
     imu_to_camera_ = eigen_quat.toRotationMatrix();  // Eigen::Matrix3d
     imu_to_camera_ = Sophus::SO3d::fitToSO3(eigen_quat.toRotationMatrix()).matrix();
+ //   std::cout<<imu_to_camera_<<std::endl;
 
     
 
@@ -483,7 +486,7 @@ void WustVision::DetectCallback(
 }
 armors.armors=armor_pose_estimator_->extractArmorPoses(objs, imu_to_camera_);
 
-//measure_tool_->processDetectedArmors(objs, detect_color_, armors);
+measure_tool_->processDetectedArmors(objs, detect_color_, armors);
 
          
      
@@ -494,7 +497,7 @@ armors.armors=armor_pose_estimator_->extractArmorPoses(objs, imu_to_camera_);
       this->armorsCallback(armors,src_img);
   });
 
-//  drawresult(src_img,objs,timestamp_nanosec);
+ //drawresult(src_img,objs,timestamp_nanosec);
   
   
   

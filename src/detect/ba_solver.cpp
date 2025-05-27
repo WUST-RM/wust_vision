@@ -95,8 +95,10 @@ BaSolver::solveBa(const ArmorObject &armor, const Eigen::Vector3d &t_camera_armo
     break;
     case 2:
     armor_size =Eigen::Vector2d(LARGE_ARMOR_WIDTH_NET, LARGE_ARMOR_HEIGHT_NET);
+    break;
     case 3:
     armor_size =Eigen::Vector2d(SMALL_ARMOR_WIDTH_NET, SMALL_ARMOR_HEIGHT_NET);
+    break;
   
   }
 

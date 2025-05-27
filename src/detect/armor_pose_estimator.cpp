@@ -37,8 +37,9 @@ ArmorPoseEstimator::ArmorPoseEstimator(const std::string &camera_info_path)
   ba_solver_ = std::make_unique<BaSolver>(camera_k, camera_d);
 
   R_gimbal_camera_ = Eigen::Matrix3d::Identity();
-  R_gimbal_camera_ << 0, 1, 0, 0, 0, -1, -1, 0, 0;
-  //R_gimbal_camera_ << 0, 0, 1, -1, 0, 0, 0, -1, 0;
+  //R_gimbal_camera_ << 0, 1, 0, 0, 0, -1, -1, 0, 0;
+  //R_gimbal_camera_ << 0, 0, -1, 1, 0, 0, 0, -1, 0;
+  R_gimbal_camera_ << 0, 0, 1, -1, 0, 0, 0, -1, 0;
 }
 
 std::vector<Armor>
@@ -75,7 +76,7 @@ ArmorPoseEstimator::extractArmorPoses(const std::vector<ArmorObject> &armors,
             (temp_type))) 
   {
      
-    sortPnPResult(armor, rvecs, tvecs ,temp_type);
+   sortPnPResult(armor, rvecs, tvecs ,temp_type);
     
       cv::Mat rmat;
       cv::Rodrigues(rvecs[0], rmat);
@@ -196,12 +197,16 @@ void ArmorPoseEstimator::sortPnPResult(const ArmorObject &armor,
   double l_angle =
       std::atan2(armor.lights[0].axis.y, armor.lights[0].axis.x) * 180 / M_PI;
   double r_angle =
-      std::atan2(armor.lights[1].axis.y, armor.lights[1].axis.x) * 180 /
-      M_PI;
+      std::atan2(armor.lights[1].axis.y, armor.lights[1].axis.x) * 180 /M_PI;
   double angle = (l_angle + r_angle) / 2;
+ 
   angle += 90.0;
-
+  
   if (armor.number == ArmorNumber::OUTPOST) angle = -angle;
+  // double aa=rpy1[2]/M_PI*180;
+  // double bb=rpy2[2]/M_PI*180;
+
+  // std::cout<<aa<<""<<bb<<std::endl;
 
   // 根据倾斜角度选择解
   // 如果装甲板左倾（angle > 0），选择Yaw为负的解
@@ -211,6 +216,6 @@ void ArmorPoseEstimator::sortPnPResult(const ArmorObject &armor,
     std::swap(rvec1, rvec2);
     std::swap(tvec1, tvec2);
 
-    //std::cout<<"armor_detector"<<"PnP Solution 2 Selected"<<std::endl;
+   // std::cout<<"armor_detector"<<"PnP Solution 2 Selected"<<std::endl;
   }
 }

@@ -61,6 +61,7 @@ tracker:
   target_frame: "odom"
   max_match_distance: 0.5
   max_match_yaw_diff: 0.7
+  max_match_z_diff: 0.1
   tracking_thres: 5
   lost_time_thres: 0.1
   obs_vyaw_buffer_thres: 5
@@ -69,6 +70,7 @@ tracker:
   min_valid_velocity_thresh: 0.01
   max_inconsistent_count: 3
   rotation_inconsistent_cooldown_limit: 5
+  jump_thresh: 0.4
   ekf:
     s2qx: 7.0
     s2qy: 7.0
@@ -80,6 +82,7 @@ tracker:
     r_y: 0.0322467810
     r_z: 0.2659587660
     r_yaw: 0.3651087658
+
 solver:
       prediction_delay: 0.0
       controller_delay: 0.0
