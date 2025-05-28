@@ -19,6 +19,8 @@ void drawGimbalDirection(cv::Mat& debug_img,
     const GimbalCmd& gimbal_cmd);
 void updatePlot(const std::vector<Armor>& armors);
 void dumpImuToFile(const ReceiveImuData& imu, const std::string& path ="/tmp/imu_status.txt");
+void dumpAimToFile(const ReceiveAimINFO& aim, const std::string& path="/tmp/aim_status.txt");
+std::string formatAimInfo(const ReceiveAimINFO& aim);
 std::string formatImuInfo(const ReceiveImuData& imu);
 void draw_debug_overlay(const imgframe &src_img, 
     const Armors *armors = nullptr,

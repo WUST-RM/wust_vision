@@ -35,7 +35,7 @@ public:
   std::vector<std::pair<double, double>> getTrajectory(double distance,
                                                        double angle) const noexcept;
 
-  double velocity = 15.0;
+  
   int iteration_times = 20;
   double gravity = 9.8;
   double resistance = 0.01;

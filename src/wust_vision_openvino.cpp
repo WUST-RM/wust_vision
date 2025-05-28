@@ -63,12 +63,12 @@ void  WustVision::init()
   float conf_threshold = config["model"]["conf_threshold"].as<float>();
   int top_k = config["model"]["top_k"].as<int>();
   float nms_threshold = config["model"]["nms_threshold"].as<float>();
-  gimbal2camera_x_  = config["tf"]["gimbal2camera_x"].as<double>();
-  gimbal2camera_y_  = config["tf"]["gimbal2camera_y"].as<double>();
-  gimbal2camera_z_  = config["tf"]["gimbal2camera_z"].as<double>();
-  gimbal2camera_roll_ = config["tf"]["gimbal2camera_roll"].as<double>();
-  gimbal2camera_pitch_ = config["tf"]["gimbal2camera_pitch"].as<double>();
-  gimbal2camera_yaw_ = config["tf"]["gimbal2camera_yaw"].as<double>();
+  gimbal2camera_x_  = config["tf"]["gimbal2camera_x"].as<double>(0.0);
+  gimbal2camera_y_  = config["tf"]["gimbal2camera_y"].as<double>(0.0);
+  gimbal2camera_z_  = config["tf"]["gimbal2camera_z"].as<double>(0.0);
+  gimbal2camera_roll_ = config["tf"]["gimbal2camera_roll"].as<double>(0.0);
+  gimbal2camera_pitch_ = config["tf"]["gimbal2camera_pitch"].as<double>(0.0);
+  gimbal2camera_yaw_ = config["tf"]["gimbal2camera_yaw"].as<double>(0.0);
 
   float expand_ratio_w = config["light"]["expand_ratio_w"].as<float>();
   float expand_ratio_h = config["light"]["expand_ratio_h"].as<float>();
@@ -191,7 +191,10 @@ void WustVision::initTF()
     // camera 相对于 odom，设置 odom -> camera 的变换
     tf_tree_.setTransform("odom", "gimbal_odom", createTf(0, 0, 0, tf2::Quaternion(0, 0, 0, 1)));
     tf_tree_.setTransform("gimbal_odom", "gimbal_link", createTf(0, 0, 0, tf2::Quaternion(0, 0, 0, 1)));
-    tf2::Quaternion origimbal2camera = eulerToQuaternion(gimbal2camera_roll_, gimbal2camera_pitch_, gimbal2camera_yaw_);
+    double gimbal2camera_roll=gimbal2camera_roll_*M_PI/180;
+    double gimbal2camera_pitch=gimbal2camera_pitch_*M_PI/180;
+    double  gimbal2camera_yaw=gimbal2camera_yaw_*M_PI/180;
+    tf2::Quaternion origimbal2camera = eulerToQuaternion(gimbal2camera_roll, gimbal2camera_pitch, gimbal2camera_yaw);
     tf_tree_.setTransform("gimbal_link", "camera", createTf(gimbal2camera_x_, gimbal2camera_y_, gimbal2camera_z_, origimbal2camera));
 
     // camera_optical_frame 相对于 camera，设置 camera -> camera_optical_frame 的旋转变换
@@ -529,7 +532,7 @@ void WustVision::timerCallback()
 { 
   
   if(!is_inited_)return;
-  serial_.send_robot_cmd_data_.data.gimbal.pitch=0;
+ 
   Target target;
     {
         std::lock_guard<std::mutex> lock(armor_target_mutex_);
@@ -545,6 +548,10 @@ void WustVision::timerCallback()
         try {
         auto now=std::chrono::steady_clock::now();
         gimbal_cmd=solver_->solve(target, now);
+        if(gimbal_cmd.fire_advice)
+        {
+         fire_count_++;
+        }
         serial_.transformGimbalCmd(gimbal_cmd);
         } catch (...) {
         WUST_ERROR(vision_logger)<<"solver error";
@@ -647,11 +654,13 @@ void WustVision::printStats()
 
   auto elapsed = duration_cast<duration<double>>(now - last_stat_time_steady_);
   if (elapsed.count() >= 1.0) {
-   WUST_INFO(vision_logger)<< "Received: " << img_recv_count_ << ", Detected: " << detect_finish_count_ << ", FPS: " << detect_finish_count_ / elapsed.count()<< " Latency: " << latency_ms << "ms";
+   WUST_INFO(vision_logger)<< "Received: " << img_recv_count_ << ", Detected: " << detect_finish_count_ << ", FPS: " << detect_finish_count_ / elapsed.count()<< " Latency: " << latency_ms << "ms" <<"  Fire: " << fire_count_;
 
     img_recv_count_ = 0;
     detect_finish_count_ = 0;
+    fire_count_ = 0;
     last_stat_time_steady_ = now;
+
   }
 }
 

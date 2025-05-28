@@ -528,7 +528,7 @@ void WustVision::timerCallback()
 { 
   
   if(!is_inited_)return;
-  serial_.send_robot_cmd_data_.data.gimbal.pitch=0;
+ 
   Target target;
     {
         std::lock_guard<std::mutex> lock(armor_target_mutex_);

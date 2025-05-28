@@ -880,13 +880,22 @@ void draw_debug_overlay(const imgframe &src_img,
             int y = std::min(debug_img.rows - 1, 100); 
             cv::putText(debug_img, id_str, {x, y},
                         cv::FONT_HERSHEY_SIMPLEX, 1.6, cv::Scalar(255, 0, 255), 2);
+        
+            std::string fire_str = gimbal_cmd && gimbal_cmd->fire_advice ? "Fire!" : "";
+            cv::Size fire_size = cv::getTextSize(fire_str, cv::FONT_HERSHEY_SIMPLEX, 1.2, 2, &baseline);
+            int fire_x = x - fire_size.width - 10;  
+            int fire_y = y;
+        
+            cv::putText(debug_img, fire_str, {fire_x, fire_y},
+                        cv::FONT_HERSHEY_SIMPLEX, 1.2, cv::Scalar(0, 0, 255), 2);
         }
 
 
         if (gimbal_cmd.has_value()) {
-        std::string gimbal_str = fmt::format("Pitch: {:.2f}, Yaw: {:.2f}", gimbal_cmd->pitch, gimbal_cmd->yaw);
+        std::string gimbal_str = fmt::format("Pitch: {:.2f}, Yaw: {:.2f}, Pitch_diff: {:.2f}, Yaw_diff: {:.2f}", gimbal_cmd->pitch, gimbal_cmd->yaw, gimbal_cmd->pitch_diff, gimbal_cmd->yaw_diff);
         cv::putText(debug_img, gimbal_str, {10, debug_img.rows - 30},
         cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(255, 255, 0), 2);
+        
         }
 
         
@@ -997,3 +1006,57 @@ void dumpImuToFile(const ReceiveImuData& imu, const std::string& path) {
         file.close();
     }
 }
+std::string formatAimInfo(const ReceiveAimINFO& aim) {
+    std::ostringstream oss;
+    oss << std::fixed << std::setprecision(3);
+
+    // 静态变量用于帧率统计
+    static int frame_count = 0;
+    static double fps = 0.0;
+    static auto last_time = std::chrono::steady_clock::now();
+
+    ++frame_count;
+    auto now = std::chrono::steady_clock::now();
+    double elapsed = std::chrono::duration<double>(now - last_time).count();
+
+    if (elapsed >= 1.0) {
+        fps = frame_count / elapsed;
+        frame_count = 0;
+        last_time = now;
+    }
+
+    oss << "=== Aim Info ===\n";
+    oss << "Timestamp     : " << aim.time_stamp << "\n";
+
+    oss << "\n-- Orientation (rad) --\n";
+    oss << "Yaw   : " << aim.yaw   << "\n";
+    oss << "Pitch : " << aim.pitch << "\n";
+    oss << "Roll  : " << aim.roll  << "\n";
+
+    oss << "\n-- Angular Velocity (rad/s) --\n";
+    oss << "Yaw_vel   : " << aim.yaw_vel   << "\n";
+    oss << "Pitch_vel : " << aim.pitch_vel << "\n";
+    oss << "Roll_vel  : " << aim.roll_vel  << "\n";
+
+    oss << "\n-- Orientation (deg) --\n";
+    oss << "Yaw   : " << aim.yaw   * 180 / M_PI << "\n";
+    oss << "Pitch : " << aim.pitch * 180 / M_PI << "\n";
+    oss << "Roll  : " << aim.roll  * 180 / M_PI << "\n";
+
+    oss << "\n-- System Info --\n";
+    oss << "Bullet Speed     : " << aim.bullet_speed << " m/s\n";
+    oss << "Controller Delay : " << aim.controller_delay << " s\n";
+    oss << "Detect Color     : " << (aim.detect_color == 0 ? "Red" : "Blue") << "\n";
+
+    oss << "Frame Rate (FPS) : " << std::setprecision(1) << fps << "\n";
+
+    return oss.str();
+}
+void dumpAimToFile(const ReceiveAimINFO& aim, const std::string& path) {
+    std::ofstream file(path);
+    if (file.is_open()) {
+        file << formatAimInfo(aim);
+        file.close();
+    }
+}
+

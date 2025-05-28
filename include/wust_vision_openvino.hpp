@@ -44,6 +44,7 @@ public:
     bool is_inited_ = false;
     size_t img_recv_count_ = 0;
     size_t detect_finish_count_ = 0;
+    size_t fire_count_ = 0;
     std::chrono::steady_clock::time_point last_stat_time_steady_;
     std::atomic<int> infer_running_count_{0};
     int max_infer_running_ ; 

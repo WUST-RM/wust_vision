@@ -1,6 +1,7 @@
 // armor_solver.cpp
 #include "control/armor_solver.hpp"
 #include <cmath>
+#include <iostream>
 #include <stdexcept>
 #include <string>
 #include "yaml-cpp/yaml.h"
@@ -37,7 +38,7 @@ void Solver::init(const YAML::Node& config)
   // 3. 初始化弹道补偿器
   trajectory_compensator_ = CompensatorFactory::createCompensator(comp_type);
   trajectory_compensator_->iteration_times = iteration_times;
-  trajectory_compensator_->velocity        = bullet_speed;
+  velocity        = bullet_speed;
   trajectory_compensator_->gravity         = gravity;
   trajectory_compensator_->resistance      = resistance;
 
@@ -45,6 +46,7 @@ void Solver::init(const YAML::Node& config)
   manual_compensator_ = std::make_unique<ManualCompensator>();
   if (s["pitch_offset"]) {
     std::vector<std::string> raw_offsets = s["pitch_offset"].as<std::vector<std::string>>();
+ 
     if (!manual_compensator_->updateMapFlow(raw_offsets)) {
       WUST_WARN(solver_logger)<< "Failed to update manual compensator";
     }
@@ -70,7 +72,7 @@ GimbalCmd Solver::solve(const Target& target, std::chrono::steady_clock::time_po
   tf2::Matrix3x3(tf_gimbal.orientation)
     .getRPY(rpy[0], rpy[1], rpy[2]);
   rpy[1] = -rpy[1];
-
+  //std::cout << "RPY: " << rpy[0]/M_PI*180 << " " << rpy[1]/M_PI*180 << " " << rpy[2]/M_PI*180 << std::endl;
   // 2. 预测目标位置与朝向
   Eigen::Vector3d pos(target.position_.x,
                       target.position_.y,

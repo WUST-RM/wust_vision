@@ -72,7 +72,7 @@ private:
                       double shooting_range_h        = 0.135;
                       double max_tracking_v_yaw      = 6.0;
                       double prediction_delay        = 0.0;
-                      double controller_delay        = 0.0;
+                      //double controller_delay        = 0.0;
                       double side_angle              = 15.0;  // degrees
                       double min_switching_v_yaw     = 1.0;
                       int    transfer_thresh         = 5;

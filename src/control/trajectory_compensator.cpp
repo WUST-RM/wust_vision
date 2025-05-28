@@ -14,6 +14,7 @@
 // limitations under the License.
 
 #include "control/trajectory_compensator.hpp"
+#include "common/gobal.hpp"
 
 bool TrajectoryCompensator::compensate(const Eigen::Vector3d &target_position,
                                        double &pitch) const noexcept {

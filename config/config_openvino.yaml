@@ -40,7 +40,7 @@ control_rate: 1000
 camera:
   camera_info_path: "/home/hy/wust_vision/config/camera_info.yaml"
   serial: "" 
-  acquisition_frame_rate: 200
+  acquisition_frame_rate: 160
   exposure_time: 3500
   gain: 7.0
   adc_bit_depth: "Bits_8"
@@ -53,7 +53,7 @@ tf:
   gimbal2camera_z:  0.0
   gimbal2camera_roll: 0.0
   gimbal2camera_pitch: 0.0
-  gimbal2camera_yaw: 0.0
+  gimbal2camera_yaw: 180.0
 
 
 tracker:
@@ -82,26 +82,26 @@ tracker:
     r_z: 0.0016992016
     r_yaw: 0.6092185450
 solver:
-      prediction_delay: 0.0
+      prediction_delay: 0.05
       controller_delay: 0.0
       max_tracking_v_yaw: 180.0 #转速(rad/s)大于这个值时瞄准机器人中心 
       side_angle: 20.0 
-      bullet_speed: 25.0
+      bullet_speed: 15.0
       compenstator_type: "ideal"
       gravity: 9.8
       resistance: 0.092
-      iteration_times: 120 # 补偿的迭代次数
-      # ["距离下限, 距离上限, 高度下限, 高度下限, pitch轴补偿值"]
+      iteration_times: 20 # 补偿的迭代次数
+      # ["距离下限, 距离上限, 高度下限, 高度下限, pitch轴补偿值, yaw轴补偿值"]
       pitch_offset: [
-        "5.0 6.0 -1.0 0.4 0.0",
-        "5.0 6.0  0.4 0.8 0.0",
-        "5.0 6.0  0.8 1.2 0.0",
-        "6.0 7.0 -1.0 0.4 0.0",
-        "6.0 7.0  0.4 0.8 0.0",
-        "6.0 7.0  0.8 1.2 0.0",
-        "7.0 8.0 -1.0 0.4 0.0",
-        "7.0 8.0  0.4 0.8 0.0",
-        "7.0 8.0  0.8 1.2 0.0",
+        "5.0 6.0 -1.0 0.4 0.0 0.0",
+        "5.0 6.0  0.4 0.8 0.0 0.0",
+        "5.0 6.0  0.8 1.2 0.0 0.0",
+        "6.0 7.0 -1.0 0.4 0.0 0.0",
+        "6.0 7.0  0.4 0.8 0.0 0.0",
+        "6.0 7.0  0.8 1.2 0.0 0.0",
+        "7.0 8.0 -1.0 0.4 0.0 0.0",
+        "7.0 8.0  0.4 0.8 0.0 0.0",
+        "7.0 8.0  0.8 1.2 0.0 0.0",
       ]
 
 # R_x:0.0009817214

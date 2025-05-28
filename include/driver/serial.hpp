@@ -21,6 +21,7 @@ public:
     void stopThread();
     void receiveData();
     void imu_cbk(ReceiveImuData & imu_data);
+    void aim_cbk(ReceiveAimINFO & aim_data);
     bool usbOk() const { return is_usb_ok_; }
     void sendData();
     void transformGimbalCmd(GimbalCmd & gimbal_cmd);

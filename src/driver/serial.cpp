@@ -4,6 +4,7 @@
 #include "common/tools.hpp"
 #include "driver/crc8_crc16.hpp"
 #include "common/logger.hpp"
+#include "driver/packet_typedef.hpp"
 #include "type/type.hpp"
 Serial::Serial()
 : device_name_(""),
@@ -183,8 +184,9 @@ void Serial::receiveData()
 
             // 根据 ID 解析并回调
             switch (hf.id) {
-                case ID_DEBUG: {
-                    auto dbg = fromVector<ReceiveDebugData>(data_buf);
+                case ID_AIM_INFO: {
+                    auto dbg = fromVector<ReceiveAimINFO>(data_buf);
+                    
                    // if (debug_cb_) debug_cb_(dbg);
                     
                     break;
@@ -205,6 +207,64 @@ void Serial::receiveData()
     }
 
     WUST_INFO(serial_logger) << "receiveData stopped";
+}
+void Serial::aim_cbk(ReceiveAimINFO & aim_data)
+{
+  static uint32_t last_time = 0;
+    static int valid_count = 0;
+    static bool out_of_order_detected = false;
+    
+
+    if (!out_of_order_detected) {
+ 
+        if (aim_data.time_stamp <= last_time) {
+            WUST_WARN(serial_logger) << "Received out-of-order imu data, entering recovery mode.";
+            out_of_order_detected = true;
+            valid_count = 0;
+            last_time = aim_data.time_stamp;
+        } else {
+            last_time = aim_data.time_stamp; 
+        }
+    }
+
+    if (out_of_order_detected) {
+  
+        if (aim_data.time_stamp > last_time) {
+            valid_count++;
+          
+            if (valid_count >= 100) {
+                WUST_INFO(serial_logger) << "IMU timestamp recovered after 100 valid frames, exiting recovery mode.";
+                out_of_order_detected = false;
+                valid_count = 0;
+            }
+        } else {
+            valid_count = 0; 
+        }
+        return;  
+    }
+
+
+    // aim_data.roll     *= M_PI / 180.0;
+    // aim_data.pitch    *= M_PI / 180.0;
+    // aim_data.yaw      *= M_PI / 180.0;
+    // aim_data.roll_vel *= M_PI / 180.0;
+    // aim_data.pitch_vel*= M_PI / 180.0;
+    // aim_data.yaw_vel  *= M_PI / 180.0;
+
+    tf2::Quaternion q;
+    q.setRPY(aim_data.roll, aim_data.pitch, aim_data.yaw);
+
+    Transform gimbal_tf(Position(0, 0, 0), q);
+
+    tf_tree_.setTransform("gimbal_odom", "gimbal_link", gimbal_tf);
+    detect_color_=aim_data.detect_color;
+    controller_delay=aim_data.controller_delay;
+    velocity=aim_data.bullet_speed;
+
+    if(debug_mode_)
+    {
+      dumpAimToFile(aim_data, "/tmp/aim_status.txt");
+    }
 }
 void Serial::imu_cbk(ReceiveImuData & imu_data)
 {
@@ -303,11 +363,18 @@ void Serial::sendData()
 }
 void Serial::transformGimbalCmd(GimbalCmd & gimbal_cmd)
 {
-  send_robot_cmd_data_.data.gimbal.yaw=gimbal_cmd.yaw;
-  send_robot_cmd_data_.data.gimbal.pitch=gimbal_cmd.pitch;
-  send_robot_cmd_data_.data.gimbal.distance=gimbal_cmd.distance;
-  send_robot_cmd_data_.data.shoot.pitch_diff=gimbal_cmd.pitch_diff;
-  send_robot_cmd_data_.data.shoot.yaw_diff=gimbal_cmd.yaw_diff;
-  send_robot_cmd_data_.data.shoot.fire=gimbal_cmd.fire_advice;
-  send_robot_cmd_data_.data.debug.detect_color=detect_color_;
+  // send_robot_cmd_data_.data.gimbal.yaw=gimbal_cmd.yaw;
+  // send_robot_cmd_data_.data.gimbal.pitch=gimbal_cmd.pitch;
+  // send_robot_cmd_data_.data.gimbal.distance=gimbal_cmd.distance;
+  // send_robot_cmd_data_.data.shoot.pitch_diff=gimbal_cmd.pitch_diff;
+  // send_robot_cmd_data_.data.shoot.yaw_diff=gimbal_cmd.yaw_diff;
+  // send_robot_cmd_data_.data.shoot.fire=gimbal_cmd.fire_advice;
+  // send_robot_cmd_data_.data.debug.detect_color=detect_color_;
+  send_robot_cmd_data_.yaw=gimbal_cmd.yaw;
+  send_robot_cmd_data_.pitch=gimbal_cmd.pitch;
+  send_robot_cmd_data_.distance=gimbal_cmd.distance;
+  send_robot_cmd_data_.pitch_diff=gimbal_cmd.pitch_diff;
+  send_robot_cmd_data_.yaw_diff=gimbal_cmd.yaw_diff;
+  send_robot_cmd_data_.fire=gimbal_cmd.fire_advice;
+  send_robot_cmd_data_.detect_color=detect_color_;
 }

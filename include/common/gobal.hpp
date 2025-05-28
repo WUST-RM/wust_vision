@@ -10,3 +10,5 @@ extern int detect_color_;
 extern bool debug_mode_ ;
 extern int debug_w;
 extern int debug_h;
+extern double controller_delay;
+extern double velocity ;
