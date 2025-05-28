@@ -244,4 +244,3 @@ logger.enableFileOutput(filename.string());
 //   nvinfer1::ILogger::Severity severity_;
 // };
 
-

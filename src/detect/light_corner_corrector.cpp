@@ -43,27 +43,28 @@ void LightCornerCorrector::correctCorners(ArmorObject& armor) noexcept {
         light.center.y += zero_y;
         light.bottom.x += zero_x;
         light.bottom.y += zero_y;
+        
         continue;
 
         }
 
       
-        // SymmetryAxis axis = findSymmetryAxis(armor.whole_gray_img, light);
+        SymmetryAxis axis = findSymmetryAxis(armor.whole_gray_img, light);
         
 
-        // light.center = axis.centroid;
-        // light.axis = axis.direction;
+        light.center = axis.centroid;
+        light.axis = axis.direction;
       
 
         
-        // if (cv::Point2f t = findCorner(armor.whole_gray_img, light, axis, "top"); t.x > 0) {
-        //     light.top = t;
+        if (cv::Point2f t = findCorner(armor.whole_gray_img, light, axis, "top"); t.x > 0) {
+            light.top = t;
         
-        // }
-        // if (cv::Point2f b = findCorner(armor.whole_gray_img, light, axis, "bottom"); b.x > 0) {
-        //     light.bottom = b;
+        }
+        if (cv::Point2f b = findCorner(armor.whole_gray_img, light, axis, "bottom"); b.x > 0) {
+            light.bottom = b;
        
-        // }
+        }
         light.top.x += zero_x;
         light.top.y += zero_y;
         light.center.x += zero_x;
@@ -71,8 +72,7 @@ void LightCornerCorrector::correctCorners(ArmorObject& armor) noexcept {
 
         light.bottom.x += zero_x;
         light.bottom.y += zero_y;
-        light.axis.x += zero_x;
-        light.axis.y += zero_y;
+   
 
 
     }
@@ -103,6 +103,21 @@ void LightCornerCorrector::correctCorners(ArmorObject& armor) noexcept {
     }
 
 
+    if (light_distances.size() >= 2) {
+        const Light* l1 = light_distances[0].first;
+        const Light* l2 = light_distances[1].first;
+    
+        // 判断哪个灯条在左侧，哪个在右侧
+        if (l1->center.x < l2->center.x) {
+            armor.lights[0] = *l1;  // 解引用指针，赋值对象
+            armor.lights[1] = *l2;
+        } else {
+            armor.lights[0] = *l2;
+            armor.lights[1] = *l1;
+        }
+    }
+    
+
     // Step 4: 构建 candidates，只保留两个灯条的 top/bottom
     std::vector<cv::Point2f> candidates;
     for (int i = 0; i < std::min(2, (int)light_distances.size()); ++i) {
@@ -111,6 +126,7 @@ void LightCornerCorrector::correctCorners(ArmorObject& armor) noexcept {
         candidates.push_back(light->bottom);
         
     }
+ 
 
 
     double w = cv::norm(armor.pts[0] - armor.pts[1]);
@@ -150,7 +166,7 @@ void LightCornerCorrector::correctCorners(ArmorObject& armor) noexcept {
         }
         armor.pts_binary.push_back(pt);
     }
-
+    
 
     armor.is_ok = true;
     for (const auto& pt : armor.pts_binary) {
@@ -172,82 +188,143 @@ void LightCornerCorrector::correctCorners(ArmorObject& armor) noexcept {
         armor.pts_binary.clear();
         
     }
-
+    if(armor.is_ok)
+    {
+    armor.center = (armor.lights[0].center+armor.lights[1].center)/2;
+    }else {
+    armor.center =armor_center;
+    }
 
   }
    
-
   SymmetryAxis LightCornerCorrector::findSymmetryAxis(const cv::Mat &gray_img, const Light &light) {
-    constexpr float MAX_BRIGHTNESS = 25.0f;
-    constexpr float SCALE = 0.07f;
-
-    // Scale bounding box
+    constexpr float MAX_BRIGHTNESS = 25;
+    constexpr float SCALE = 0.07;
+  
+    // Scale the bounding box
     cv::Rect light_box = light.boundingRect();
     light_box.x -= light_box.width * SCALE;
     light_box.y -= light_box.height * SCALE;
     light_box.width += light_box.width * SCALE * 2;
     light_box.height += light_box.height * SCALE * 2;
-
-    // Clip ROI within image bounds
-    light_box &= cv::Rect(0, 0, gray_img.cols, gray_img.rows);
-    if (light_box.empty()) {
-        return SymmetryAxis{.centroid = cv::Point2f(-1, -1), .direction = {0, -1}, .mean_val = 0};
-    }
-
-    // Get ROI and normalize
+  
+    // Check boundary
+    light_box.x = std::max(light_box.x, 0);
+    light_box.x = std::min(light_box.x, gray_img.cols - 1);
+    light_box.y = std::max(light_box.y, 0);
+    light_box.y = std::min(light_box.y, gray_img.rows - 1);
+    light_box.width = std::min(light_box.width, gray_img.cols - light_box.x);
+    light_box.height = std::min(light_box.height, gray_img.rows - light_box.y);
+  
+    // Get normalized light image
     cv::Mat roi = gray_img(light_box);
-    if (roi.empty()) {
-        return SymmetryAxis{.centroid = cv::Point2f(-1, -1), .direction = {0, -1}, .mean_val = 0};
-    }
-
-    cv::Mat roi_float;
-    roi.convertTo(roi_float, CV_32F);
-    float mean_val = static_cast<float>(cv::mean(roi_float)[0]);
-    cv::normalize(roi_float, roi_float, 0.0f, MAX_BRIGHTNESS, cv::NORM_MINMAX);
-
-    // Weighted centroid and covariance calculation
-    double m00 = 0, m10 = 0, m01 = 0;
-    double mu20 = 0, mu02 = 0, mu11 = 0;
-
-    for (int y = 0; y < roi_float.rows; ++y) {
-        for (int x = 0; x < roi_float.cols; ++x) {
-            float w = roi_float.at<float>(y, x);
-            if (w < 1e-3f) continue;
-
-            m00 += w;
-            m10 += x * w;
-            m01 += y * w;
+    float mean_val = cv::mean(roi)[0];
+    roi.convertTo(roi, CV_32F);
+    cv::normalize(roi, roi, 0, MAX_BRIGHTNESS, cv::NORM_MINMAX);
+  
+    // Calculate the centroid
+    cv::Moments moments = cv::moments(roi, false);
+    cv::Point2f centroid = cv::Point2f(moments.m10 / moments.m00, moments.m01 / moments.m00) +
+                           cv::Point2f(light_box.x, light_box.y);
+  
+    // Initialize the PointCloud
+    std::vector<cv::Point2f> points;
+    for (int i = 0; i < roi.rows; i++) {
+      for (int j = 0; j < roi.cols; j++) {
+        for (int k = 0; k < std::round(roi.at<float>(i, j)); k++) {
+          points.emplace_back(cv::Point2f(j, i));
         }
+      }
     }
-
-    if (m00 < 1e-5) {
-        return SymmetryAxis{.centroid = cv::Point2f(-1, -1), .direction = {0, -1}, .mean_val = mean_val};
+    cv::Mat points_mat = cv::Mat(points).reshape(1);
+  
+    // PCA (Principal Component Analysis)
+    auto pca = cv::PCA(points_mat, cv::Mat(), cv::PCA::DATA_AS_ROW);
+  
+    // Get the symmetry axis
+    cv::Point2f axis =
+      cv::Point2f(pca.eigenvectors.at<float>(0, 0), pca.eigenvectors.at<float>(0, 1));
+  
+    // Normalize the axis
+    axis = axis / cv::norm(axis);
+  
+    if (axis.y > 0) {
+      axis = -axis;
     }
+  
+    return SymmetryAxis{.centroid = centroid, .direction = axis, .mean_val = mean_val};
+  }
+//   SymmetryAxis LightCornerCorrector::findSymmetryAxis(const cv::Mat &gray_img, const Light &light) {
+//     constexpr float MAX_BRIGHTNESS = 25.0f;
+//     constexpr float SCALE = 0.07f;
 
-    double cx = m10 / m00;
-    double cy = m01 / m00;
+//     // Scale bounding box
+//     cv::Rect light_box = light.boundingRect();
+//     light_box.x -= light_box.width * SCALE;
+//     light_box.y -= light_box.height * SCALE;
+//     light_box.width += light_box.width * SCALE * 2;
+//     light_box.height += light_box.height * SCALE * 2;
 
-    for (int y = 0; y < roi_float.rows; ++y) {
-        for (int x = 0; x < roi_float.cols; ++x) {
-            float w = roi_float.at<float>(y, x);
-            if (w < 1e-3f) continue;
+//     // Clip ROI within image bounds
+//     light_box &= cv::Rect(0, 0, gray_img.cols, gray_img.rows);
+//     if (light_box.empty()) {
+//         return SymmetryAxis{.centroid = cv::Point2f(-1, -1), .direction = {0, -1}, .mean_val = 0};
+//     }
 
-            double dx = x - cx;
-            double dy = y - cy;
-            mu20 += w * dx * dx;
-            mu02 += w * dy * dy;
-            mu11 += w * dx * dy;
-        }
-    }
+//     // Get ROI and normalize
+//     cv::Mat roi = gray_img(light_box);
+//     if (roi.empty()) {
+//         return SymmetryAxis{.centroid = cv::Point2f(-1, -1), .direction = {0, -1}, .mean_val = 0};
+//     }
 
-    // Compute orientation from covariance matrix
-    double theta = 0.5 * std::atan2(2 * mu11, mu20 - mu02);
-    cv::Point2f dir(std::cos(theta), std::sin(theta));
-    if (dir.y > 0) dir = -dir;
+//     cv::Mat roi_float;
+//     roi.convertTo(roi_float, CV_32F);
+//     float mean_val = static_cast<float>(cv::mean(roi_float)[0]);
+//     cv::normalize(roi_float, roi_float, 0.0f, MAX_BRIGHTNESS, cv::NORM_MINMAX);
 
-    cv::Point2f centroid(cx + light_box.x, cy + light_box.y);
-    return SymmetryAxis{.centroid = centroid, .direction = dir, .mean_val = mean_val};
-}
+//     // Weighted centroid and covariance calculation
+//     double m00 = 0, m10 = 0, m01 = 0;
+//     double mu20 = 0, mu02 = 0, mu11 = 0;
+
+//     for (int y = 0; y < roi_float.rows; ++y) {
+//         for (int x = 0; x < roi_float.cols; ++x) {
+//             float w = roi_float.at<float>(y, x);
+//             if (w < 1e-3f) continue;
+
+//             m00 += w;
+//             m10 += x * w;
+//             m01 += y * w;
+//         }
+//     }
+
+//     if (m00 < 1e-5) {
+//         return SymmetryAxis{.centroid = cv::Point2f(-1, -1), .direction = {0, -1}, .mean_val = mean_val};
+//     }
+
+//     double cx = m10 / m00;
+//     double cy = m01 / m00;
+
+//     for (int y = 0; y < roi_float.rows; ++y) {
+//         for (int x = 0; x < roi_float.cols; ++x) {
+//             float w = roi_float.at<float>(y, x);
+//             if (w < 1e-3f) continue;
+
+//             double dx = x - cx;
+//             double dy = y - cy;
+//             mu20 += w * dx * dx;
+//             mu02 += w * dy * dy;
+//             mu11 += w * dx * dy;
+//         }
+//     }
+
+//     // Compute orientation from covariance matrix
+//     double theta = 0.5 * std::atan2(2 * mu11, mu20 - mu02);
+//     cv::Point2f dir(std::cos(theta), std::sin(theta));
+//     if (dir.y > 0) dir = -dir;
+
+//     cv::Point2f centroid(cx + light_box.x, cy + light_box.y);
+//     return SymmetryAxis{.centroid = centroid, .direction = dir, .mean_val = mean_val};
+//  }
 
 
 cv::Point2f LightCornerCorrector::findCorner(const cv::Mat &gray_img,

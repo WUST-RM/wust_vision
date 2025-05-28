@@ -40,7 +40,7 @@ inline double normalizeAngle(double angle) {
 
 class Tracker {
 public:
-  Tracker(double max_match_distance, double max_match_yaw );
+  Tracker(double max_match_distance, double max_match_yaw, double max_match_z_diff_ );
 
   void init(const Armors &armors_msg) noexcept;
   void update(const Armors &armors_msg) noexcept;
@@ -76,6 +76,7 @@ public:
   float min_valid_velocity = 0.01;
   int max_inconsistent_count_ = 3;
   int rotation_inconsistent_cooldown_limit_ = 5;  
+  double jump_thresh = 0.4;
 
 private:
   void initEKF(const Armor &a) noexcept;
@@ -84,9 +85,11 @@ private:
   double orientationToYaw(const tf2::Quaternion &q) noexcept;
   static Eigen::Vector3d getArmorPositionFromState(const Eigen::VectorXd &x) noexcept;
   void updateBestYawdiff(const Armor &armor1,const Armor &armor2);
+  void updateYawStateConsistency(double measured_yaw);
 
   double max_match_distance_;
   double max_match_yaw_diff_;
+  double max_match_z_diff_;
 
   int detect_count_;
   int lost_count_;

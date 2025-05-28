@@ -91,7 +91,9 @@ void drawresult(const cv::Mat &src_img, const std::vector<ArmorObject> &objs, in
             cv::line(debug_img, obj.pts[i], obj.pts[(i + 1) % 4], cv::Scalar(48, 48, 255), 1);
             if (obj.is_ok) {
                 cv::line(debug_img, obj.pts_binary[i], obj.pts_binary[next_indices[i]], cv::Scalar(0, 255, 0), 1);
+                cv::putText(debug_img, fmt::format("{}", i), cv::Point2i(obj.pts_binary[i]), cv::FONT_HERSHEY_SIMPLEX, 0.8,cv::Scalar(255, 255, 0), 2);
             }
+            
         }
 
         std::string armor_color;
@@ -724,7 +726,7 @@ void draw_debug_overlay(const imgframe &src_img,
         }
 
         auto now = std::chrono::steady_clock::now();
-        constexpr double min_interval_ms = 1000.0 / 60.0;
+        constexpr double min_interval_ms = 1000.0 / 90.0;
         double elapsed_ms = std::chrono::duration<double, std::milli>(now - last_show_time).count();
         if (elapsed_ms < min_interval_ms) return;
         last_show_time = now;

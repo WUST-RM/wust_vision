@@ -9,7 +9,7 @@
 #include "detect/mono_measure_tool.hpp"
 #include <filesystem>
 #include "detect/light_corner_corrector.hpp"
-
+#include <iostream>
 
 class OpenVino {
 public:
@@ -19,7 +19,7 @@ std::function<void(const std::vector<ArmorObject> &, int64_t, const cv::Mat &)>;
     explicit OpenVino(
         const std::filesystem::path & model_path, const std::string & classify_model_path,const
         std::string & classify_label_path, const std::string & device_name,const LightParams &l , float conf_threshold = 0.25,
-        int top_k = 128, float nms_threshold = 0.3, float expand_ratio_w= 2.0f, float expand_ratio_h= 1.5f, int binary_thres_= 85, bool auto_init = true);
+        int top_k = 128, float nms_threshold = 0.3, float expand_ratio_w= 1.1f, float expand_ratio_h= 1.1f, int binary_thres_= 85, bool auto_init = true);
 
     ~OpenVino();
     //~OpenVino();

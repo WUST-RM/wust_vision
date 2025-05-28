@@ -60,18 +60,18 @@ double orientationToYaw(const tf2::Quaternion& orientation) {
               last_time_ = current_time;
               if(datas.size()==1)
               {
-                  last_x_ = armors.armors[0].target_pos.x;
-                  last_y_ = armors.armors[0].target_pos.y;
-                  last_z_ = armors.armors[0].target_pos.z;
-                  last_yaw_ = orientationToYaw(armors.armors[0].target_ori);
+                  last_x_ = armors.armors[0].pos.x;
+                  last_y_ = armors.armors[0].pos.y;
+                  last_z_ = armors.armors[0].pos.z;
+                  last_yaw_ = orientationToYaw(armors.armors[0].ori);
   
               }
               else{
   
-                      double current_x = armors.armors[0].target_pos.x;
-                      double current_y = armors.armors[0].target_pos.y;
-                      double current_z = armors.armors[0].target_pos.z;
-                      double current_yaw = orientationToYaw(armors.armors[0].target_ori);
+                      double current_x = armors.armors[0].pos.x;
+                      double current_y = armors.armors[0].pos.y;
+                      double current_z = armors.armors[0].pos.z;
+                      double current_yaw = orientationToYaw(armors.armors[0].ori);
   
                       if (delta_time > 0) {
                           double v_x = (current_x - last_x_) / delta_time;
@@ -114,10 +114,10 @@ double orientationToYaw(const tf2::Quaternion& orientation) {
                   if (!datas[i].armors.empty())
                   {
                       time_ = time_ +1;
-                      all_x += datas[i].armors[0].target_pos.x;
-                      all_y += datas[i].armors[0].target_pos.y;
-                      all_z += datas[i].armors[0].target_pos.z;
-                      all_yaw += orientationToYaw(datas[i].armors[0].target_ori);
+                      all_x += datas[i].armors[0].pos.x;
+                      all_y += datas[i].armors[0].pos.y;
+                      all_z += datas[i].armors[0].pos.z;
+                      all_yaw += orientationToYaw(datas[i].armors[0].ori);
   
                   }
                   else
@@ -141,10 +141,10 @@ double orientationToYaw(const tf2::Quaternion& orientation) {
                    if (!datas[i].armors.empty())
                    {
                    // 修改这里：使用 datas[i].armors[0] 访问第一个 Armor 对象
-                      variance_x += pow(mean_x - datas[i].armors[0].target_pos.x, 2);
-                      variance_y += pow(mean_y - datas[i].armors[0].target_pos.y, 2);
-                      variance_z += pow(mean_z - datas[i].armors[0].target_pos.z, 2);
-                      variance_yaw += pow(mean_yaw - orientationToYaw(datas[i].armors[0].target_ori), 2);
+                      variance_x += pow(mean_x - datas[i].armors[0].pos.x, 2);
+                      variance_y += pow(mean_y - datas[i].armors[0].pos.y, 2);
+                      variance_z += pow(mean_z - datas[i].armors[0].pos.z, 2);
+                      variance_yaw += pow(mean_yaw - orientationToYaw(datas[i].armors[0].ori), 2);
                    }
                   
               }

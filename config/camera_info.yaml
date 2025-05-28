@@ -1,32 +1,32 @@
 
 
 #8mm
-image_width: 1440
-image_height: 1080
-camera_name: front_industrial_camera
-camera_matrix:
-  rows: 3
-  cols: 3
-  data: [1818.37412,    0.     ,  741.155  ,
-            0.     , 1819.41308,  565.76948,
-            0.     ,    0.     ,    1.     ]
-distortion_model: plumb_bob
-distortion_coefficients:
-  rows: 1
-  cols: 5
-  data: [-0.085245, 0.164316, 0.000489, 0.000701, 0.000000]
-rectification_matrix:
-  rows: 3
-  cols: 3
-  data: [1., 0., 0.,
-         0., 1., 0.,
-         0., 0., 1.]
-projection_matrix:
-  rows: 3
-  cols: 4
-  data: [1801.11425,    0.     ,  742.00202,    0.     ,
-            0.     , 1807.80329,  566.27438,    0.     ,
-            0.     ,    0.     ,    1.     ,    0.     ]
+# image_width: 1440
+# image_height: 1080
+# camera_name: front_industrial_camera
+# camera_matrix:
+#   rows: 3
+#   cols: 3
+#   data: [1818.37412,    0.     ,  741.155  ,
+#             0.     , 1819.41308,  565.76948,
+#             0.     ,    0.     ,    1.     ]
+# distortion_model: plumb_bob
+# distortion_coefficients:
+#   rows: 1
+#   cols: 5
+#   data: [-0.085245, 0.164316, 0.000489, 0.000701, 0.000000]
+# rectification_matrix:
+#   rows: 3
+#   cols: 3
+#   data: [1., 0., 0.,
+#          0., 1., 0.,
+#          0., 0., 1.]
+# projection_matrix:
+#   rows: 3
+#   cols: 4
+#   data: [1801.11425,    0.     ,  742.00202,    0.     ,
+#             0.     , 1807.80329,  566.27438,    0.     ,
+#             0.     ,    0.     ,    1.     ,    0.     ]
 
 
 
@@ -45,29 +45,33 @@ projection_matrix:
 
 
 #6mm
-# image_width: 1440
-# image_height: 1080
-# camera_name: narrow_stereo
-# camera_matrix:
-#   rows: 3
-#   cols: 3
-#   data: [2386.12222,    0.     ,  693.93728,
-#             0.     , 2380.29375,  558.7691 ,
-#             0.     ,    0.     ,    1.     ]
-# distortion_model: plumb_bob
-# distortion_coefficients:
-#   rows: 1
-#   cols: 5
-#   data: [-0.056126, 0.251579, -0.001416, -0.002064, 0.000000]
-# rectification_matrix:
-#   rows: 3
-#   cols: 3
-#   data: [1., 0., 0.,
-#          0., 1., 0.,
-#          0., 0., 1.]
-# projection_matrix:
-#   rows: 3
-#   cols: 4
-#   data: [2380.68628,    0.     ,  692.40761,    0.     ,
-#             0.     , 2376.64479,  558.03679,    0.     ,
-#             0.     ,    0.     ,    1.     ,    0.     ]
+
+      
+
+
+image_width: 1440
+image_height: 1080
+camera_name: narrow_stereo
+camera_matrix:
+  rows: 3
+  cols: 3
+  data: [1815.35593,    0.     ,  757.44026,
+            0.     , 1812.54923,  540.84684,
+            0.     ,    0.     ,    1.     ]
+distortion_model: plumb_bob
+distortion_coefficients:
+  rows: 1
+  cols: 5
+  data: [-0.070270, -0.004536, -0.000523, -0.000291, 0.000000]
+rectification_matrix:
+  rows: 3
+  cols: 3
+  data: [1., 0., 0.,
+         0., 1., 0.,
+         0., 0., 1.]
+projection_matrix:
+  rows: 3
+  cols: 4
+  data: [1794.52272,    0.     ,  758.08426,    0.     ,
+            0.     , 1801.02279,  540.60538,    0.     ,
+            0.     ,    0.     ,    1.     ,    0.     ]

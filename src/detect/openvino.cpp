@@ -392,10 +392,9 @@ void OpenVino::extractNumberImage(const cv::Mat & src, ArmorObject & armor)  {
   std::vector<cv::Point2f> pts_vec(std::begin(armor.pts), std::end(armor.pts));
   cv::Rect bbox = cv::boundingRect(pts_vec);
 
-  float expand_ratio_w = 2.0f;
-  float expand_ratio_h = 1.5f;
-  int new_width = static_cast<int>(bbox.width * expand_ratio_w);
-  int new_height = static_cast<int>(bbox.height * expand_ratio_h);
+
+  int new_width = static_cast<int>(bbox.width * expand_ratio_w_);
+  int new_height = static_cast<int>(bbox.height * expand_ratio_h_);
   int new_x = static_cast<int>(bbox.x - (new_width - bbox.width) / 2);
   int new_y = static_cast<int>(bbox.y - (new_height - bbox.height) / 2);
 
@@ -448,7 +447,7 @@ void OpenVino::extractNumberImage(const cv::Mat & src, ArmorObject & armor)  {
   armor.number_img = flipped_image;
   armor.whole_binary_img = litroi;
   armor.whole_rgb_img = litroi_color;
-  // cv::imshow("number_image",flipped_image);
+  // cv::imshow("number_image",armor.whole_gray_img);
   // cv::waitKey(1);
   return ;
 }
@@ -609,7 +608,6 @@ bool OpenVino::processCallback(
   {
     // BGR->RGB, u8(0-255)->f32(0.0-1.0), HWC->NCHW
     // note: TUP's model no need to normalize
-   // auto start =std::chrono::high_resolution_clock::now();
     cv::Mat blob =
       cv::dnn::blobFromImage(resized_img, 1., cv::Size(INPUT_W, INPUT_H), cv::Scalar(0, 0, 0), true);
   
@@ -673,8 +671,7 @@ bool OpenVino::processCallback(
         }
       }
     }
-    // auto end =std::chrono::high_resolution_clock::now();
-    // WUST_INFO("openvino") << "infer time:" << std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count() << "ms" ;
+  
   
     for (auto & armor : objs_result) {
       if(armor.color == ArmorColor::NONE||armor.color == ArmorColor::PURPLE)

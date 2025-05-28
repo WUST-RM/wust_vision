@@ -166,28 +166,48 @@ bool AdaptedTRTModule::extractImage(const cv::Mat & src, ArmorObject & armor) {
   static const cv::Size input_size(28, 28);
 
   if (src.empty() || src.cols < 10 || src.rows < 10) {
-     // std::cerr << "Source image is empty or too small" << std::endl;
+     // std::cerr << "[extractImage] Source image is empty or too small" << std::endl;
       return false;
   }
 
-  std::vector<cv::Point2f> pts_vec(std::begin(armor.pts), std::end(armor.pts));
-  cv::Rect bbox = cv::boundingRect(pts_vec);
+  // 过滤 armor.pts，确保所有点在图像边界内，且坐标合理
+  std::vector<cv::Point2f> valid_pts;
+  for (const auto& pt : armor.pts) {
+      if (pt.x >= 0 && pt.x < src.cols && pt.y >= 0 && pt.y < src.rows &&
+          std::isfinite(pt.x) && std::isfinite(pt.y)) {
+          valid_pts.push_back(pt);
+      } else {
+         // std::cerr << "[extractImage] Invalid pt detected and skipped: (" << pt.x << ", " << pt.y << ")" << std::endl;
+      }
+  }
+  if (valid_pts.size() < 4) {
+      //std::cerr << "[extractImage] Not enough valid points after filtering: " << valid_pts.size() << std::endl;
+      return false;
+  }
 
-  float expand_ratio_w = 2.0f;
-  float expand_ratio_h = 1.5f;
-  int new_width = static_cast<int>(bbox.width * expand_ratio_w);
-  int new_height = static_cast<int>(bbox.height * expand_ratio_h);
+  cv::Rect bbox = cv::boundingRect(valid_pts);
+
+  // 增加bbox尺寸和坐标合理性校验，避免异常
+  if (bbox.width <= 0 || bbox.height <= 0 || 
+      bbox.x < 0 || bbox.y < 0 ||
+      bbox.x + bbox.width > src.cols || bbox.y + bbox.height > src.rows) {
+   //   std::cerr << "[extractImage] Invalid bounding box: " << bbox << std::endl;
+      return false;
+  }
+
+  int new_width = static_cast<int>(bbox.width * expand_ratio_w_);
+  int new_height = static_cast<int>(bbox.height * expand_ratio_h_);
   int new_x = static_cast<int>(bbox.x - (new_width - bbox.width) / 2);
   int new_y = static_cast<int>(bbox.y - (new_height - bbox.height) / 2);
 
-  // 边界检查
+  // 边界检查和裁剪
   new_x = std::max(0, new_x);
   new_y = std::max(0, new_y);
   if (new_x + new_width > src.cols) new_width = src.cols - new_x;
   if (new_y + new_height > src.rows) new_height = src.rows - new_y;
-
   if (new_width <= 0 || new_height <= 0) {
-     // std::cerr << "Expanded ROI is invalid" << std::endl;
+     // std::cerr << "[extractImage] Expanded ROI is invalid after clamp: "
+    //            << new_width << "x" << new_height << std::endl;
       return false;
   }
 
@@ -195,10 +215,9 @@ bool AdaptedTRTModule::extractImage(const cv::Mat & src, ArmorObject & armor) {
   armor.new_x = new_x;
   armor.new_y = new_y;
 
-  // 截取 ROI 区域
   cv::Mat litroi_color = src(expanded_rect).clone();
   if (litroi_color.empty()) {
-      //std::cerr << "ROI color image is empty" << std::endl;
+     // std::cerr << "[extractImage] ROI color image is empty" << std::endl;
       return false;
   }
 
@@ -213,6 +232,7 @@ bool AdaptedTRTModule::extractImage(const cv::Mat & src, ArmorObject & armor) {
   armor.whole_binary_img = litroi_bin;
 
   // Perspective warp
+  // 注意这里用 armor.pts 的原始点，如果不确定有效性，也可替换为 valid_pts 对应点
   cv::Point2f lights_vertices[4] = {armor.pts[0], armor.pts[1], armor.pts[2], armor.pts[3]};
   int top_light_y = (warp_height - light_length) / 2 - 1;
   int bottom_light_y = top_light_y + light_length;
@@ -230,7 +250,7 @@ bool AdaptedTRTModule::extractImage(const cv::Mat & src, ArmorObject & armor) {
   cv::warpPerspective(src, number_image, warp_mat, cv::Size(warp_width, warp_height));
 
   if (number_image.empty() || number_image.cols < roi_size.width || number_image.rows < roi_size.height) {
-     // std::cerr << "Warped number image is invalid" << std::endl;
+    //  std::cerr << "[extractImage] Warped number image is invalid" << std::endl;
       return false;
   }
 
@@ -238,7 +258,7 @@ bool AdaptedTRTModule::extractImage(const cv::Mat & src, ArmorObject & armor) {
   cv::Rect number_roi((warp_width - roi_size.width) / 2, 0, roi_size.width, roi_size.height);
   if ((number_roi.x + number_roi.width > number_image.cols) || 
       (number_roi.y + number_roi.height > number_image.rows)) {
-     // std::cerr << "ROI for number image is out of bounds" << std::endl;
+     // std::cerr << "[extractImage] ROI for number image is out of bounds" << std::endl;
       return false;
   }
 
@@ -246,6 +266,7 @@ bool AdaptedTRTModule::extractImage(const cv::Mat & src, ArmorObject & armor) {
   cv::cvtColor(number_image, number_image, cv::COLOR_RGB2GRAY);
   cv::threshold(number_image, number_image, 0, 255, cv::THRESH_BINARY | cv::THRESH_OTSU);
   cv::resize(number_image, number_image, input_size);
+
   cv::Mat flipped_image;
   cv::flip(number_image, flipped_image, 0);
   armor.number_img = flipped_image;
@@ -254,166 +275,62 @@ bool AdaptedTRTModule::extractImage(const cv::Mat & src, ArmorObject & armor) {
 }
 
 
-  bool AdaptedTRTModule::isLight(const Light &light) noexcept {
-    // The ratio of light (short side / long side)
-    float ratio = light.width / light.length;
-    bool ratio_ok = light_params_.min_ratio < ratio && ratio < light_params_.max_ratio;
-  
-    bool angle_ok = light.tilt_angle < light_params_.max_angle;
-  
-    bool is_light = ratio_ok && angle_ok;
-  
-  
-    return is_light;
-  }
-  std::vector<Light> AdaptedTRTModule::findLights(const cv::Mat &rgb_img,
-    const cv::Mat &binary_img, ArmorObject &armor) noexcept
-  {
-      using std::vector;
-      vector<vector<cv::Point>> contours;
-      vector<cv::Vec4i> hierarchy;
-  
-  
-      cv::findContours(binary_img, contours, hierarchy, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_NONE);
-  
-      vector<Light> all_lights;
-  
-      for (const auto &contour : contours) {
-          if (contour.size() < 6) continue;
-  
-          auto light = Light(contour);
-          if (isLight(light)) {
-              all_lights.emplace_back(light);
-          }
-      }
-  
-      std::sort(all_lights.begin(), all_lights.end(), [](const Light &l1, const Light &l2) {
-          return l1.center.x < l2.center.x;
-      });
-  
-      // 更新 armor 内的信息
-      armor.lights = all_lights;
-      if (armor.lights.empty()) return all_lights;
-    if (armor.whole_gray_img.empty()) {return all_lights;
-    
+
+
+std::vector<Light> AdaptedTRTModule::findLights(const cv::Mat &rgb_img,
+  const cv::Mat &binary_img, ArmorObject &armor) noexcept
+{
+    using std::vector;
+    vector<vector<cv::Point>> contours;
+    vector<cv::Vec4i> hierarchy;
+
+
+    cv::findContours(binary_img, contours, hierarchy, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_NONE);
+
+    vector<Light> all_lights;
+
+    for (const auto &contour : contours) {
+        if (contour.size() < 6) continue;
+
+        auto light = Light(contour);
+        if (isLight(light)) {
+            all_lights.emplace_back(light);
+        }
     }
-      double zero_x = armor.new_x;
-      double zero_y = armor.new_y;
-      for (auto& light : armor.lights) {
-        
-        light.top.x += zero_x;
-        light.top.y += zero_y;
-        light.center.x += zero_x;
-        light.center.y += zero_y;
 
-        light.bottom.x += zero_x;
-        light.bottom.y += zero_y;
-        light.axis.x += zero_x;
-        light.axis.y += zero_y;
+    std::sort(all_lights.begin(), all_lights.end(), [](const Light &l1, const Light &l2) {
+        return l1.center.x < l2.center.x;
+    });
+
+    // 更新 armor 内的信息
+    armor.lights = all_lights;
+    //armor.is_ok = !armor.lights.empty();
+
+    return all_lights;
+}
 
 
-    }
-      std::vector<std::pair<const Light*, double>> light_distances;
-      cv::Point2f armor_center = (armor.pts[0] + armor.pts[1] + armor.pts[2] + armor.pts[3]) * 0.25;
-      for (const auto& light : armor.lights) {
-          double dist = cv::norm(light.center - armor_center);
-          light_distances.emplace_back(&light, dist);
-      }
 
-      // Step 3: 按距离排序，选择最近两个灯条
-      std::sort(light_distances.begin(), light_distances.end(), [](const auto& a, const auto& b) {
-          return a.second < b.second;
-      });
-      if (light_distances.size() >= 2) {
-          const Light* l1 = light_distances[0].first;
-          const Light* l2 = light_distances[1].first;
-      
-          
-      }
+bool AdaptedTRTModule::isLight(const Light &light) noexcept {
+  // The ratio of light (short side / long side)
+  float ratio = light.width / light.length;
+  bool ratio_ok = light_params_.min_ratio < ratio && ratio < light_params_.max_ratio;
+
+  bool angle_ok = light.tilt_angle < light_params_.max_angle;
+
+  bool is_light = ratio_ok && angle_ok;
 
 
-      // Step 4: 构建 candidates，只保留两个灯条的 top/bottom
-      std::vector<cv::Point2f> candidates;
-      for (int i = 0; i < std::min(2, (int)light_distances.size()); ++i) {
-          const auto* light = light_distances[i].first;
-          candidates.push_back(light->top);
-          candidates.push_back(light->bottom);
-          
-      }
-
-
-      double w = cv::norm(armor.pts[0] - armor.pts[1]);
-      double h = cv::norm(armor.pts[0] - armor.pts[3]);
-      double size_scale = w + h;
-
-      std::vector<cv::Point2f> selected_pts(4, cv::Point2f(-1, -1));
-      std::vector<int> selected_indices(4, -1); 
-
+  return is_light;
+}
+void AdaptedTRTModule::detect(ArmorObject & armor)
+{ 
+  findLights(armor.whole_rgb_img,armor.whole_binary_img,armor);
+ 
+  LightCornerCorrector corner_corrector;
+  corner_corrector.correctCorners(armor);
   
-      for (int i = 0; i < 4; ++i) {
-          double min_dist = DBL_MAX;
-          int best_match = -1;
-
-          double test_result = cv::pointPolygonTest(armor.pts, armor.pts[i], false);
-          double dist_threshold = (test_result >= 0) ? (0.15 * size_scale) : (0.25 * size_scale);
-
-          for (size_t j = 0; j < candidates.size(); ++j) {
-              double dist = cv::norm(armor.pts[i] - candidates[j]);
-              if (dist < min_dist) {
-                  min_dist = dist;
-                  best_match = static_cast<int>(j);
-              }
-          }
-
-          if (best_match != -1 && min_dist < dist_threshold) {
-              selected_pts[i] = candidates[best_match];
-              selected_indices[i] = best_match;
-          }
-      }
-
-
-      for (const auto& pt : selected_pts) {
-          if (pt.x >= 0 && pt.y >= 0) {
-              auto it = std::find(candidates.begin(), candidates.end(), pt);
-              if (it != candidates.end()) candidates.erase(it);
-          }
-          armor.pts_binary.push_back(pt);
-      }
-
-
-      armor.is_ok = true;
-      for (const auto& pt : armor.pts_binary) {
-          if (pt.x < 0 || pt.y < 0) {
-              armor.is_ok = false;
-              break;
-          }
-      }
-
-
-      if (std::count_if(armor.pts_binary.begin(), armor.pts_binary.end(), [](const cv::Point2f& p) {
-          return p.x >= 0 && p.y >= 0;
-      }) != 4) {
-          armor.is_ok = false;
-      }
-
-
-      if (!armor.is_ok) {
-          armor.pts_binary.clear();
-          
-      }
-
-
-      //armor.is_ok = !armor.lights.empty();
-  
-      return all_lights;
-  }
-    void AdaptedTRTModule::detect(ArmorObject & armor)
-  { 
-    findLights(armor.whole_rgb_img,armor.whole_binary_img,armor);
-   
-
-    
-  }
+}
 // 构造函数：初始化参数并构建引擎
 AdaptedTRTModule::AdaptedTRTModule(const std::string & onnx_path, const Params & params, double expand_ratio_w, double expand_ratio_h, int binary_thres, LightParams light_params,std::string classify_model_path,std::string classify_label_path)
 : params_(params), engine_(nullptr), context_(nullptr), output_buffer_(nullptr), runtime_(nullptr),expand_ratio_h_(expand_ratio_h),expand_ratio_w_(expand_ratio_w),binary_thres_(binary_thres),light_params_(light_params),classify_label_path_(classify_label_path),classify_model_path_(classify_model_path)
@@ -546,7 +463,13 @@ bool AdaptedTRTModule::processCallback(
   // 后处理
   objs_result=postprocess(
     objs_tmp, scores, rects, output_buffer_, output_sz_ / 21, transform_matrix); 
-  
+  if(objs_result.size() > 10)
+  {
+    if (this->infer_callback_) {
+        this->infer_callback_(objs_result, timestamp_nanosec, src_img);
+        return true;
+      }
+  }
 
 
   for (auto & armor : objs_result) {

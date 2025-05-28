@@ -7,19 +7,21 @@
 #include <cfloat>
 #include <iostream>
 #include <memory>
+#include <ostream>
 #include <string>
 #include <algorithm>  // 如果需要转换大小写
 #include <fmt/format.h>
 
 
 
-Tracker::Tracker(double max_match_distance, double max_match_yaw_diff)
+Tracker::Tracker(double max_match_distance, double max_match_yaw_diff, double max_match_z_diff)
 : tracker_state(LOST)
 , tracked_id(ArmorNumber::UNKNOWN)  
 , measurement(Eigen::VectorXd::Zero(4))
 , target_state(Eigen::VectorXd::Zero(9))
 , max_match_distance_(max_match_distance)
 , max_match_yaw_diff_(max_match_yaw_diff)
+, max_match_z_diff_(max_match_z_diff)
 , detect_count_(0)
 , lost_count_(0)
 , last_yaw_(0) {}
@@ -62,7 +64,9 @@ void Tracker::update(const Armors &armors_msg) noexcept {
     int same_id_armors_count = 0;
     auto predicted_position = getArmorPositionFromState(ekf_prediction);
     double min_position_diff = DBL_MAX;
+    double min_z_diff = DBL_MAX;
     double yaw_diff = DBL_MAX;
+ 
 
 
     for ( auto &armor : armors_msg.armors) 
@@ -76,10 +80,12 @@ void Tracker::update(const Armors &armors_msg) noexcept {
         auto p = armor.target_pos;
         Eigen::Vector3d position_vec(p.x, p.y, p.z);
         double position_diff = (predicted_position - position_vec).norm();
+        double z_diff = std::abs(armor.target_pos.z - predicted_position.z());
        // WUST_INFO(tracker_logger)<<"Armor found!"<<fmt::format("position_diff: {}\n", position_diff);
 
         if (position_diff < min_position_diff) {
           min_position_diff = position_diff;
+          min_z_diff = z_diff;
           yaw_diff = std::abs(orientationToYaw(armor.target_ori) - ekf_prediction(6));
           tracked_armor = armor;
           tracked_armor.timestamp=armors_msg.timestamp;
@@ -96,76 +102,15 @@ void Tracker::update(const Armors &armors_msg) noexcept {
         }
       }
     }
-   
-    if (min_position_diff < max_match_distance_ && yaw_diff < max_match_yaw_diff_) {
+  
+    if (min_position_diff < max_match_distance_ && yaw_diff < max_match_yaw_diff_&&min_z_diff  < max_match_z_diff_) {
       matched = true;
       auto p = tracked_armor.target_pos;
       double measured_yaw = orientationToYaw(tracked_armor.target_ori);
       measurement = Eigen::Vector4d(p.x, p.y, p.z, measured_yaw);
       target_state = ekf->update(measurement);
       if (if_have_last_track_) {
-        track_update_count_++;
-      
-   
-        if (track_update_count_ >= 10) {
-          double dt = std::chrono::duration_cast<std::chrono::duration<double>>(
-            tracked_armor.timestamp - last_track_time_).count();
-      
-          if (dt > 1e-5) {
-            double yaw_diff_a = normalizeAngle(measured_yaw - last_track_yaw_);
-            float yaw_velocity = yaw_diff_a / dt;
-      
-          
-            yaw_velocity_buffer_.push_back(yaw_velocity);
-            if (yaw_velocity_buffer_.size() > buffer_size_) {
-              yaw_velocity_buffer_.pop_front();
-            }
-      
-            float yaw_velocity_avg = std::accumulate(
-              yaw_velocity_buffer_.begin(), yaw_velocity_buffer_.end(), 0.0f)
-              / yaw_velocity_buffer_.size();
-      
-           
-      
-        
-            
-      
-            float v_yaw_target = target_state(7);
-      
-          
-            auto getRotationState = [](float v, float stationary_thresh, float min_valid) {
-              if (std::abs(v) < stationary_thresh) return 0;     // 静止
-              else if (v > min_valid) return 1;                  // 正转
-              else if (v < -min_valid) return -1;                // 反转
-              else return 0;
-            };
-      
-            int obs_state = getRotationState(yaw_velocity_avg, obs_yaw_stationary_thresh, min_valid_velocity);
-            int pred_state = getRotationState(v_yaw_target, pred_yaw_stationary_thresh, min_valid_velocity);
-      
-
-            if (rotation_inconsistent_cooldown_ == 0) {
-              if (obs_state != pred_state) {
-                rotation_inconsistent_count_++;
-                if (rotation_inconsistent_count_ >= max_inconsistent_count_) {
-                  WUST_WARN(tracker_logger) << "yaw rotation mismatch: OBS-PRED change ";
-                  tracker_state = LOST;
-                  rotation_inconsistent_count_ = 0;
-                  rotation_inconsistent_cooldown_ = rotation_inconsistent_cooldown_limit_; 
-                }
-              } else {
-                rotation_inconsistent_count_ = 0;
-              }
-            } else {
-              rotation_inconsistent_cooldown_--;  
-            }
-          }
-      
-        
-          last_track_yaw_ = measured_yaw;
-          last_track_time_ = tracked_armor.timestamp;
-          track_update_count_ = 0;
-        }
+        updateYawStateConsistency(measured_yaw);
       
       } else {
      
@@ -175,14 +120,9 @@ void Tracker::update(const Armors &armors_msg) noexcept {
         yaw_velocity_buffer_.clear();
         track_update_count_ = 0;
       }
-      
-   
-     
-      
-
 
       
-    } else if (same_id_armors_count == 1 && yaw_diff > max_match_yaw_diff_) {
+    } else if (same_id_armors_count == 1 && yaw_diff > max_match_yaw_diff_&&min_z_diff  < max_match_z_diff_) {
       
       handleArmorJump(same_id_armor);
       if_have_last_track_=false;
@@ -256,14 +196,17 @@ void Tracker::handleArmorJump(const Armor &current_armor) noexcept {
   // -------- 原始逻辑保持不变 --------
   double last_yaw = target_state(6);
   double yaw = orientationToYaw(current_armor.target_ori);
+  double delta_yaw = normalizeAngle(yaw - last_yaw);
 
-  if (std::abs(yaw - last_yaw) > 0.3) {
+  if (std::abs(delta_yaw) > jump_thresh) {
     target_state(6) = yaw;
 
     if (tracked_armors_num == ArmorsNum::NORMAL_4) {
       d_za = target_state(4) + target_state(9) - current_armor.target_pos.z;
       std::swap(target_state(8), another_r);
+     // std::cout<<d_za<<"c"<<d_zc<<"t4"<<target_state(4)<<"az"<<current_armor.target_pos.z<<std::endl;
       d_zc = d_zc == 0 ? -d_za : 0;
+      
       target_state(9) = d_zc;
     }
     WUST_DEBUG(tracker_logger) << "Armor Jump!";
@@ -282,6 +225,7 @@ void Tracker::handleArmorJump(const Armor &current_armor) noexcept {
     target_state(4) = current_armor.target_pos.z;
     target_state(5) = 0;
     target_state(9) = d_zc;
+   
   }
 
   ekf->setState(target_state);
@@ -340,4 +284,58 @@ Eigen::Vector3d Tracker::getArmorPositionFromState(const Eigen::VectorXd &x) noe
   double ya = yc - r * sin(yaw);
   return Eigen::Vector3d(xa, ya, za);
 }
+void Tracker::updateYawStateConsistency(double measured_yaw) {
+  track_update_count_++;
 
+  if (track_update_count_ >= 10) {
+    double dt = std::chrono::duration_cast<std::chrono::duration<double>>(
+      tracked_armor.timestamp - last_track_time_).count();
+
+    if (dt > 1e-5) {
+      double yaw_diff_a = normalizeAngle(measured_yaw - last_track_yaw_);
+      float yaw_velocity = yaw_diff_a / dt;
+
+      yaw_velocity_buffer_.push_back(yaw_velocity);
+      if (yaw_velocity_buffer_.size() > buffer_size_) {
+        yaw_velocity_buffer_.pop_front();
+      }
+
+      float yaw_velocity_avg = std::accumulate(
+        yaw_velocity_buffer_.begin(), yaw_velocity_buffer_.end(), 0.0f
+      ) / yaw_velocity_buffer_.size();
+
+      float v_yaw_target = target_state(7);
+
+      auto getRotationState = [](float v, float stationary_thresh, float min_valid) {
+        if (std::abs(v) < stationary_thresh) return 0;     // 静止
+        else if (v > min_valid) return 1;                  // 正转
+        else if (v < -min_valid) return -1;                // 反转
+        else return 0;
+      };
+
+      int obs_state = getRotationState(yaw_velocity_avg, obs_yaw_stationary_thresh, min_valid_velocity);
+      int pred_state = getRotationState(v_yaw_target, pred_yaw_stationary_thresh, min_valid_velocity);
+
+      if (rotation_inconsistent_cooldown_ == 0) {
+        if (obs_state != pred_state) {
+          rotation_inconsistent_count_++;
+          if (rotation_inconsistent_count_ >= max_inconsistent_count_) {
+            WUST_WARN(tracker_logger) << "yaw rotation mismatch: OBS-PRED change ";
+            tracker_state = LOST;
+           // target_state(7)=yaw_velocity_avg;
+            rotation_inconsistent_count_ = 0;
+            rotation_inconsistent_cooldown_ = rotation_inconsistent_cooldown_limit_;
+          }
+        } else {
+          rotation_inconsistent_count_ = 0;
+        }
+      } else {
+        rotation_inconsistent_cooldown_--;
+      }
+    }
+
+    last_track_yaw_ = measured_yaw;
+    last_track_time_ = tracked_armor.timestamp;
+    track_update_count_ = 0;
+  }
+}

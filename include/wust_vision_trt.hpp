@@ -9,6 +9,7 @@
 #include "yaml-cpp/yaml.h"
 #include "common/gobal.hpp"
 #include "control/armor_solver.hpp"
+#include "detect/armor_pose_estimator.hpp"
 class  WustVision{
 public:
     WustVision();
@@ -49,7 +50,8 @@ public:
     int detect_color_;
     std::string vision_logger="tensorrt_vision";
     std::atomic<bool> run_loop_{false};
-
+    double latency_ms;
+    int control_rate;
 
     std::atomic<bool> timer_running_{false};
     std::thread timer_thread_;
@@ -72,5 +74,6 @@ public:
     std::unique_ptr<Solver> solver_;
     bool use_calculation_ = false;
 
-
+    std::unique_ptr<ArmorPoseEstimator> armor_pose_estimator_;
+    Eigen::Matrix3d imu_to_camera_;
 };

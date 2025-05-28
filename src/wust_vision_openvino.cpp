@@ -7,6 +7,7 @@
 #include <opencv2/core/mat.hpp>
 #include <opencv2/highgui.hpp>
 #include <functional>
+#include <ostream>
 #include <string>
 #include "common/tf.hpp"
 #include "common/tools.hpp"
@@ -89,6 +90,7 @@ void  WustVision::init()
   
   const std::string camera_info_path = config["camera"]["camera_info_path"].as<std::string>();
   measure_tool_=std::make_unique<MonoMeasureTool>(camera_info_path);
+  armor_pose_estimator_=std::make_unique<ArmorPoseEstimator>(camera_info_path);
   
   initTF();
   
@@ -128,6 +130,7 @@ void  WustVision::init()
         });
 
   camera_.startCamera();
+  control_rate = config["control_rate"].as<int>(100);
   startTimer();
 
   is_inited_ = true;
@@ -167,9 +170,9 @@ void WustVision::startTimer()
 {
     if (timer_running_) return;  
     timer_running_ = true;
-
-    timer_thread_ = std::thread([this]() {
-        const auto interval = std::chrono::microseconds(5000);  // 5ms = 200Hz
+    int ms_interval = 1000 / control_rate;
+    timer_thread_ = std::thread([this, &ms_interval]() {
+        const auto interval = std::chrono::microseconds(ms_interval);  
         auto next_time = std::chrono::steady_clock::now() + interval;
 
         while (timer_running_) {
@@ -192,13 +195,17 @@ void WustVision::initTF()
     tf_tree_.setTransform("gimbal_link", "camera", createTf(gimbal2camera_x_, gimbal2camera_y_, gimbal2camera_z_, origimbal2camera));
 
     // camera_optical_frame 相对于 camera，设置 camera -> camera_optical_frame 的旋转变换
-    double yaw = -M_PI / 2;
+    double yaw = M_PI / 2;
     double roll = -M_PI / 2;
     double pitch = 0.0;
 
     tf2::Quaternion orientation;
     orientation.setRPY(roll, pitch, yaw);
+  
+   
+
     tf_tree_.setTransform("camera", "camera_optical_frame", createTf(0, 0, 0, orientation));
+
 }
 void WustVision::initSerial()
 {
@@ -220,13 +227,15 @@ void WustVision::initTracker(const YAML::Node& config)
     // Tracker 基础参数
     double max_match_distance = config["max_match_distance"].as<double>(0.2);
     double max_match_yaw_diff = config["max_match_yaw_diff"].as<double>(1.0);
-    tracker_ = std::make_unique<Tracker>(max_match_distance, max_match_yaw_diff);
+    double max_match_z_diff = config["max_match_z_diff"].as<double>(0.1);
+    tracker_ = std::make_unique<Tracker>(max_match_distance, max_match_yaw_diff,max_match_z_diff);
     tracker_->buffer_size_ = config["obs_vyaw_buffer_thres"].as<int>(5);
     tracker_->obs_yaw_stationary_thresh  = config["obs_yaw_stationary_thresh"].as<float>(1.0);
     tracker_->pred_yaw_stationary_thresh = config["pred_yaw_stationary_thresh"].as<float>(0.5);
     tracker_->min_valid_velocity = config["min_valid_velocity_thresh"].as<float>(0.01);
     tracker_->max_inconsistent_count_ = config["max_inconsistent_count"].as<int>(3);
     tracker_->rotation_inconsistent_cooldown_limit_  = config["rotation_inconsistent_cooldown_limit"].as<int>(5);
+    tracker_->jump_thresh = config["jump_thresh"].as<double>(0.4);
 
     // 跟踪判定参数
     tracker_->tracking_thres = config["tracking_thres"].as<int>(5);
@@ -451,73 +460,34 @@ void WustVision::DetectCallback(
 } Armors armors;
   armors.timestamp=std::chrono::time_point_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::time_point(std::chrono::nanoseconds(timestamp_nanosec)));
   armors.frame_id="camera_optical_frame";
-
-
-  for (auto & obj : objs) {
-  if (detect_color_ == 0 && obj.color != ArmorColor::RED) {
-      continue;
-  } else if (detect_color_ == 1 && obj.color != ArmorColor::BLUE) {
-      continue;
-  }
-
-  if(!obj.is_ok)continue;
-
-  cv::Point3f target_position;
-  cv::Mat target_rvec;
-  std::string armor_type;
-
-  if (!measure_tool_->calcArmorTarget(obj, target_position, target_rvec, armor_type)) {
-      //WUST_WARN(vision_logger) << "Calculate target position failed";
-      continue;
-  }
-
-  
-  if (!cv::checkRange(cv::Mat(target_position))) {
-  //WUST_WARN(vision_logger) << "Invalid target position (NaN)";
-  continue;
-  }
-
-
- 
-  if (target_rvec.empty() || target_rvec.total() != 3 || target_rvec.rows * target_rvec.cols != 3 || !cv::checkRange(target_rvec)) {
-      //WUST_WARN(vision_logger) << "Invalid rotation vector (empty or NaN): " << target_rvec;
-      continue;
-  }
-
   try {
-      cv::Mat rot_mat;
-      cv::Rodrigues(target_rvec, rot_mat);
+    auto target_time = armors.timestamp; // 需要有一个转换函数
+    Transform tf;
+    if (!tf_tree_.getTransform(armors.frame_id, target_frame_, target_time, tf)) {
+        throw std::runtime_error("Transform not found.");
+    }
 
-      tf2::Matrix3x3 tf_rot_mat(
-          rot_mat.at<double>(0, 0), rot_mat.at<double>(0, 1), rot_mat.at<double>(0, 2),
-          rot_mat.at<double>(1, 0), rot_mat.at<double>(1, 1), rot_mat.at<double>(1, 2),
-          rot_mat.at<double>(2, 0), rot_mat.at<double>(2, 1), rot_mat.at<double>(2, 2));
-      tf2::Quaternion tf_quaternion;
-      tf_rot_mat.getRotation(tf_quaternion);
+    tf2::Quaternion tf_quat = tf.orientation;
+   // std::cout<<tf.orientation.x<<" "<<tf.orientation.y<<" "<<tf.orientation.z<<" "<<tf.orientation.w<<std::endl;
+    Eigen::Quaterniond eigen_quat(tf_quat.w, tf_quat.x, tf_quat.y, tf_quat.z);
+    imu_to_camera_ = eigen_quat.toRotationMatrix();  // Eigen::Matrix3d
+    imu_to_camera_ = Sophus::SO3d::fitToSO3(eigen_quat.toRotationMatrix()).matrix();
+ //   std::cout<<imu_to_camera_<<std::endl;
 
-      if (!std::isfinite(tf_quaternion.x) || !std::isfinite(tf_quaternion.y) ||
-      !std::isfinite(tf_quaternion.z) || !std::isfinite(tf_quaternion.w)) {
-      WUST_WARN(vision_logger) << "Quaternion contains NaN or Inf";
-      continue;
-      }
-      Armor armor;
-      armor.pos={target_position.x,target_position.y,target_position.z};
-      armor.ori={tf_quaternion.x,tf_quaternion.y,tf_quaternion.z,tf_quaternion.w};
+    
 
-      armor.number=obj.number;
-      armor.type=armor_type;
-      armor.distance_to_image_center=measure_tool_->calcDistanceToCenter(obj);
-      armors.armors.emplace_back(armor);
 
-      //WUST_INFO(vision_logger) << "Position: " << target_position << " Quaternion: " << tf_quaternion;
 
-  } catch (const cv::Exception& e) {
-      WUST_ERROR(vision_logger) << "cv::Rodrigues failed: " << e.what();
-      continue;
-  }
+
+   
+} catch (const std::exception& e) {
+    
+    return;
 }
+armors.armors=armor_pose_estimator_->extractArmorPoses(objs, imu_to_camera_);
 
-      
+measure_tool_->processDetectedArmors(objs, detect_color_, armors);
+
          
      
 
@@ -527,7 +497,7 @@ void WustVision::DetectCallback(
       this->armorsCallback(armors,src_img);
   });
 
-
+ //drawresult(src_img,objs,timestamp_nanosec);
   
   
   
@@ -537,15 +507,17 @@ void WustVision::transformArmorData(Armors& armors)
   for (auto& armor : armors.armors) {
     try {
       Transform tf(armor.pos, armor.ori, armors.timestamp);
-        auto pose_in_target_frame = tf_tree_.transform(tf, armors.frame_id, target_frame_, armors.timestamp);      
+        auto pose_in_target_frame = tf_tree_.transform(tf, armors.frame_id, target_frame_, armors.timestamp); 
+       // auto pose_in_target_frame = tf_tree_.transform(tf, target_frame_,armors.frame_id,  armors.timestamp);      
         armor.target_pos = pose_in_target_frame.position;
         armor.target_ori = pose_in_target_frame.orientation;
         
 
         armor.yaw=getRPYFromQuaternion(armor.target_ori).yaw;
-     
+        double yaw=armor.yaw*180/M_PI;
+        //std::cout<<"YAW:"<<yaw<<std::endl;
 
-        //WUST_DEBUG(vision_logger)<<"Z:"<<armor.yaw;
+       //  WUST_DEBUG(vision_logger)<<"Z:"<<armor.target_pos.z;
     } catch (const std::exception& e) {
         WUST_ERROR(vision_logger) << "Can't find transform from " << armors.frame_id << " to " << target_frame_ << ": " << e.what();
         return;
@@ -600,6 +572,7 @@ void WustVision::timerCallback()
       try {
         Transform tf(armor.pos, armor.ori);
         auto pose_in_target_frame = tf_tree_.transform(tf, armor_data.frame_id, "camera_optical_frame");
+        //auto pose_in_target_frame = tf_tree_.transform(tf, "camera_optical_frame", armor_data.frame_id, armor_data.timestamp);
         armor.target_pos = pose_in_target_frame.position;
         armor.target_ori = pose_in_target_frame.orientation;
       } catch (const std::exception& e) {
@@ -719,4 +692,3 @@ int main() {
 
     return 0;
 }
-

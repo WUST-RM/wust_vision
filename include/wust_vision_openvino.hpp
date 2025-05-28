@@ -7,6 +7,7 @@
 #include "driver/serial.hpp"
 #include <opencv2/core/mat.hpp>
 #include "control/armor_solver.hpp"
+#include "detect/armor_pose_estimator.hpp"
 class WustVision {
 public:
     WustVision();
@@ -16,7 +17,7 @@ public:
     void init();
    
     void processImage(const ImageFrame& frame);
-
+   
    
     void printStats();
     void DetectCallback(
@@ -36,7 +37,7 @@ public:
 
 
     HikCamera camera_;
-   
+    
     std::thread image_thread_;
     std::unique_ptr<ThreadPool> thread_pool_;
     std::unique_ptr<OpenVino> detector_;
@@ -47,7 +48,7 @@ public:
     std::atomic<int> infer_running_count_{0};
     int max_infer_running_ ; 
     std::mutex callback_mutex_;
-    
+    double latency_ms;
     
     std::string vision_logger="openvino_vision";
     std::atomic<bool> run_loop_{false};
@@ -63,8 +64,8 @@ public:
     double s2qx_, s2qy_, s2qz_, s2qyaw_, s2qr_, s2qd_zc_;
     double r_x_, r_y_, r_z_, r_yaw_;
     double lost_time_thres_;
-    double latency_ms;
-  
+    int control_rate;
+
 
     double gimbal2camera_x_, gimbal2camera_y_, gimbal2camera_z_, gimbal2camera_yaw_, gimbal2camera_roll_, gimbal2camera_pitch_;
     
@@ -83,7 +84,8 @@ public:
     bool use_calculation_ = false;
 
     
-    
+    std::unique_ptr<ArmorPoseEstimator> armor_pose_estimator_;
+    Eigen::Matrix3d imu_to_camera_;
 
 
 };
