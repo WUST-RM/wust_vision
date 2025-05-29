@@ -36,57 +36,43 @@ public:
   // Get 3d position of the object coord system using PnP algorithm
   template <class InputArray>
   bool solvePnPGeneric(const InputArray &image_points,
-                       std::vector<cv::Mat> &rvecs,
-                       std::vector<cv::Mat> &tvecs,
+                       std::vector<cv::Mat> &rvecs, std::vector<cv::Mat> &tvecs,
                        const std::string &coord_frame_name) {
     rvecs.clear();
     tvecs.clear();
     if (object_points_map_.find(coord_frame_name) != object_points_map_.end()) {
       const auto &object_points = object_points_map_[coord_frame_name];
-      int solutions = cv::solvePnPGeneric(object_points,
-                                          image_points,
-                                          camera_matrix_,
-                                          distortion_coefficients_,
-                                          rvecs,
-                                          tvecs,
-                                          false,
-                                          method_);
+      int solutions = cv::solvePnPGeneric(
+          object_points, image_points, camera_matrix_, distortion_coefficients_,
+          rvecs, tvecs, false, method_);
       return solutions > 0;
     } else {
-      std::cout << "No object points found for coord frame: " << coord_frame_name
-                << std::endl;
+      std::cout << "No object points found for coord frame: "
+                << coord_frame_name << std::endl;
       return false;
     }
   }
 
   // Get 3d position of the object coord system using PnP algorithm
   template <class InputArray>
-  bool solvePnP(const InputArray &image_points,
-                cv::Mat &rvec,
-                cv::Mat &tvec,
+  bool solvePnP(const InputArray &image_points, cv::Mat &rvec, cv::Mat &tvec,
                 const std::string &coord_frame_name) {
     if (object_points_map_.find(coord_frame_name) != object_points_map_.end()) {
       const auto &object_points = object_points_map_[coord_frame_name];
-      return cv::solvePnP(object_points,
-                          image_points,
-                          camera_matrix_,
-                          distortion_coefficients_,
-                          rvec,
-                          tvec,
-                          false,
-                          method_);
+      return cv::solvePnP(object_points, image_points, camera_matrix_,
+                          distortion_coefficients_, rvec, tvec, false, method_);
     } else {
       return false;
     }
   }
 
   // Calculate the distance between armor center and image center
-  float calculateDistanceToCenter(const cv::Point2f &image_point) const noexcept;
+  float
+  calculateDistanceToCenter(const cv::Point2f &image_point) const noexcept;
 
-  double calculateReprojectionError(const std::vector<cv::Point2f> &image_points,
-                                    const cv::Mat &rvec,
-                                    const cv::Mat &tvec,
-                                    const std::string &coord_frame_name) const noexcept;
+  double calculateReprojectionError(
+      const std::vector<cv::Point2f> &image_points, const cv::Mat &rvec,
+      const cv::Mat &tvec, const std::string &coord_frame_name) const noexcept;
 
 private:
   std::unordered_map<std::string, std::vector<cv::Point3f>> object_points_map_;
@@ -95,4 +81,4 @@ private:
   cv::SolvePnPMethod method_;
 };
 
-#endif  // RM_UTILS_PNP_SOLVER_HPP_
+#endif // RM_UTILS_PNP_SOLVER_HPP_

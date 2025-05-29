@@ -1,6 +1,7 @@
 // Copyright Chen Jun 2023. Licensed under the MIT License.
 //
-// Additional modifications and features by Chengfu Zou, Labor. Licensed under Apache License 2.0.
+// Additional modifications and features by Chengfu Zou, Labor. Licensed under
+// Apache License 2.0.
 //
 // Copyright (C) FYT Vision Group. All rights reserved.
 //
@@ -17,4 +18,3 @@
 // limitations under the License.
 
 #include "tracker/extended_kalman_filter.hpp"
-

@@ -40,12 +40,12 @@
 #include "detect/graph_optimizer.hpp"
 #include "type/type.hpp"
 inline double normalizeAngleaa(double angle) {
-  while (angle > 180.0) angle -= 360.0;
-  while (angle < -180.0) angle += 360.0;
+  while (angle > 180.0)
+    angle -= 360.0;
+  while (angle < -180.0)
+    angle += 360.0;
   return angle;
 }
-
-
 
 // BA algorithm based Optimizer for the armor pose estimation (Particularly for
 // the Yaw angle)
@@ -68,6 +68,5 @@ private:
   g2o::OptimizationAlgorithmProperty solver_property_;
   g2o::OptimizationAlgorithmLevenberg *lm_algorithm_;
 };
-
 
 #endif // ARMOR_DETECTOR_BAS_SOLVER_HPP_

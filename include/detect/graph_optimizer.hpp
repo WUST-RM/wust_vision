@@ -71,5 +71,4 @@ private:
   Eigen::Matrix3d K_;
 };
 
-
 #endif // ARMOR_DETECTOR_GRAPH_OPTIMIZER_HPP_

@@ -40,14 +40,16 @@ public:
   explicit ArmorPoseEstimator(const std::string &camera_info_path);
 
   std::vector<Armor> extractArmorPoses(const std::vector<ArmorObject> &armors,
-    Eigen::Matrix3d R_imu_camera);
+                                       Eigen::Matrix3d R_imu_camera);
 
   void enableBA(bool enable) { use_ba_ = enable; }
 
 private:
-  // Select the best PnP solution according to the armor's direction in image, only available for SOLVEPNP_IPPE
+  // Select the best PnP solution according to the armor's direction in image,
+  // only available for SOLVEPNP_IPPE
   void sortPnPResult(const ArmorObject &armor, std::vector<cv::Mat> &rvecs,
-                     std::vector<cv::Mat> &tvecs ,std::string coord_frame_name) const;
+                     std::vector<cv::Mat> &tvecs,
+                     std::string coord_frame_name) const;
 
   // Convert a rotation matrix to RPY
   static Eigen::Vector3d rotationMatrixToRPY(const Eigen::Matrix3d &R);
