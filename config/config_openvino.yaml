@@ -1,4 +1,5 @@
 use_calculation:  false
+use_serial: true
 
 logger:
   log_level: "DEBUG"
@@ -11,7 +12,7 @@ debug:
   debug_mode: true
   debug_w: 1440
   debug_h: 1080
-  debug_show_dt: 0.01
+  debug_show_dt: 0.05
 
 max_infer_running: 4
 
@@ -63,7 +64,7 @@ tracker:
   max_match_z_diff: 0.1
   tracking_thres: 5
   lost_time_thres: 0.2
-  obs_vyaw_buffer_thres: 5
+  obs_vyaw_buffer_thres: 6
   obs_yaw_stationary_thresh: 0.7
   pred_yaw_stationary_thresh: 0.6
   min_valid_velocity_thresh: 0.01
@@ -86,7 +87,7 @@ solver:
       controller_delay: 0.0
       max_tracking_v_yaw: 180.0 #转速(rad/s)大于这个值时瞄准机器人中心 
       side_angle: 20.0 
-      bullet_speed: 15.0
+      bullet_speed: 25.0
       compenstator_type: "ideal"
       gravity: 9.8
       resistance: 0.092

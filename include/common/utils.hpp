@@ -16,53 +16,53 @@
 #ifndef RM_UTILS_UTILS_HPP_
 #define RM_UTILS_UTILS_HPP_
 
-
 #include <Eigen/Dense>
 #include <opencv2/calib3d.hpp>
 #include <opencv2/core.hpp>
 #include <opencv2/core/eigen.hpp>
-
 
 // util functions
 namespace utils {
 // Convert euler angles to rotation matrix
 enum class EulerOrder { XYZ, XZY, YXZ, YZX, ZXY, ZYX };
 template <typename Vec3Like>
-Eigen::Matrix3d eulerToMatrix(const Vec3Like &euler, EulerOrder order = EulerOrder::XYZ) {
+Eigen::Matrix3d eulerToMatrix(const Vec3Like &euler,
+                              EulerOrder order = EulerOrder::XYZ) {
   auto r = Eigen::AngleAxisd(euler[0], Eigen::Vector3d::UnitX());
   auto p = Eigen::AngleAxisd(euler[1], Eigen::Vector3d::UnitY());
   auto y = Eigen::AngleAxisd(euler[2], Eigen::Vector3d::UnitZ());
   switch (order) {
-    case EulerOrder::XYZ:
-      return (y * p * r).matrix();
-    case EulerOrder::XZY:
-      return (p * y * r).matrix();
-    case EulerOrder::YXZ:
-      return (y * r * p).matrix();
-    case EulerOrder::YZX:
-      return (r * y * p).matrix();
-    case EulerOrder::ZXY:
-      return (p * r * y).matrix();
-    case EulerOrder::ZYX:
-      return (r * p * y).matrix();
+  case EulerOrder::XYZ:
+    return (y * p * r).matrix();
+  case EulerOrder::XZY:
+    return (p * y * r).matrix();
+  case EulerOrder::YXZ:
+    return (y * r * p).matrix();
+  case EulerOrder::YZX:
+    return (r * y * p).matrix();
+  case EulerOrder::ZXY:
+    return (p * r * y).matrix();
+  case EulerOrder::ZYX:
+    return (r * p * y).matrix();
   }
 }
 
-inline Eigen::Vector3d matrixToEuler(const Eigen::Matrix3d &R,
-                                     EulerOrder order = EulerOrder::XYZ) noexcept {
+inline Eigen::Vector3d
+matrixToEuler(const Eigen::Matrix3d &R,
+              EulerOrder order = EulerOrder::XYZ) noexcept {
   switch (order) {
-    case EulerOrder::XYZ:
-      return R.eulerAngles(0, 1, 2);
-    case EulerOrder::XZY:
-      return R.eulerAngles(0, 2, 1);
-    case EulerOrder::YXZ:
-      return R.eulerAngles(1, 0, 2);
-    case EulerOrder::YZX:
-      return R.eulerAngles(1, 2, 0);
-    case EulerOrder::ZXY:
-      return R.eulerAngles(2, 0, 1);
-    case EulerOrder::ZYX:
-      return R.eulerAngles(2, 1, 0);
+  case EulerOrder::XYZ:
+    return R.eulerAngles(0, 1, 2);
+  case EulerOrder::XZY:
+    return R.eulerAngles(0, 2, 1);
+  case EulerOrder::YXZ:
+    return R.eulerAngles(1, 0, 2);
+  case EulerOrder::YZX:
+    return R.eulerAngles(1, 2, 0);
+  case EulerOrder::ZXY:
+    return R.eulerAngles(2, 0, 1);
+  case EulerOrder::ZYX:
+    return R.eulerAngles(2, 1, 0);
   }
 }
 
@@ -78,8 +78,10 @@ inline Eigen::Vector3d getRPY(const Eigen::Matrix3d &R) {
   return -Eigen::Vector3d(roll, pitch, yaw);
 }
 
-template <typename _Tp, int _rows, int _cols, int _options, int _maxRows, int _maxCols>
-cv::Mat eigenToCv(const Eigen::Matrix<_Tp, _rows, _cols, _options, _maxRows, _maxCols> &eigen_mat) {
+template <typename _Tp, int _rows, int _cols, int _options, int _maxRows,
+          int _maxCols>
+cv::Mat eigenToCv(const Eigen::Matrix<_Tp, _rows, _cols, _options, _maxRows,
+                                      _maxCols> &eigen_mat) {
   cv::Mat cv_mat;
   cv::eigen2cv(eigen_mat, cv_mat);
   return cv_mat;
@@ -91,6 +93,6 @@ inline Eigen::MatrixXd cvToEigen(const cv::Mat &cv_mat) noexcept {
   return eigen_mat;
 }
 
-}  // namespace utils
+} // namespace utils
 
 #endif

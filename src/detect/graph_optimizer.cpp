@@ -22,10 +22,8 @@
 #include <g2o/types/slam3d/vertex_pointxyz.h>
 #include <sophus/so3.hpp>
 // project
-#include "type/type.hpp"
 #include "common/utils.hpp"
-
-
+#include "type/type.hpp"
 
 void VertexYaw::oplusImpl(const double *update) {
   Sophus::SO3d R_yaw = Sophus::SO3d::exp(Eigen::Vector3d(0, 0, update[0])) *
@@ -59,5 +57,3 @@ void EdgeProjection::computeError() {
   // Calculate the error
   _error = obs - p_2d.head<2>();
 }
-
-

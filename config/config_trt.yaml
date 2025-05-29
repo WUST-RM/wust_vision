@@ -1,4 +1,5 @@
 use_calculation: false
+use_serial: false
 
 logger:
   log_level: "INFO"

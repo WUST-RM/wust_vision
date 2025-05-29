@@ -35,7 +35,6 @@
 
 #include "common/utils.hpp"
 
-
 G2O_USE_OPTIMIZATION_LIBRARY(dense)
 
 BaSolver::BaSolver(std::array<double, 9> &camera_matrix,
@@ -58,18 +57,17 @@ BaSolver::BaSolver(std::array<double, 9> &camera_matrix,
   lm_algorithm_->setUserLambdaInit(0.1);
 }
 
-Eigen::Matrix3d
-BaSolver::solveBa(const ArmorObject &armor, const Eigen::Vector3d &t_camera_armor,
-                  const Eigen::Matrix3d &R_camera_armor,
-                  const Eigen::Matrix3d &R_imu_camera,
-                  int type_number) noexcept {
+Eigen::Matrix3d BaSolver::solveBa(const ArmorObject &armor,
+                                  const Eigen::Vector3d &t_camera_armor,
+                                  const Eigen::Matrix3d &R_camera_armor,
+                                  const Eigen::Matrix3d &R_imu_camera,
+                                  int type_number) noexcept {
   // Reset optimizer
   optimizer_.clear();
 
   // Essential coordinate system transformation
   Eigen::Matrix3d R_imu_armor = R_imu_camera * R_camera_armor;
   Sophus::SO3d R_camera_imu = Sophus::SO3d(R_imu_camera.transpose());
-
 
   // Compute the initial yaw from rotation matrix
   double initial_armor_yaw;
@@ -82,28 +80,28 @@ BaSolver::solveBa(const ArmorObject &armor, const Eigen::Vector3d &t_camera_armo
   }
 
   // Get the pitch angle of the armor
-  double armor_pitch =
-      armor.number == ArmorNumber::OUTPOST ? -FIFTTEN_DEGREE_RAD : FIFTTEN_DEGREE_RAD;
+  double armor_pitch = armor.number == ArmorNumber::OUTPOST
+                           ? -FIFTTEN_DEGREE_RAD
+                           : FIFTTEN_DEGREE_RAD;
   Sophus::SO3d R_pitch = Sophus::SO3d::exp(Eigen::Vector3d(0, armor_pitch, 0));
   Eigen::Vector2d armor_size;
   switch (type_number) {
-    case 0:
-    armor_size =Eigen::Vector2d(LARGE_ARMOR_WIDTH, LARGE_ARMOR_HEIGHT);
+  case 0:
+    armor_size = Eigen::Vector2d(LARGE_ARMOR_WIDTH, LARGE_ARMOR_HEIGHT);
     break;
-    case 1:
-    armor_size =Eigen::Vector2d(SMALL_ARMOR_WIDTH, SMALL_ARMOR_HEIGHT);
+  case 1:
+    armor_size = Eigen::Vector2d(SMALL_ARMOR_WIDTH, SMALL_ARMOR_HEIGHT);
     break;
-    case 2:
-    armor_size =Eigen::Vector2d(LARGE_ARMOR_WIDTH_NET, LARGE_ARMOR_HEIGHT_NET);
+  case 2:
+    armor_size = Eigen::Vector2d(LARGE_ARMOR_WIDTH_NET, LARGE_ARMOR_HEIGHT_NET);
     break;
-    case 3:
-    armor_size =Eigen::Vector2d(SMALL_ARMOR_WIDTH_NET, SMALL_ARMOR_HEIGHT_NET);
+  case 3:
+    armor_size = Eigen::Vector2d(SMALL_ARMOR_WIDTH_NET, SMALL_ARMOR_HEIGHT_NET);
     break;
-  
   }
 
-  const auto object_points =
-      ArmorObject::buildObjectPoints<Eigen::Vector3d>(armor_size(0), armor_size(1));
+  const auto object_points = ArmorObject::buildObjectPoints<Eigen::Vector3d>(
+      armor_size(0), armor_size(1));
 
   // Fill the optimizer
   size_t id_counter = 0;
@@ -141,8 +139,9 @@ BaSolver::solveBa(const ArmorObject &armor, const Eigen::Vector3d &t_camera_armo
   double yaw_optimized = v_yaw->estimate();
 
   if (std::isnan(yaw_optimized)) {
-    //FYT_ERROR("armor_detector", "Yaw angle is nan after optimization");
-    std::cout<<"armor_detector"<<"Yaw angle is nan after optimization"<<std::endl;
+    // FYT_ERROR("armor_detector", "Yaw angle is nan after optimization");
+    std::cout << "armor_detector"
+              << "Yaw angle is nan after optimization" << std::endl;
     return R_camera_armor;
   }
 
