@@ -1,5 +1,5 @@
 use_calculation: false
-use_serial: false
+use_serial: true
 
 logger:
   log_level: "INFO"
@@ -56,7 +56,7 @@ tf:
   gimbal2camera_z:  0.0
   gimbal2camera_roll: 0.0
   gimbal2camera_pitch: 0.0
-  gimbal2camera_yaw: 0.0
+  gimbal2camera_yaw: 180.0
 
 tracker:
   target_frame: "odom"

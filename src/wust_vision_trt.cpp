@@ -185,8 +185,11 @@ void WustVision::initTF() {
                         createTf(0, 0, 0, tf2::Quaternion(0, 0, 0, 1)));
   tf_tree_.setTransform("gimbal_odom", "gimbal_link",
                         createTf(0, 0, 0, tf2::Quaternion(0, 0, 0, 1)));
+  double gimbal2camera_roll = gimbal2camera_roll_ * M_PI / 180;
+  double gimbal2camera_pitch = gimbal2camera_pitch_ * M_PI / 180;
+  double gimbal2camera_yaw = gimbal2camera_yaw_ * M_PI / 180;
   tf2::Quaternion origimbal2camera = eulerToQuaternion(
-      gimbal2camera_roll_, gimbal2camera_pitch_, gimbal2camera_yaw_);
+      gimbal2camera_roll, gimbal2camera_pitch, gimbal2camera_yaw);
   tf_tree_.setTransform("gimbal_link", "camera",
                         createTf(gimbal2camera_x_, gimbal2camera_y_,
                                  gimbal2camera_z_, origimbal2camera));
@@ -538,6 +541,9 @@ void WustVision::timerCallback() {
       try {
         auto now = std::chrono::steady_clock::now();
         gimbal_cmd = solver_->solve(target, now);
+        if (gimbal_cmd.fire_advice) {
+          fire_count_++;
+        }
         serial_.transformGimbalCmd(gimbal_cmd);
       } catch (...) {
         WUST_ERROR(vision_logger) << "solver error";
@@ -558,6 +564,8 @@ void WustVision::timerCallback() {
         Transform tf(armor.pos, armor.ori);
         auto pose_in_target_frame =
             tf_tree_.transform(tf, armor_data.frame_id, "camera_optical_frame");
+        // auto pose_in_target_frame = tf_tree_.transform(tf,
+        // "camera_optical_frame", armor_data.frame_id, armor_data.timestamp);
         armor.target_pos = pose_in_target_frame.position;
         armor.target_ori = pose_in_target_frame.orientation;
       } catch (const std::exception &e) {
@@ -625,13 +633,16 @@ void WustVision::printStats() {
         << "Received: " << img_recv_count_
         << ", Detected: " << detect_finish_count_
         << ", FPS: " << detect_finish_count_ / elapsed.count()
-        << " Latency: " << latency_ms << "ms";
+        << " Latency: " << latency_ms << "ms"
+        << "  Fire: " << fire_count_;
 
     img_recv_count_ = 0;
     detect_finish_count_ = 0;
+    fire_count_ = 0;
     last_stat_time_steady_ = now;
   }
 }
+
 
 WustVision *global_vision = nullptr;
 std::mutex mtx;
