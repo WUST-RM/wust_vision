@@ -8,3 +8,4 @@ int debug_h;
 double controller_delay = 0.0;
 double velocity = 15.0;
 bool if_manual_reset = false;
+int control_rate=1000;

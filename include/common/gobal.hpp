@@ -12,3 +12,4 @@ extern int debug_h;
 extern double controller_delay;
 extern double velocity;
 extern bool if_manual_reset;
+extern int control_rate;

@@ -5,6 +5,7 @@
 #include "driver/crc8_crc16.hpp"
 #include "driver/packet_typedef.hpp"
 #include "type/type.hpp"
+#include <cmath>
 #include <iostream>
 Serial::Serial()
     : device_name_(""), config_(SerialPortConfig()), is_usb_ok_(false),
@@ -22,6 +23,7 @@ void Serial::startThread() {
   running_ = true;
   protect_thread_ = std::thread(&Serial::serialPortProtect, this);
   receive_thread_ = std::thread(&Serial::receiveData, this);
+  send_thread_ = std::thread(&Serial::sendData, this);
 }
 
 void Serial::stopThread() {
@@ -31,6 +33,10 @@ void Serial::stopThread() {
   }
   if (receive_thread_.joinable()) {
     receive_thread_.join();
+  }
+  if(send_thread_.joinable())
+  {
+    send_thread_.join();
   }
   if (driver_.is_open()) {
     driver_.close();
@@ -108,47 +114,47 @@ void Serial::receiveData() {
 
     try {
       // 读一个字节，检查 SOF
-      sof_buf.resize(1);
+      sof_buf.resize(39);
       driver_.receive(sof_buf);
-      if (sof_buf[0] != SOF_RECEIVE) {
-        ++sof_count;
-        // WUST_INFO(serial_logger) << "Finding SOF, count=" << sof_count ;
-        continue;
-      }
-      sof_count = 0;
+      // if (sof_buf[0] != SOF_RECEIVE) {
+      //   ++sof_count;
+      //   // WUST_INFO(serial_logger) << "Finding SOF, count=" << sof_count ;
+      //   continue;
+      // }
+      //sof_count = 0;
 
       // 读剩余 header（3 字节）
-      header_buf.resize(3);
-      driver_.receive(header_buf);
-      // 把 SOF 插到最前面
-      header_buf.insert(header_buf.begin(), sof_buf[0]);
+      // header_buf.resize(3);
+      // driver_.receive(header_buf);
+      // // 把 SOF 插到最前面
+      // header_buf.insert(header_buf.begin(), sof_buf[0]);
 
-      // 反序列化 HeaderFrame
-      HeaderFrame hf = fromVector<HeaderFrame>(header_buf);
+      // // 反序列化 HeaderFrame
+      // HeaderFrame hf = fromVector<HeaderFrame>(header_buf);
 
-      // CRC8 校验
-      if (!crc8::verify_CRC8_check_sum(reinterpret_cast<uint8_t *>(&hf),
-                                       sizeof(hf))) {
-        // WUST_ERROR(serial_logger) << "Header CRC8 failed\n";
-        continue;
-      }
+      // // CRC8 校验
+      // if (!crc8::verify_CRC8_check_sum(reinterpret_cast<uint8_t *>(&hf),
+      //                                  sizeof(hf))) {
+      //   // WUST_ERROR(serial_logger) << "Header CRC8 failed\n";
+      //   continue;
+      // }
 
       // 读 data + CRC16
-      data_buf.resize(hf.len + 2);
-      int received = driver_.receive(data_buf);
-      int total = received;
-      int remain = (hf.len + 2) - received;
+      //data_buf.resize(hf.len + 2);
+      // int received = driver_.receive(data_buf);
+      // int total = received;
+      // int remain = (hf.len + 2) - received;
       // 如果没读完，就继续读
-      while (remain > 0) {
-        std::vector<uint8_t> tmp(remain);
-        int n = driver_.receive(tmp);
-        data_buf.insert(data_buf.begin() + total, tmp.begin(), tmp.begin() + n);
-        total += n;
-        remain -= n;
-      }
+      // while (remain > 0) {
+      //   std::vector<uint8_t> tmp(remain);
+      //   int n = driver_.receive(tmp);
+      //   data_buf.insert(data_buf.begin() + total, tmp.begin(), tmp.begin() + n);
+      //   total += n;
+      //   remain -= n;
+      // }
 
-      // 把 header_buf 拼回 data_buf 前面，得到完整包
-      data_buf.insert(data_buf.begin(), header_buf.begin(), header_buf.end());
+      // // 把 header_buf 拼回 data_buf 前面，得到完整包
+      // data_buf.insert(data_buf.begin(), header_buf.begin(), header_buf.end());
 
       //（可选）CRC16 校验
       // if (!crc16::verify_CRC16_check_sum(data_buf)) {
@@ -157,22 +163,21 @@ void Serial::receiveData() {
       // }
 
       // 根据 ID 解析并回调
-      switch (hf.id) {
-      case ID_AIM_INFO: {
-        auto dbg = fromVector<ReceiveAimINFO>(data_buf);
+      // switch (sof_buf[0]) {
+      // case ID_AIM_INFO: {
+      auto aim = fromVector<ReceiveAimINFO>(sof_buf);
+      aim_cbk(aim);
 
-        // if (debug_cb_) debug_cb_(dbg);
-
-        break;
-      }
-      case ID_IMU: {
-        auto imu = fromVector<ReceiveImuData>(data_buf);
-        imu_cbk(imu);
-        break;
-      }
-      default:
-        WUST_WARN(serial_logger) << "Unknown packet ID=" << int(hf.id);
-      }
+      //   break;
+      // }
+      // case ID_IMU: {
+      //   auto imu = fromVector<ReceiveImuData>(data_buf);
+      //   imu_cbk(imu);
+      //   break;
+      // }
+      // default:
+      // WUST_WARN(serial_logger) << "Unknown packet ID=" << (int)sof_buf[0];
+      // }
 
     } catch (const std::exception &ex) {
       WUST_ERROR(serial_logger) << "receiveData exception: " << ex.what();
@@ -187,35 +192,42 @@ void Serial::aim_cbk(ReceiveAimINFO &aim_data) {
   static int valid_count = 0;
   static bool out_of_order_detected = false;
   static int last_reset_count = -1;
+  
+  //std::cout<<"roll:"<<aim_data.roll<<"pitch:"<<aim_data.pitch<<"yaw:"<<aim_data.yaw<<std::endl;
 
-  if (!out_of_order_detected) {
-    if (aim_data.time_stamp <= last_time) {
-      WUST_WARN(serial_logger)
-          << "Received out-of-order imu data, entering recovery mode.";
-      out_of_order_detected = true;
-      valid_count = 0;
-      last_time = aim_data.time_stamp;
-    } else {
-      last_time = aim_data.time_stamp;
-    }
-  }
-
-  if (out_of_order_detected) {
-    if (aim_data.time_stamp > last_time) {
-      valid_count++;
-      if (valid_count >= 100) {
-        WUST_INFO(serial_logger) << "IMU timestamp recovered after 100 valid "
-                                    "frames, exiting recovery mode.";
-        out_of_order_detected = false;
-        valid_count = 0;
-        last_reset_count = -1;
-      }
-    } else {
-      valid_count = 0;
-      last_reset_count = -1;
-    }
-    return;
-  }
+  // if (!out_of_order_detected) {
+  //   if (aim_data.time_stamp <= last_time) {
+  //     WUST_WARN(serial_logger)
+  //         << "Received out-of-order imu data, entering recovery mode.";
+  //     out_of_order_detected = true;
+  //     valid_count = 0;
+  //     last_time = aim_data.time_stamp;
+  //   } else {
+  //     last_time = aim_data.time_stamp;
+  //   }
+  // }
+  
+  // if (out_of_order_detected) {
+  //   if (aim_data.time_stamp > last_time) {
+  //     valid_count++;
+  //     if (valid_count >= 100) {
+  //       WUST_INFO(serial_logger) << "IMU timestamp recovered after 100 valid "
+  //                                   "frames, exiting recovery mode.";
+  //       out_of_order_detected = false;
+  //       valid_count = 0;
+  //       last_reset_count = -1;
+  //     }
+  //   } else {
+  //     valid_count = 0;
+  //     last_reset_count = -1;
+  //   }
+  //   return;
+  // }
+  double roll= aim_data.roll*M_PI/180.0;
+  double pitch= aim_data.pitch*M_PI/180.0;
+  double yaw= aim_data.yaw*M_PI/180.0;
+ // WUST_INFO(serial_logger)<<"roll:"<<roll<<" pitch:"<<pitch<<" yaw:"<<yaw;
+  
   if (aim_data.manual_reset_count != last_reset_count) {
     WUST_INFO(serial_logger)
         << "Manual reset count changed: " << last_reset_count << " -> "
@@ -227,7 +239,10 @@ void Serial::aim_cbk(ReceiveAimINFO &aim_data) {
   }
 
   tf2::Quaternion q;
-  q.setRPY(aim_data.roll, aim_data.pitch, aim_data.yaw);
+  
+  
+  
+  q.setRPY(roll, pitch, yaw);
 
   Transform gimbal_tf(Position(0, 0, 0), q);
   tf_tree_.setTransform("gimbal_odom", "gimbal_link", gimbal_tf);
@@ -297,15 +312,15 @@ void Serial::imu_cbk(ReceiveImuData &imu_data) {
 void Serial::sendData() {
   WUST_INFO(serial_logger) << "Start sendData!";
 
-  send_robot_cmd_data_.frame_header.sof = SOF_SEND;
-  send_robot_cmd_data_.frame_header.id = ID_ROBOT_CMD;
-  send_robot_cmd_data_.frame_header.len = sizeof(SendRobotCmdData) - 6;
+  //send_robot_cmd_data_.frame_header.sof = SOF_SEND;
+  send_robot_cmd_data_.cmd_ID = ID_ROBOT_CMD;
+  //send_robot_cmd_data_.frame_header.len = sizeof(SendRobotCmdData) - 6;
   // send_robot_cmd_data_.data.speed_vector.vx = 0;
   // send_robot_cmd_data_.data.speed_vector.vy = 0;
   // send_robot_cmd_data_.data.speed_vector.wz = 0;
   // 添加帧头crc8校验
-  crc8::append_CRC8_check_sum(
-      reinterpret_cast<uint8_t *>(&send_robot_cmd_data_), sizeof(HeaderFrame));
+  // crc8::append_CRC8_check_sum(
+  //     reinterpret_cast<uint8_t *>(&send_robot_cmd_data_), sizeof(HeaderFrame));
 
   int retry_count = 0;
 
@@ -321,18 +336,19 @@ void Serial::sendData() {
     try {
       // 整包数据校验
       // 添加数据段crc16校验
-      crc16::append_CRC16_check_sum(
-          reinterpret_cast<uint8_t *>(&send_robot_cmd_data_),
-          sizeof(SendRobotCmdData));
+      // crc16::append_CRC16_check_sum(
+      //     reinterpret_cast<uint8_t *>(&send_robot_cmd_data_),
+      //     sizeof(SendRobotCmdData));
 
       // 发送数据
+      //std::cout  << "send_robot_cmd_data_" << std::endl;
       std::vector<uint8_t> send_data = toVector(send_robot_cmd_data_);
       driver_.send(send_data);
     } catch (const std::exception &ex) {
       WUST_ERROR(serial_logger) << "Error sending data: " << ex.what();
       is_usb_ok_ = false;
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000/control_rate));
   }
 }
 void Serial::transformGimbalCmd(GimbalCmd &gimbal_cmd) {

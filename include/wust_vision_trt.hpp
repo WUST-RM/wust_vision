@@ -48,7 +48,7 @@ public:
   std::string vision_logger = "tensorrt_vision";
   std::atomic<bool> run_loop_{false};
   double latency_ms;
-  int control_rate;
+
 
   std::atomic<bool> timer_running_{false};
   std::thread timer_thread_;
