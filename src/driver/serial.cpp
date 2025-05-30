@@ -230,8 +230,10 @@ void Serial::aim_cbk(ReceiveAimINFO &aim_data) {
   double roll= aim_data.roll*M_PI/180.0;
   double pitch= aim_data.pitch*M_PI/180.0;
   double yaw= aim_data.yaw*M_PI/180.0;
-  //WUST_INFO(serial_logger)<<"roll:"<<roll<<" pitch:"<<pitch<<" yaw:"<<yaw;
-  
+ // WUST_INFO(serial_logger)<<"roll:"<<aim_data.roll<<" pitch:"<<aim_data.pitch<<" yaw:"<<aim_data.yaw;
+  last_pitch=pitch;
+  last_roll=roll;
+  last_yaw=yaw;
   if (aim_data.manual_reset_count != last_reset_count) {
     WUST_INFO(serial_logger)
         << "Manual reset count changed: " << last_reset_count << " -> "
@@ -252,8 +254,8 @@ void Serial::aim_cbk(ReceiveAimINFO &aim_data) {
   tf_tree_.setTransform("gimbal_odom", "gimbal_link", gimbal_tf);
 
   detect_color_ = aim_data.detect_color;
-  controller_delay = aim_data.controller_delay;
-  velocity = 20;
+  //controller_delay = aim_data.controller_delay;
+  velocity = 23;
 
   if (debug_mode_) {
     dumpAimToFile(aim_data, "/tmp/aim_status.txt");

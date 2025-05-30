@@ -50,12 +50,12 @@ echo -e "${blue}        $total${reset}"
 if [ "$1" == "build" ]; then
     echo -e "${yellow}\n<--- Only building and copying both executables --->${reset}"
     # Copy the executables to /usr/local/bin
-    sudo cp ./wust_vision_trt /usr/local/bin/
+    #sudo cp ./wust_vision_trt /usr/local/bin/
     if [ $? -ne 0 ]; then
         echo -e "${red}\n--- Failed to copy wust_vision_trt to /usr/local/bin ---${reset}"
         exit 1
     fi
-    sudo cp ./wust_vision_openvino /usr/local/bin/
+    #sudo cp ./wust_vision_openvino /usr/local/bin/
     if [ $? -ne 0 ]; then
         echo -e "${red}\n--- Failed to copy wust_vision_openvino to /usr/local/bin ---${reset}"
         exit 1

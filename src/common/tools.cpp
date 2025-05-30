@@ -1117,7 +1117,11 @@ std::string formatTargetInfo(const Target &target) {
 
   oss << "\n-- Position --\n";
   oss << "x: " << target.position_.x << ", y: " << target.position_.y
-      << ", z: " << target.position_.z << "\n";
+       << " ，z: " << target.position_.z << ", normal: " << 
+      ", Distance to Origin: " << std::sqrt(target.position_.x * target.position_.x + 
+                                           target.position_.y * target.position_.y + 
+                                           target.position_.z * target.position_.z) << " m\n";
+
 
   oss << "\n-- Velocity --\n";
   oss << "vx: " << target.velocity_.x << ", vy: " << target.velocity_.y
@@ -1143,6 +1147,7 @@ void dumpTargetToFile(const Target &target, const std::string &path) {
   std::ofstream file(path);
   if (file.is_open()) {
     file << formatTargetInfo(target);
+    //std::cout << "Target info dumped to " << path << std::endl;
     file.close();
   }
 }

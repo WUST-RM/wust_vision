@@ -331,9 +331,9 @@ void Tracker::updateYawStateConsistency(double measured_yaw) {
           if (rotation_inconsistent_count_ >= max_inconsistent_count_) {
             WUST_WARN(tracker_logger)
                 << "yaw rotation mismatch: OBS-PRED change ";
-            // tracker_state = LOST;
-            target_state(7) = yaw_velocity_avg;
-            ekf->setState(target_state);
+             //tracker_state = LOST;
+            // target_state(7) = yaw_velocity_avg;
+            // ekf->setState(target_state);
             rotation_inconsistent_count_ = 0;
             rotation_inconsistent_cooldown_ =
                 rotation_inconsistent_cooldown_limit_;

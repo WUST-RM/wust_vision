@@ -15,24 +15,24 @@
 #include <unordered_map>
 #include <unordered_set>
 struct rpy {
-  float roll;
-  float pitch;
-  float yaw;
+  double roll;
+  double pitch;
+  double yaw;
 };
 namespace tf2 {
 
 class Quaternion {
 public:
-  float x, y, z, w;
+  double x, y, z, w;
 
   Quaternion() : x(0.0), y(0.0), z(0.0), w(1.0) {}
-  Quaternion(float x_, float y_, float z_, float w_)
+  Quaternion(double x_, double y_, double z_, double w_)
       : x(x_), y(y_), z(z_), w(w_) {}
 
   cv::Matx33d toRotationMatrix() const {
-    float xx = x * x, yy = y * y, zz = z * z;
-    float xy = x * y, xz = x * z, yz = y * z;
-    float xw = x * w, yw = y * w, zw = z * w;
+    double xx = x * x, yy = y * y, zz = z * z;
+    double xy = x * y, xz = x * z, yz = y * z;
+    double xw = x * w, yw = y * w, zw = z * w;
 
     return cv::Matx33d(1 - 2 * (yy + zz), 2 * (xy - zw), 2 * (xz + yw),
                        2 * (xy + zw), 1 - 2 * (xx + zz), 2 * (yz - xw),
@@ -121,33 +121,33 @@ inline rpy getRPYFromQuaternion(const Quaternion &q) {
   // roll (x-axis rotation)
   double sinr_cosp = 2.0 * (q.w * q.x + q.y * q.z);
   double cosr_cosp = 1.0 - 2.0 * (q.x * q.x + q.y * q.y);
-  result.roll = static_cast<float>(std::atan2(sinr_cosp, cosr_cosp));
+  result.roll = static_cast<double>(std::atan2(sinr_cosp, cosr_cosp));
 
   // pitch (y-axis rotation)
   double sinp = 2.0 * (q.w * q.y - q.z * q.x);
   if (std::abs(sinp) >= 1.0)
-    result.pitch = static_cast<float>(std::copysign(M_PI / 2, sinp));
+    result.pitch = static_cast<double>(std::copysign(M_PI / 2, sinp));
   else
-    result.pitch = static_cast<float>(std::asin(sinp));
+    result.pitch = static_cast<double>(std::asin(sinp));
 
   // yaw (z-axis rotation)
   double siny_cosp = 2.0 * (q.w * q.z + q.x * q.y);
   double cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z);
-  result.yaw = static_cast<float>(std::atan2(siny_cosp, cosy_cosp));
+  result.yaw = static_cast<double>(std::atan2(siny_cosp, cosy_cosp));
 
   return result;
 }
 class Matrix3x3 {
 public:
-  float m[3][3];
+  double m[3][3];
 
   Matrix3x3() {
     for (int i = 0; i < 3; ++i)
       for (int j = 0; j < 3; ++j)
         m[i][j] = (i == j) ? 1.0f : 0.0f;
   }
-  Matrix3x3(float m00, float m01, float m02, float m10, float m11, float m12,
-            float m20, float m21, float m22) {
+  Matrix3x3(double m00, double m01, double m02, double m10, double m11, double m12,
+            double m20, double m21, double m22) {
     m[0][0] = m00;
     m[0][1] = m01;
     m[0][2] = m02;
@@ -163,15 +163,15 @@ public:
     cv::Matx33d rot = q.toRotationMatrix();
     for (int i = 0; i < 3; ++i)
       for (int j = 0; j < 3; ++j)
-        m[i][j] = static_cast<float>(rot(i, j));
+        m[i][j] = static_cast<double>(rot(i, j));
   }
-  const float *operator[](int i) const { return m[i]; }
-  float *operator[](int i) { return m[i]; }
+  const double *operator[](int i) const { return m[i]; }
+  double *operator[](int i) { return m[i]; }
 
   void getRotation(Quaternion &q) const {
-    float trace = m[0][0] + m[1][1] + m[2][2];
+    double trace = m[0][0] + m[1][1] + m[2][2];
     if (trace > 0.0) {
-      float s = std::sqrt(trace + 1.0f) * 2.0f;
+      double s = std::sqrt(trace + 1.0f) * 2.0f;
       q.w = 0.25f * s;
       q.x = (m[2][1] - m[1][2]) / s;
       q.y = (m[0][2] - m[2][0]) / s;
@@ -179,7 +179,7 @@ public:
     } else {
       int i = (m[0][0] > m[1][1]) ? ((m[0][0] > m[2][2]) ? 0 : 2)
                                   : ((m[1][1] > m[2][2]) ? 1 : 2);
-      float s;
+      double s;
       if (i == 0) {
         s = std::sqrt(1.0f + m[0][0] - m[1][1] - m[2][2]) * 2.0f;
         q.w = (m[2][1] - m[1][2]) / s;
@@ -259,9 +259,9 @@ template <> struct fmt::formatter<tf2::Quaternion> {
   }
 };
 struct Position {
-  float x, y, z;
+  double x, y, z;
   Position() : x(0.0f), y(0.0f), z(0.0f) {}
-  Position(float x_, float y_, float z_) : x(x_), y(y_), z(z_) {}
+  Position(double x_, double y_, double z_) : x(x_), y(y_), z(z_) {}
 
   Position operator+(const Position &other) const {
     return Position(x + other.x, y + other.y, z + other.z);
@@ -339,12 +339,15 @@ struct Transform {
   }
 
   static Transform compose(const Transform &a, const Transform &b) {
-    cv::Matx44d result = a.toMatrix() * b.toMatrix();
-    return fromMatrix(result);
-  }
+  cv::Matx44d result = a.toMatrix() * b.toMatrix();
+  Transform t = fromMatrix(result);
+  t.timestamp = a.timestamp;  // 或者其他策略
+  return t;
+}
+
 };
 
-inline Transform createTf(float x, float y, float z, const tf2::Quaternion &q) {
+inline Transform createTf(double x, double y, double z, const tf2::Quaternion &q) {
   return Transform(Position(x, y, z), q);
 }
 
@@ -454,7 +457,7 @@ public:
   Transform
   transform(const Transform &input, const std::string &source_frame,
             const std::string &target_frame,
-            const Time &time = std::chrono::steady_clock::now()) const {
+            const Time time ) const {
     Transform tf;
     if (!getTransform(source_frame, target_frame, time, tf)) {
       throw std::runtime_error("Cannot find transform from " + source_frame +
@@ -512,34 +515,43 @@ private:
     return result;
   }
 
-  Transform interpolate(const Transform &a, const Transform &b,
-                        double alpha) const {
-    tf2::Quaternion q = a.orientation.slerp(b.orientation, alpha);
-    Position p = a.position * (1.0 - alpha) + b.position * alpha;
-    return Transform(p, q);
-  }
+ Transform interpolate(const Transform &a, const Transform &b, double alpha) const {
+  tf2::Quaternion q = a.orientation.slerp(b.orientation, alpha);
+  Position p = a.position * (1.0 - alpha) + b.position * alpha;
+
+  // 插值出的时间戳
+  auto interpolated_time = a.timestamp + 
+    std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+      (b.timestamp - a.timestamp) * alpha);
+
+  return Transform(p, q, interpolated_time);
+}
+
 
   Transform lookupTransformAtTime(const FrameNode &node,
-                                  const Time &time) const {
-    const auto &transforms = node.transforms;
+                                const Time &time) const {
+  const auto &transforms = node.transforms;
 
-    auto it_after = transforms.lower_bound(time);
-    if (it_after == transforms.begin()) {
-      return it_after->second; // time <= 最早时间
-    }
-
-    if (it_after == transforms.end()) {
-      return std::prev(it_after)->second; // time > 最新时间
-    }
-
-    auto it_before = std::prev(it_after);
-    const Time &t0 = it_before->first;
-    const Time &t1 = it_after->first;
-
-    double alpha = std::chrono::duration<double>(time - t0).count() /
-                   std::chrono::duration<double>(t1 - t0).count();
-    return interpolate(it_before->second, it_after->second, alpha);
+  auto it_after = transforms.lower_bound(time);
+  if (it_after == transforms.begin()) {
+    return it_after->second;
   }
+
+  if (it_after == transforms.end()) {
+    return std::prev(it_after)->second;
+  }
+
+  auto it_before = std::prev(it_after);
+  const Time &t0 = it_before->first;
+  const Time &t1 = it_after->first;
+
+  double alpha = std::chrono::duration<double>(time - t0).count() /
+                 std::chrono::duration<double>(t1 - t0).count();
+
+  // 这里会使用两个变换的 timestamp 做插值
+  return interpolate(it_before->second, it_after->second, alpha);
+}
+
 
   Transform invert(const Transform &tf) const {
     cv::Matx44d inv = tf.toMatrix().inv();

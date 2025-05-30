@@ -1,6 +1,7 @@
 // armor_solver.cpp
 #include "control/armor_solver.hpp"
 #include "common/logger.hpp"
+#include "common/gobal.hpp"
 #include "yaml-cpp/yaml.h"
 #include <cmath>
 #include <iostream>
@@ -59,20 +60,17 @@ GimbalCmd Solver::solve(const Target &target,
                         std::chrono::steady_clock::time_point current_time) {
   // 1. 获取最新的云台 RPY
   std::array<double, 3> rpy{};
-  Transform tf_gimbal;
-  if (!tf_tree_.getTransform(target.frame_id, "gimbal_link", tf_gimbal)) {
-    throw std::runtime_error("Failed to get gimbal_link transform");
-  }
-  tf2::Matrix3x3(tf_gimbal.orientation).getRPY(rpy[0], rpy[1], rpy[2]);
-  rpy[1] = -rpy[1];
-  rpy[2] = -rpy[2];
-  // std::cout << "RPY: " << rpy[0]/M_PI*180 << " " << rpy[1]/M_PI*180 << " " <<
- // rpy[2]/M_PI*180 << std::endl;
+  
+
+  rpy[0]=last_roll;
+  rpy[1]=last_pitch+gimbal2camera_pitch;
+  rpy[2]=last_yaw;
+ // std::cout<<"pitch: "<<rpy[1]/M_PI*180<<std::endl;
   //  2. 预测目标位置与朝向
   Eigen::Vector3d pos(target.position_.x, target.position_.y,
                       target.position_.z);
   double yaw = target.yaw;
-  // std::cout<<"yaw: "<<yaw/M_PI*180<<std::endl;
+  //std::cout<<"yaw: "<<yaw/M_PI*180<<std::endl;
   using namespace std::chrono;
 
   double fly_t = trajectory_compensator_->getFlyingTime(pos);
