@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_BUILD_TYPE "Release")
 add_executable(${PROJECT_NAME}_openvino
-  src/driver/hik.cpp
+
   src/wust_vision_openvino.cpp
 
   src/common/tools.cpp
@@ -26,9 +26,10 @@ add_executable(${PROJECT_NAME}_openvino
   src/detect/graph_optimizer.cpp
   src/detect/armor_pose_estimator.cpp
   src/detect/ba_solver.cpp
+  src/driver/image_capturer.cpp
 )
 add_executable(${PROJECT_NAME}_trt
-  src/driver/hik.cpp
+
   src/wust_vision_trt.cpp
   src/detect/trt.cpp
   src/common/tools.cpp
@@ -48,6 +49,7 @@ add_executable(${PROJECT_NAME}_trt
   src/detect/graph_optimizer.cpp
   src/detect/armor_pose_estimator.cpp
   src/detect/ba_solver.cpp
+  src/driver/image_capturer.cpp
 
 
 )

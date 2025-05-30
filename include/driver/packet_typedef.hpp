@@ -87,23 +87,22 @@ struct HeaderFrame {
 //   int detect_color; // 0 red 1 blue
 
 // } __attribute__((packed));
-struct ReceiveAimINFO
-{
-  uint8_t cmd_ID;//命令码
-  uint32_t time_stamp;//时间戳
+struct ReceiveAimINFO {
+  uint8_t cmd_ID;      //命令码
+  uint32_t time_stamp; //时间戳
 
-  float yaw;    // rad
-  float pitch;  // rad
-  float roll;   // rad
+  float yaw;   // rad
+  float pitch; // rad
+  float roll;  // rad
 
-  float yaw_vel;    // rad/s
-  float pitch_vel;  // rad/s
-  float roll_vel;   // rad/s
+  float yaw_vel;   // rad/s
+  float pitch_vel; // rad/s
+  float roll_vel;  // rad/s
 
-  float bullet_speed; //m/s
-  float controller_delay; //s
+  float bullet_speed;     // m/s
+  float controller_delay; // s
   uint8_t manual_reset_count;
-  uint8_t detect_color;//0 red 1 blue
+  uint8_t detect_color; // 0 red 1 blue
 } __attribute__((packed));
 // IMU 数据包
 struct ReceiveImuData {

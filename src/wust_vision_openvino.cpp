@@ -15,6 +15,8 @@
 #include <opencv2/highgui.hpp>
 #include <ostream>
 #include <string>
+#include <unistd.h>
+
 WustVision::WustVision() {
   detector_ = nullptr;
   init();
@@ -24,8 +26,6 @@ WustVision::~WustVision() {
 
   is_inited_ = false;
   stopTimer();
-
-  camera_.stopCamera();
 
   detector_.reset();
 
@@ -59,7 +59,7 @@ void WustVision::init() {
   const std::string model_path =
       config["model"]["model_path"].as<std::string>();
   auto device_type = config["model"]["device_type"].as<std::string>();
-  ;
+
   float conf_threshold = config["model"]["conf_threshold"].as<float>();
   int top_k = config["model"]["top_k"].as<int>();
   float nms_threshold = config["model"]["nms_threshold"].as<float>();
@@ -113,34 +113,57 @@ void WustVision::init() {
   thread_pool_ =
       std::make_unique<ThreadPool>(std::thread::hardware_concurrency(), 100);
   solver_ = std::make_unique<Solver>(config);
-  std::string camera_serial = config["camera"]["serial"].as<std::string>("");
-  if (!camera_.initializeCamera(camera_serial)) {
-    WUST_ERROR(vision_logger) << "Camera initialization failed.";
-    return;
-  }
-  camera_.setParameters(config["camera"]["acquisition_frame_rate"].as<int>(),
-                        config["camera"]["exposure_time"].as<int>(),
-                        config["camera"]["gain"].as<double>(),
-                        config["camera"]["adc_bit_depth"].as<std::string>(),
-                        config["camera"]["pixel_format"].as<std::string>());
-  camera_.setFrameCallback([this](const ImageFrame &frame) {
-    if (is_inited_) {
-      thread_pool_->enqueue(
-          [frame = std::move(frame), this]() { processImage(frame); });
-    }
-  });
 
-  camera_.startCamera();
+  bool trigger_mode = config["camera"]["trigger_mode"].as<bool>(false);
+  bool invert_image = config["camera"]["invert_image"].as<bool>(false);
+  int exposure_time_us = config["camera"]["exposure_time_us"].as<int>(3500);
+  float gain = config["camera"]["gain"].as<float>(7.0f);
+
+  hikcamera::ImageCapturer::CameraProfile profile;
+  profile.trigger_mode = trigger_mode;
+  profile.invert_image = invert_image;
+  profile.exposure_time = std::chrono::microseconds(exposure_time_us);
+  profile.gain = gain;
+
+  capturer_ = std::make_unique<hikcamera::ImageCapturer>(
+      profile, nullptr, hikcamera::SyncMode::NONE);
+
   control_rate = config["control_rate"].as<int>(100);
   startTimer();
+  capture_running_ = true;
+  capture_thread_ =
+      std::make_unique<std::thread>(&WustVision::captureLoop, this);
 
   is_inited_ = true;
 }
+
+void WustVision::captureLoop() {
+  while (capture_running_ && is_inited_) {
+    // auto start = std::chrono::high_resolution_clock::now();
+    using namespace std::chrono_literals;
+
+    auto frame = capturer_->read();
+    int64_t timestamp_nanosec =
+        std::chrono::steady_clock::now().time_since_epoch().count();
+
+    if (!frame.empty()) {
+
+      thread_pool_->enqueue(
+          [frame = std::move(frame), this, timestamp_nanosec]() {
+            processImage(frame, timestamp_nanosec);
+          });
+    }
+  }
+}
 void WustVision::stop() {
   is_inited_ = false;
+  capture_running_ = false;
+  if (capture_thread_ && capture_thread_->joinable()) {
+    capture_thread_->join();
+  }
   stopTimer();
   std::this_thread::sleep_for(std::chrono::seconds(1));
-  camera_.stopCamera();
+
   detector_.reset();
   measure_tool_.reset();
   if (thread_pool_) {
@@ -500,10 +523,11 @@ void WustVision::DetectCallback(const std::vector<ArmorObject> &objs,
   measure_tool_->processDetectedArmors(objs, detect_color_, armors);
 
   infer_running_count_--;
+  armorsCallback(armors, src_img);
 
-  thread_pool_->enqueue([this, armors = std::move(armors), src_img]() {
-    this->armorsCallback(armors, src_img);
-  });
+  // thread_pool_->enqueue([this, armors = std::move(armors), src_img]() {
+  //   this->armorsCallback(armors, src_img);
+  // });
 
   // drawresult(src_img,objs,timestamp_nanosec);
 }
@@ -612,23 +636,17 @@ void WustVision::timerCallback() {
                        gimbal_cmd);
   }
 }
-void WustVision::processImage(const ImageFrame &frame) {
+
+void WustVision::processImage(const cv::Mat &frame, int64_t timestamp_nanosec) {
 
   img_recv_count_++;
   if (infer_running_count_.load() >= max_infer_running_) {
-    // WUST_WARN(vision_logger)<<"Infer running too much
-    // ("<<infer_running_count_.load()<<"), dropping frame";
     return;
   }
 
-  cv::Mat img = convertToMat(frame);
   infer_running_count_++;
   printStats();
-  auto timestamp_nanosec = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                               frame.timestamp.time_since_epoch())
-                               .count();
-
-  detector_->pushInput(img, timestamp_nanosec);
+  detector_->pushInput(frame, timestamp_nanosec);
 }
 
 void WustVision::printStats() {
