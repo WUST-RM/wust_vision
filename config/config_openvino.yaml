@@ -9,7 +9,7 @@ logger:
   use_logcli:  true
 
 debug:
-  debug_mode: false
+  debug_mode: true
   debug_w: 640
   debug_h: 480
   debug_show_dt: 0.05
@@ -42,8 +42,8 @@ camera:
   trigger_mode: false
   invert_image: false
   camera_info_path: "/home/nuc/wust_vision/config/camera_info.yaml"
-  exposure_time_us: 4500
-  gain: 16.0
+  exposure_time_us: 2500
+  gain: 7.0
 
 detect_color: 0
 tf:
@@ -56,7 +56,7 @@ tf:
 
 
 tracker:
-  target_frame: "odom"
+  target_frame: "gimbal_odom"
   max_match_distance: 0.5
   max_match_yaw_diff: 0.5
   max_match_z_diff: 0.1

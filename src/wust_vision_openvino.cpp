@@ -509,7 +509,7 @@ void WustVision::DetectCallback(const std::vector<ArmorObject> &objs,
     imu_to_camera_ = eigen_quat.toRotationMatrix(); // Eigen::Matrix3d
     imu_to_camera_ =
         Sophus::SO3d::fitToSO3(eigen_quat.toRotationMatrix()).matrix();
-    //  std::cout<<imu_to_camera_<<std::endl;
+      //std::cout<<imu_to_camera_<<std::endl;
 
   } catch (const std::exception &e) {
 
@@ -531,6 +531,7 @@ void WustVision::DetectCallback(const std::vector<ArmorObject> &objs,
 }
 void WustVision::transformArmorData(Armors &armors) {
   for (auto &armor : armors.armors) {
+    //armor.number = ArmorNumber::OUTPOST;
     try {
       Transform tf(armor.pos, armor.ori, armors.timestamp);
       auto pose_in_target_frame = tf_tree_.transform(

@@ -28,7 +28,10 @@ public:
   Quaternion() : x(0.0), y(0.0), z(0.0), w(1.0) {}
   Quaternion(double x_, double y_, double z_, double w_)
       : x(x_), y(y_), z(z_), w(w_) {}
-
+  Quaternion operator*(const Quaternion &other) const {
+        Eigen::Quaterniond q = toEigenQuat() * other.toEigenQuat();
+        return Quaternion(q.x(), q.y(), q.z(), q.w());
+  }
   cv::Matx33d toRotationMatrix() const {
     double xx = x * x, yy = y * y, zz = z * z;
     double xy = x * y, xz = x * z, yz = y * z;
@@ -109,6 +112,9 @@ public:
     return Quaternion((q1.x * s0) + (q2.x * s1), (q1.y * s0) + (q2.y * s1),
                       (q1.z * s0) + (q2.z * s1), (q1.w * s0) + (q2.w * s1));
   }
+  Eigen::Quaterniond toEigenQuat() const {
+    return Eigen::Quaterniond(w, x, y, z);
+}
 };
 
 inline double getYawFromQuaternion(const Quaternion &q) {
@@ -406,78 +412,106 @@ inline tf2::Quaternion eulerToQuaternion(double roll, double pitch,
   return q;
 }
 
+
+
 class TfTree {
-  public:
-      using Time = std::chrono::steady_clock::time_point;
-      using Duration = std::chrono::steady_clock::duration;
-      static constexpr Duration STATIC_THRESHOLD = std::chrono::hours(24); // 24小时视为静态
-      static constexpr Duration RECENT_THRESHOLD = std::chrono::nanoseconds(100); // 0.0001ms内视为最新
-      //static constexpr Duration RECENT_THRESHOLD = std::chrono::milliseconds(1); // 1ms内视为最新
-      
-      // 设置变换关系，支持静态标记
-      void setTransform(const std::string &parent, const std::string &child,
-                        const Transform &tf, bool is_static = false) {
-          std::unique_lock lock(mutex_);
-          FrameNode &node = nodes_[child];
-          node.parent_frame = parent;
-          
-          if (is_static) {
-              // 静态变换：清除所有历史，只保留当前变换
-              node.transforms.clear();
-              node.transforms[tf.timestamp] = tf;
-              node.is_static = true;
-          } else {
-              // 动态变换：添加新变换，维护最近1000个变换
-              node.is_static = false;
-              node.transforms[tf.timestamp] = tf;
-              
-              // 动态变换缓冲区管理（保留最近1000个）
-              if (node.transforms.size() > 3000) {
-                  node.transforms.erase(node.transforms.begin());
-              }
-          }
-      }
-  
-      // 核心查询方法
-      bool getTransform(const std::string &source_frame,
-                        const std::string &target_frame, const Time &time,
-                        Transform &out) const {
-          std::shared_lock lock(mutex_);
-          if (source_frame == target_frame) {
-              out = Transform(); // Identity
-              return true;
-          }
-  
-          try {
-              auto path_source = getPathToRoot(source_frame);
-              auto path_target = getPathToRoot(target_frame);
-  
-              int i = path_source.size() - 1, j = path_target.size() - 1;
-              while (i >= 0 && j >= 0 && path_source[i] == path_target[j]) {
-                  --i;
-                  --j;
-              }
-  
-              Transform tf_src_to_common =
-                  accumulatePath(path_source, i + 1, time, false);
-              Transform tf_common_to_target =
-                  accumulatePath(path_target, j + 1, time, true);
-  
-              out = Transform::compose(tf_common_to_target, tf_src_to_common);
-              return true;
-          } catch (...) {
-              return false;
-          }
-      }
-      Transform transform(const Transform &input, 
-        const std::string &source_frame,
-        const std::string &target_frame,
-        const Time time) const {
+public:
+    using Time = std::chrono::steady_clock::time_point;
+    using Duration = std::chrono::steady_clock::duration;
+    static constexpr Duration STATIC_THRESHOLD = std::chrono::hours(24); // 24小时视为静态
+    static constexpr Duration RECENT_THRESHOLD = std::chrono::milliseconds(1); // 1ms内视为最新
+    
+    // 设置变换关系，支持静态标记
+    void setTransform(const std::string &parent, const std::string &child,
+                      const Transform &tf, bool is_static = false) {
+        std::unique_lock lock(mutex_);
+        FrameNode &node = nodes_[child];
+        node.parent_frame = parent;
+        
+        if (is_static) {
+            // 静态变换：清除所有历史，只保留当前变换
+            node.transforms.clear();
+            node.transforms[tf.timestamp] = tf;
+            node.is_static = true;
+            // 静态变换速度为零
+            node.linear_velocity = Eigen::Vector3d::Zero();
+            node.angular_velocity = Eigen::Vector3d::Zero();
+        } else {
+            // 动态变换：添加新变换，维护最近1000个变换
+            node.is_static = false;
+            
+            // 计算速度（如果有前一个变换）
+            if (!node.transforms.empty()) {
+                const auto& last_tf = node.transforms.rbegin()->second;
+                double dt = std::chrono::duration<double>(tf.timestamp - last_tf.timestamp).count();
+                
+                if (dt > 1e-6) {
+                    // 计算线速度
+                    node.linear_velocity = (tf.position.toEigen() - last_tf.position.toEigen()) / dt;
+                    
+                    // 计算角速度
+                    Eigen::Quaterniond dq = tf.orientation.toEigenQuat() * 
+                                            last_tf.orientation.toEigenQuat().inverse();
+                    node.angular_velocity = 2.0 * dq.vec() / dt;
+                    
+                    // 限制最大角速度（避免异常值）
+                    double max_ang_vel = 10.0; // rad/s
+                    if (node.angular_velocity.norm() > max_ang_vel) {
+                        node.angular_velocity = node.angular_velocity.normalized() * max_ang_vel;
+                    }
+                }
+            }
+            
+            node.transforms[tf.timestamp] = tf;
+            
+            // 动态变换缓冲区管理（保留最近1000个）
+            if (node.transforms.size() > 1000) {
+                node.transforms.erase(node.transforms.begin());
+            }
+        }
+    }
+
+    // 核心查询方法
+    bool getTransform(const std::string &source_frame,
+                      const std::string &target_frame, const Time &time,
+                      Transform &out) const {
+        std::shared_lock lock(mutex_);
+        if (source_frame == target_frame) {
+            out = Transform(); // Identity
+            return true;
+        }
+
+        try {
+            auto path_source = getPathToRoot(source_frame);
+            auto path_target = getPathToRoot(target_frame);
+
+            int i = path_source.size() - 1, j = path_target.size() - 1;
+            while (i >= 0 && j >= 0 && path_source[i] == path_target[j]) {
+                --i;
+                --j;
+            }
+
+            Transform tf_src_to_common =
+                accumulatePath(path_source, i + 1, time, false);
+            Transform tf_common_to_target =
+                accumulatePath(path_target, j + 1, time, true);
+
+            out = Transform::compose(tf_common_to_target, tf_src_to_common);
+            return true;
+        } catch (...) {
+            return false;
+        }
+    }
+    
+    Transform transform(const Transform &input, 
+                        const std::string &source_frame,
+                        const std::string &target_frame,
+                        const Time time) const {
         // 1. 获取坐标系间变换
         Transform frame_tf;
         if (!getTransform(source_frame, target_frame, time, frame_tf)) {
-        throw std::runtime_error("Cannot find transform from " + 
-                              source_frame + " to " + target_frame);    
+            throw std::runtime_error("Cannot find transform from " + 
+                                    source_frame + " to " + target_frame);    
         }
 
         // 2. 转换为 Eigen 等距变换
@@ -489,153 +523,219 @@ class TfTree {
 
         // 4. 转换回 Transform 结构
         return Transform::fromEigen(result_iso, input.timestamp);
+    }
+    
+    // 更新帧速度（外部接口）
+    void updateFrameVelocity(const std::string& frame, 
+                            const Eigen::Vector3d& linear_vel,
+                            const Eigen::Vector3d& angular_vel) {
+        std::unique_lock lock(mutex_);
+        if (nodes_.count(frame)) {
+            nodes_[frame].linear_velocity = linear_vel;
+            nodes_[frame].angular_velocity = angular_vel;
         }
-  
-  private:
-      struct FrameNode {
-          std::string parent_frame;
-          std::map<Time, Transform> transforms;
-          bool is_static = false;
-          mutable Time last_query_time;  // 上次查询时间
-          mutable Transform last_transform; // 上次查询结果缓存
-      };
-  
-      std::unordered_map<std::string, FrameNode> nodes_;
-      mutable std::shared_mutex mutex_;
-  
-      // 获取到根节点的路径（带环检测）
-      std::vector<std::string> getPathToRoot(const std::string &frame) const {
-          std::vector<std::string> path;
-          std::set<std::string> visited;
-  
-          std::string current = frame;
-          while (nodes_.count(current)) {
-              if (visited.count(current))
-                  throw std::runtime_error("TF loop detected.");
-              visited.insert(current);
-              path.push_back(current);
-              current = nodes_.at(current).parent_frame;
-          }
-          path.push_back(current); // root
-          return path;
-      }
-  
-      // 沿路径累加变换
-      Transform accumulatePath(const std::vector<std::string> &path, int end_idx,
-                               const Time &time, bool reverse) const {
-          Transform result;
-          if (!reverse) {
-              for (int i = 0; i < end_idx; ++i) {
-                  const auto &f = path[i];
-                  const FrameNode &node = nodes_.at(f);
-                  Transform tf = lookupTransformAtTime(node, time);
-                  result = Transform::compose(tf, result);
-              }
-          } else {
-              for (int i = end_idx - 1; i >= 0; --i) {
-                  const auto &f = path[i];
-                  const FrameNode &node = nodes_.at(f);
-                  Transform tf = lookupTransformAtTime(node, time);
-                  result = Transform::compose(invert(tf), result);
-              }
-          }
-          return result;
-      }
-  
-      // 时间插值查询（核心优化）
-      Transform lookupTransformAtTime(const FrameNode &node,
-                                      const Time &time) const {
-          // 静态变换直接返回（忽略时间戳）
-          if (node.is_static) {
-              return node.transforms.begin()->second;
-          }
-          
-          // 检查时间查询缓存（避免重复计算）
-          if (std::chrono::abs(time - node.last_query_time) < RECENT_THRESHOLD) {
-              return node.last_transform;
-          }
-          
-          const auto &transforms = node.transforms;
-          
-          // 空变换处理
-          if (transforms.empty()) {
-              throw std::runtime_error("No transforms available");
-          }
-          
-          // 单变换直接返回
-          if (transforms.size() == 1) {
-              return transforms.begin()->second;
-          }
-          
-          // 查找时间边界
-          auto it_after = transforms.lower_bound(time);
-          
-          // 边界情况处理
-          if (it_after == transforms.begin()) {
-              return cacheResult(node, time, it_after->second);
-          }
-          if (it_after == transforms.end()) {
-              return cacheResult(node, time, std::prev(it_after)->second);
-          }
-          
-          // 获取前后变换
-          auto it_before = std::prev(it_after);
-          const Time &t0 = it_before->first;
-          const Time &t1 = it_after->first;
-          
-          // 时间差过小直接返回最近变换
-          Duration delta = t1 - t0;
-          if (delta < RECENT_THRESHOLD) {
-              return cacheResult(node, time, it_after->second);
-          }
-          
-          // 计算插值比例
-          double alpha = std::chrono::duration<double>(time - t0).count() /
-                       std::chrono::duration<double>(delta).count();
-          
-          // 执行插值
-          return cacheResult(node, time, 
-                            interpolate(it_before->second, it_after->second, alpha));
-      }
-      
-      // 插值结果缓存
-      Transform cacheResult(const FrameNode &node, const Time &time, 
-                           const Transform &result) const {
-          // 非const访问需要mutable
-          const_cast<FrameNode&>(node).last_query_time = time;
-          const_cast<FrameNode&>(node).last_transform = result;
-          return result;
-      }
-  
-      // 高效插值实现（使用Eigen）
-      Transform interpolate(const Transform &a, const Transform &b, double alpha) const {
-          // 位置线性插值
-          Eigen::Vector3d pos = 
-              (1.0 - alpha) * a.position.toEigen() + 
-              alpha * b.position.toEigen();
-          
-          // 旋转球面插值
-          Eigen::Quaterniond qa(a.orientation.w, a.orientation.x, 
-                               a.orientation.y, a.orientation.z);
-          Eigen::Quaterniond qb(b.orientation.w, b.orientation.x, 
-                               b.orientation.y, b.orientation.z);
-          Eigen::Quaterniond q = qa.slerp(alpha, qb).normalized();
-          
-          // 时间戳插值
-          auto interpolated_time = a.timestamp + 
-              std::chrono::duration_cast<Duration>(
-                  std::chrono::duration<double>((b.timestamp - a.timestamp) * alpha));
-          
-          return Transform(Position::fromEigen(pos), 
-                           tf2::Quaternion(q.x(), q.y(), q.z(), q.w()),
-                           interpolated_time);
-      }
-  
-      // 变换求逆（使用Eigen）
-      Transform invert(const Transform &tf) const {
-          Eigen::Isometry3d iso = tf.toEigenIso();
-          return Transform::fromEigen(iso.inverse());
-      }
-  };
+    }
 
+private:
+    struct FrameNode {
+        std::string parent_frame;
+        std::map<Time, Transform> transforms;
+        bool is_static = false;
+        mutable Time last_query_time;  // 上次查询时间
+        mutable Transform last_transform; // 上次查询结果缓存
+        Eigen::Vector3d linear_velocity = Eigen::Vector3d::Zero();
+        Eigen::Vector3d angular_velocity = Eigen::Vector3d::Zero();
+    };
+
+    std::unordered_map<std::string, FrameNode> nodes_;
+    mutable std::shared_mutex mutex_;
+
+    // 获取到根节点的路径（带环检测）
+    std::vector<std::string> getPathToRoot(const std::string &frame) const {
+        std::vector<std::string> path;
+        std::set<std::string> visited;
+
+        std::string current = frame;
+        while (nodes_.count(current)) {
+            if (visited.count(current))
+                throw std::runtime_error("TF loop detected.");
+            visited.insert(current);
+            path.push_back(current);
+            current = nodes_.at(current).parent_frame;
+        }
+        path.push_back(current); // root
+        return path;
+    }
+
+    // 沿路径累加变换
+    Transform accumulatePath(const std::vector<std::string> &path, int end_idx,
+                             const Time &time, bool reverse) const {
+        Transform result;
+        if (!reverse) {
+            for (int i = 0; i < end_idx; ++i) {
+                const auto &f = path[i];
+                const FrameNode &node = nodes_.at(f);
+                Transform tf = lookupTransformAtTime(node, time);
+                result = Transform::compose(tf, result);
+            }
+        } else {
+            for (int i = end_idx - 1; i >= 0; --i) {
+                const auto &f = path[i];
+                const FrameNode &node = nodes_.at(f);
+                Transform tf = lookupTransformAtTime(node, time);
+                result = Transform::compose(invert(tf), result);
+            }
+        }
+        return result;
+    }
+
+    // 时间插值查询（核心优化）
+    Transform lookupTransformAtTime(const FrameNode &node,
+                                    const Time &time) const {
+        // 静态变换直接返回（忽略时间戳）
+        if (node.is_static) {
+            return node.transforms.begin()->second;
+        }
+        
+        // 检查时间查询缓存（避免重复计算）
+        if (std::chrono::abs(time - node.last_query_time) < RECENT_THRESHOLD) {
+            return node.last_transform;
+        }
+        
+        const auto &transforms = node.transforms;
+        
+        // 空变换处理
+        if (transforms.empty()) {
+            throw std::runtime_error("No transforms available");
+        }
+        
+        // 单变换直接返回
+        if (transforms.size() == 1) {
+            return cacheResult(node, time, transforms.begin()->second);
+        }
+        
+        // 查找时间边界
+        auto it_after = transforms.lower_bound(time);
+        
+        // 边界情况处理
+        if (it_after == transforms.begin()) {
+            return cacheResult(node, time, it_after->second);
+        }
+        if (it_after == transforms.end()) {
+            return cacheResult(node, time, std::prev(it_after)->second);
+        }
+        
+        // 获取前后变换
+        auto it_before = std::prev(it_after);
+        const Time &t0 = it_before->first;
+        const Time &t1 = it_after->first;
+        
+        // 时间差过小直接返回最近变换
+        Duration delta = t1 - t0;
+        if (delta < RECENT_THRESHOLD) {
+            return cacheResult(node, time, it_after->second);
+        }
+        
+        // 计算插值比例
+        double alpha = std::chrono::duration<double>(time - t0).count() /
+                     std::chrono::duration<double>(delta).count();
+        
+        // 使用带速度模型的插值
+        return cacheResult(node, time, 
+                          interpolateWithVelocity(
+                              it_before->second, 
+                              it_after->second, 
+                              alpha, 
+                              node,
+                              time - t0
+                          ));
+    }
+    
+    // 插值结果缓存
+    Transform cacheResult(const FrameNode &node, const Time &time, 
+                         const Transform &result) const {
+        // 非const访问需要mutable
+        const_cast<FrameNode&>(node).last_query_time = time;
+        const_cast<FrameNode&>(node).last_transform = result;
+        return result;
+    }
+
+    // 带速度模型的插值实现
+    Transform interpolateWithVelocity(const Transform &a, const Transform &b, 
+                                     double alpha, const FrameNode &node,
+                                     Duration time_since_a) const {
+        // 基础插值（位置和旋转）
+        Transform base = interpolate(a, b, alpha);
+        
+        // 应用速度修正（仅当速度可用时）
+        if (!node.linear_velocity.isZero() || !node.angular_velocity.isZero()) {
+            double dt = std::chrono::duration<double>(time_since_a).count();
+            double dt_alpha = dt * alpha;
+            
+            // 位置修正（基于线速度）
+            if (!node.linear_velocity.isZero()) {
+                base.position = Position::fromEigen(
+                    base.position.toEigen() + node.linear_velocity * dt_alpha
+                );
+            }
+            
+            // 旋转修正（基于角速度）
+            if (!node.angular_velocity.isZero()) {
+                // 计算旋转修正量
+                double angle = node.angular_velocity.norm() * dt_alpha;
+                if (angle > 1e-6) {
+                    Eigen::Vector3d axis = node.angular_velocity.normalized();
+                    Eigen::AngleAxisd rotation(angle, axis);
+                    Eigen::Quaterniond rot_correction(rotation);
+                    
+                    // 应用旋转修正
+                    Eigen::Quaterniond base_q(
+                        base.orientation.w, 
+                        base.orientation.x, 
+                        base.orientation.y, 
+                        base.orientation.z
+                    );
+                    base_q = rot_correction * base_q;
+                    base_q.normalize();
+                    
+                    base.orientation = tf2::Quaternion(
+                        base_q.x(), base_q.y(), base_q.z(), base_q.w()
+                    );
+                }
+            }
+        }
+        
+        return base;
+    }
+
+    // 基础插值实现（使用Eigen）
+    Transform interpolate(const Transform &a, const Transform &b, double alpha) const {
+        // 位置线性插值
+        Eigen::Vector3d pos = 
+            (1.0 - alpha) * a.position.toEigen() + 
+            alpha * b.position.toEigen();
+        
+        // 旋转球面插值
+        Eigen::Quaterniond qa(a.orientation.w, a.orientation.x, 
+                             a.orientation.y, a.orientation.z);
+        Eigen::Quaterniond qb(b.orientation.w, b.orientation.x, 
+                             b.orientation.y, b.orientation.z);
+        Eigen::Quaterniond q = qa.slerp(alpha, qb).normalized();
+        
+        // 时间戳插值
+        auto interpolated_time = a.timestamp + 
+            std::chrono::duration_cast<Duration>(
+                std::chrono::duration<double>((b.timestamp - a.timestamp) * alpha));
+        
+        return Transform(Position::fromEigen(pos), 
+                         tf2::Quaternion(q.x(), q.y(), q.z(), q.w()),
+                         interpolated_time);
+    }
+
+    // 变换求逆（使用Eigen）
+    Transform invert(const Transform &tf) const {
+        Eigen::Isometry3d iso = tf.toEigenIso();
+        return Transform::fromEigen(iso.inverse());
+    }
+};
 #endif // TF2_HPP

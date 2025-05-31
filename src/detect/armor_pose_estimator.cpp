@@ -38,8 +38,8 @@ ArmorPoseEstimator::ArmorPoseEstimator(const std::string &camera_info_path) {
   ba_solver_ = std::make_unique<BaSolver>(camera_k, camera_d);
 
   R_gimbal_camera_ = Eigen::Matrix3d::Identity();
-  // R_gimbal_camera_ << 0, 1, 0, 0, 0, -1, -1, 0, 0;
-  // R_gimbal_camera_ << 0, 0, -1, 1, 0, 0, 0, -1, 0;
+  //R_gimbal_camera_ << 0, 1, 0, 0, 0, -1, -1, 0, 0;
+   //R_gimbal_camera_ << 0, 0, -1, 1, 0, 0, 0, -1, 0;
   R_gimbal_camera_ << 0, 0, 1, -1, 0, 0, 0, -1, 0;
 }
 
@@ -187,6 +187,7 @@ void ArmorPoseEstimator::sortPnPResult(const ArmorObject &armor,
       (rpy2[0] > 10 * 180 / M_PI)) {
     return;
   }
+  
 
   // 计算灯条在图像中的倾斜角度
   double l_angle =

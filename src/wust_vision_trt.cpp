@@ -410,7 +410,7 @@ void WustVision::armorsCallback(Armors armors_, const cv::Mat &src_img) {
 Armors WustVision::visualizeTargetProjection(Target armor_target_) {
 
   Armors armor_data;
-  armor_data.frame_id = "odom";
+  armor_data.frame_id = "gimbal_odom";
   armor_data.timestamp = armor_target_.timestamp;
 
   if (armor_target_.tracking) {
