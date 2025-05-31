@@ -5,11 +5,11 @@ logger:
   log_level: "DEBUG"
   log_path: "/home/nuc/wust_log"
   use_simplelog: true
-  use_logfile: false
+  use_logfile: true
   use_logcli:  true
 
 debug:
-  debug_mode: true
+  debug_mode: false
   debug_w: 640
   debug_h: 480
   debug_show_dt: 0.05
@@ -42,8 +42,8 @@ camera:
   trigger_mode: false
   invert_image: false
   camera_info_path: "/home/nuc/wust_vision/config/camera_info.yaml"
-  exposure_time_us: 2500
-  gain: 7.0
+  exposure_time_us: 4500
+  gain: 16.0
 
 detect_color: 0
 tf:
@@ -81,8 +81,10 @@ tracker:
     r_z: 0.0016992016
     r_yaw: 0.6092185450
 solver:
+      shooting_range_w: 0.135
+      shooting_range_h: 0.135
       prediction_delay: 0.0
-      controller_delay: 0.035
+      controller_delay: 0.0
       max_tracking_v_yaw: 180.0 #转速(rad/s)大于这个值时瞄准机器人中心 
       side_angle: 20.0 
       bullet_speed: 23.0

@@ -208,13 +208,13 @@ void WustVision::startTimer() {
 void WustVision::initTF() {
   // odom 是世界坐标系的根节点
   tf_tree_.setTransform("", "odom",
-                        createTf(0, 0, 0, tf2::Quaternion(0, 0, 0, 1)));
+                        createTf(0, 0, 0, tf2::Quaternion(0, 0, 0, 1)),true);
 
   // camera 相对于 odom，设置 odom -> camera 的变换
   tf_tree_.setTransform("odom", "gimbal_odom",
-                        createTf(0, 0, 0, tf2::Quaternion(0, 0, 0, 1)));
+                        createTf(0, 0, 0, tf2::Quaternion(0, 0, 0, 1)),true);
   tf_tree_.setTransform("gimbal_odom", "gimbal_link",
-                        createTf(0, 0, 0, tf2::Quaternion(0, 0, 0, 1)));
+                        createTf(0, 0, 0, tf2::Quaternion(0, 0, 0, 1)),false);
   gimbal2camera_roll = gimbal2camera_roll_ * M_PI / 180;
   gimbal2camera_pitch = gimbal2camera_pitch_ * M_PI / 180;
   gimbal2camera_yaw = gimbal2camera_yaw_ * M_PI / 180;
@@ -222,7 +222,7 @@ void WustVision::initTF() {
       gimbal2camera_roll, gimbal2camera_pitch, gimbal2camera_yaw);
   tf_tree_.setTransform("gimbal_link", "camera",
                         createTf(gimbal2camera_x_, gimbal2camera_y_,
-                                 gimbal2camera_z_, origimbal2camera));
+                                 gimbal2camera_z_, origimbal2camera),true);
 
   // camera_optical_frame 相对于 camera，设置 camera -> camera_optical_frame
   // 的旋转变换
@@ -234,7 +234,7 @@ void WustVision::initTF() {
   orientation.setRPY(roll, pitch, yaw);
 
   tf_tree_.setTransform("camera", "camera_optical_frame",
-                        createTf(0, 0, 0, orientation));
+                        createTf(0, 0, 0, orientation),true);
 }
 void WustVision::initSerial() {
   SerialPortConfig cfg{/*baud*/ 115200, /*csize*/ 8,
@@ -360,7 +360,7 @@ void WustVision::armorsCallback(Armors armors_, const cv::Mat &src_img) {
   }
   if (use_calculation_) {
     command_callback(armors_);
-    return;
+    //return;
   }
   Target target_;
   auto time = armors_.timestamp;
@@ -542,9 +542,10 @@ void WustVision::transformArmorData(Armors &armors) {
 
       armor.yaw = getRPYFromQuaternion(armor.target_ori).yaw;
       double yaw = armor.yaw * 180 / M_PI;
-      auto now = std::chrono::steady_clock::now();
-      std::cout << "now (ns since epoch): " << now.time_since_epoch().count() << " ns" << std::endl;
-      std::cout << "timestamp (ns): " << pose_in_target_frame.timestamp.time_since_epoch().count() << " ns" << std::endl;
+      //std::cout<<"Z"<< armor.target_pos.z<<std::endl;
+      // auto now = std::chrono::steady_clock::now();
+      // std::cout << "now (ns since epoch): " << now.time_since_epoch().count() << " ns" << std::endl;
+      // std::cout << "timestamp (ns): " << pose_in_target_frame.timestamp.time_since_epoch().count() << " ns" << std::endl;
       // std::cout<<"YAW:"<<yaw<<std::endl;
 
       //  WUST_DEBUG(vision_logger)<<"Z:"<<armor.target_pos.z;

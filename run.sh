@@ -69,15 +69,16 @@ if [ $? -ne 0 ]; then
     echo -e "${red}\n--- Failed to copy wust_vision_trt to /usr/local/bin ---${reset}"
     exit 1
 fi
-sudo cp ./wust_vision_openvino /usr/local/bin/
+#sudo cp ./wust_vision_openvino /usr/local/bin/
 if [ $? -ne 0 ]; then
     echo -e "${red}\n--- Failed to copy wust_vision_openvino to /usr/local/bin ---${reset}"
     exit 1
 fi
 echo -e "${blue}\n----- Both executables copied to /usr/local/bin -----${reset}"
 
-
-
+rm /tmp/calculation.txt 
+rm /tmp/aim_status.txt
+rm /tmp/target_status.txt
 # Check input argument to decide which program to run
 if [ "$1" == "trt" ]; then
     echo -e "${yellow}\n<--- Running TensorRT version --->${reset}"

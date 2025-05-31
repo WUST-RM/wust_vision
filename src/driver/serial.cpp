@@ -248,10 +248,10 @@ void Serial::aim_cbk(ReceiveAimINFO &aim_data) {
   
   
   
-  q.setRPY(-roll, -pitch, yaw);
+  q.setRPY(roll, -pitch, yaw);
 
   Transform gimbal_tf(Position(0, 0, 0), q);
-  tf_tree_.setTransform("gimbal_odom", "gimbal_link", gimbal_tf);
+  tf_tree_.setTransform("gimbal_odom", "gimbal_link", gimbal_tf,false);
 
   detect_color_ = aim_data.detect_color;
   //controller_delay = aim_data.controller_delay;
