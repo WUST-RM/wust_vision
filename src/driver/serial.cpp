@@ -34,7 +34,8 @@ void Serial::stopThread() {
   if (receive_thread_.joinable()) {
     receive_thread_.join();
   }
-  if (send_thread_.joinable()) {
+  if(send_thread_.joinable())
+  {
     send_thread_.join();
   }
   if (driver_.is_open()) {
@@ -120,7 +121,7 @@ void Serial::receiveData() {
       //   // WUST_INFO(serial_logger) << "Finding SOF, count=" << sof_count ;
       //   continue;
       // }
-      // sof_count = 0;
+      //sof_count = 0;
 
       // 读剩余 header（3 字节）
       // header_buf.resize(3);
@@ -139,7 +140,7 @@ void Serial::receiveData() {
       // }
 
       // 读 data + CRC16
-      // data_buf.resize(hf.len + 2);
+      //data_buf.resize(hf.len + 2);
       // int received = driver_.receive(data_buf);
       // int total = received;
       // int remain = (hf.len + 2) - received;
@@ -147,13 +148,13 @@ void Serial::receiveData() {
       // while (remain > 0) {
       //   std::vector<uint8_t> tmp(remain);
       //   int n = driver_.receive(tmp);
-      //   data_buf.insert(data_buf.begin() + total, tmp.begin(), tmp.begin() +
-      //   n); total += n; remain -= n;
+      //   data_buf.insert(data_buf.begin() + total, tmp.begin(), tmp.begin() + n);
+      //   total += n;
+      //   remain -= n;
       // }
 
       // // 把 header_buf 拼回 data_buf 前面，得到完整包
-      // data_buf.insert(data_buf.begin(), header_buf.begin(),
-      // header_buf.end());
+      // data_buf.insert(data_buf.begin(), header_buf.begin(), header_buf.end());
 
       //（可选）CRC16 校验
       // if (!crc16::verify_CRC16_check_sum(data_buf)) {
@@ -191,8 +192,12 @@ void Serial::aim_cbk(ReceiveAimINFO &aim_data) {
   static int valid_count = 0;
   static bool out_of_order_detected = false;
   static int last_reset_count = -1;
-
-  // std::cout<<"roll:"<<aim_data.roll<<"pitch:"<<aim_data.pitch<<"yaw:"<<aim_data.yaw<<std::endl;
+  if(std::isnan(aim_data.roll)||std::isnan(aim_data.pitch)||std::isnan(aim_data.yaw))
+  {
+    return;
+  }
+  
+ // WUST_DEBUG("AAA")<<"roll:"<<aim_data.roll<<"pitch:"<<aim_data.pitch<<"yaw:"<<aim_data.yaw;
 
   // if (!out_of_order_detected) {
   //   if (aim_data.time_stamp <= last_time) {
@@ -205,13 +210,12 @@ void Serial::aim_cbk(ReceiveAimINFO &aim_data) {
   //     last_time = aim_data.time_stamp;
   //   }
   // }
-
+  
   // if (out_of_order_detected) {
   //   if (aim_data.time_stamp > last_time) {
   //     valid_count++;
   //     if (valid_count >= 100) {
-  //       WUST_INFO(serial_logger) << "IMU timestamp recovered after 100 valid
-  //       "
+  //       WUST_INFO(serial_logger) << "IMU timestamp recovered after 100 valid "
   //                                   "frames, exiting recovery mode.";
   //       out_of_order_detected = false;
   //       valid_count = 0;
@@ -223,11 +227,13 @@ void Serial::aim_cbk(ReceiveAimINFO &aim_data) {
   //   }
   //   return;
   // }
-  double roll = aim_data.roll * M_PI / 180.0;
-  double pitch = aim_data.pitch * M_PI / 180.0;
-  double yaw = aim_data.yaw * M_PI / 180.0;
-  // WUST_INFO(serial_logger)<<"roll:"<<roll<<" pitch:"<<pitch<<" yaw:"<<yaw;
-
+  double roll= aim_data.roll*M_PI/180.0;
+  double pitch= aim_data.pitch*M_PI/180.0;
+  double yaw= aim_data.yaw*M_PI/180.0;
+ // WUST_INFO(serial_logger)<<"roll:"<<aim_data.roll<<" pitch:"<<aim_data.pitch<<" yaw:"<<aim_data.yaw;
+  last_pitch=pitch;
+  last_roll=roll;
+  last_yaw=yaw;
   if (aim_data.manual_reset_count != last_reset_count) {
     WUST_INFO(serial_logger)
         << "Manual reset count changed: " << last_reset_count << " -> "
@@ -239,15 +245,17 @@ void Serial::aim_cbk(ReceiveAimINFO &aim_data) {
   }
 
   tf2::Quaternion q;
-
-  q.setRPY(roll, pitch, yaw);
+  
+  
+  
+  q.setRPY(roll, -pitch, yaw);
 
   Transform gimbal_tf(Position(0, 0, 0), q);
-  tf_tree_.setTransform("gimbal_odom", "gimbal_link", gimbal_tf);
+  tf_tree_.setTransform("gimbal_odom", "gimbal_link", gimbal_tf,false);
 
   detect_color_ = aim_data.detect_color;
-  controller_delay = aim_data.controller_delay;
-  velocity = aim_data.bullet_speed;
+  //controller_delay = aim_data.controller_delay;
+  velocity = 23;
 
   if (debug_mode_) {
     dumpAimToFile(aim_data, "/tmp/aim_status.txt");
@@ -302,6 +310,26 @@ void Serial::imu_cbk(ReceiveImuData &imu_data) {
   Transform gimbal_tf(Position(0, 0, 0), q);
 
   tf_tree_.setTransform("gimbal_odom", "gimbal_link", gimbal_tf);
+  // double gimbal2camera_roll = gimbal2camera_roll_ * M_PI / 180;
+  // double gimbal2camera_pitch = gimbal2camera_pitch_ * M_PI / 180;
+  // double gimbal2camera_yaw = gimbal2camera_yaw_ * M_PI / 180;
+  // tf2::Quaternion origimbal2camera = eulerToQuaternion(
+  //     0.0, 0.0, 180);
+  // tf_tree_.setTransform("gimbal_link", "camera",
+  //                       createTf(0, 0,
+  //                                0, origimbal2camera));
+
+  // // camera_optical_frame 相对于 camera，设置 camera -> camera_optical_frame
+  // // 的旋转变换
+  // double yaw = M_PI / 2;
+  // double roll = -M_PI / 2;
+  // double pitch = 0.0;
+
+  // tf2::Quaternion orientation;
+  // orientation.setRPY(roll, pitch, yaw);
+
+  // tf_tree_.setTransform("camera", "camera_optical_frame",
+  //                       createTf(0, 0, 0, orientation));
   if (debug_mode_) {
     dumpImuToFile(imu_data, "/tmp/imu_status.txt");
   }
@@ -310,16 +338,15 @@ void Serial::imu_cbk(ReceiveImuData &imu_data) {
 void Serial::sendData() {
   WUST_INFO(serial_logger) << "Start sendData!";
 
-  // send_robot_cmd_data_.frame_header.sof = SOF_SEND;
+  //send_robot_cmd_data_.frame_header.sof = SOF_SEND;
   send_robot_cmd_data_.cmd_ID = ID_ROBOT_CMD;
-  // send_robot_cmd_data_.frame_header.len = sizeof(SendRobotCmdData) - 6;
-  //  send_robot_cmd_data_.data.speed_vector.vx = 0;
-  //  send_robot_cmd_data_.data.speed_vector.vy = 0;
-  //  send_robot_cmd_data_.data.speed_vector.wz = 0;
-  //  添加帧头crc8校验
-  //  crc8::append_CRC8_check_sum(
-  //      reinterpret_cast<uint8_t *>(&send_robot_cmd_data_),
-  //      sizeof(HeaderFrame));
+  //send_robot_cmd_data_.frame_header.len = sizeof(SendRobotCmdData) - 6;
+  // send_robot_cmd_data_.data.speed_vector.vx = 0;
+  // send_robot_cmd_data_.data.speed_vector.vy = 0;
+  // send_robot_cmd_data_.data.speed_vector.wz = 0;
+  // 添加帧头crc8校验
+  // crc8::append_CRC8_check_sum(
+  //     reinterpret_cast<uint8_t *>(&send_robot_cmd_data_), sizeof(HeaderFrame));
 
   int retry_count = 0;
 
@@ -340,17 +367,17 @@ void Serial::sendData() {
       //     sizeof(SendRobotCmdData));
 
       // 发送数据
-      // std::cout  << "send_robot_cmd_data_" << std::endl;
+      //std::cout  << "send_robot_cmd_data_" << std::endl;
       std::vector<uint8_t> send_data = toVector(send_robot_cmd_data_);
       driver_.send(send_data);
     } catch (const std::exception &ex) {
       WUST_ERROR(serial_logger) << "Error sending data: " << ex.what();
       is_usb_ok_ = false;
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(1000 / control_rate));
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000/control_rate));
   }
 }
-void Serial::transformGimbalCmd(GimbalCmd &gimbal_cmd) {
+void Serial::transformGimbalCmd(GimbalCmd &gimbal_cmd,bool appear) {
   // send_robot_cmd_data_.data.gimbal.yaw=gimbal_cmd.yaw;
   // send_robot_cmd_data_.data.gimbal.pitch=gimbal_cmd.pitch;
   // send_robot_cmd_data_.data.gimbal.distance=gimbal_cmd.distance;
@@ -365,4 +392,6 @@ void Serial::transformGimbalCmd(GimbalCmd &gimbal_cmd) {
   send_robot_cmd_data_.yaw_diff = gimbal_cmd.yaw_diff;
   send_robot_cmd_data_.fire = gimbal_cmd.fire_advice;
   send_robot_cmd_data_.detect_color = detect_color_;
+  send_robot_cmd_data_.appear = appear;
+
 }

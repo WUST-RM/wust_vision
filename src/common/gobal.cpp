@@ -9,3 +9,7 @@ double controller_delay = 0.0;
 double velocity = 15.0;
 bool if_manual_reset = false;
 int control_rate = 1000;
+double last_roll;
+double last_pitch;
+double last_yaw;
+double gimbal2camera_yaw, gimbal2camera_roll, gimbal2camera_pitch;

@@ -13,3 +13,7 @@ extern double controller_delay;
 extern double velocity;
 extern bool if_manual_reset;
 extern int control_rate;
+extern double last_roll;
+extern double last_pitch;
+extern double last_yaw;
+extern double gimbal2camera_yaw, gimbal2camera_roll, gimbal2camera_pitch;

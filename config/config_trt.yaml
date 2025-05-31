@@ -46,7 +46,7 @@ camera:
   exposure_time_us: 3500
   gain: 7.0
 
-detect_color: 0
+detect_color: 1
 
 tf:
   gimbal2camera_x:  0.0

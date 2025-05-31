@@ -454,7 +454,7 @@ void AdaptedTRTModule::setCallback(DetectorCallback callback) {
 // 推理函数
 bool AdaptedTRTModule::processCallback(const cv::Mat resized_img,
                                        Eigen::Matrix3f transform_matrix,
-                                       int64_t timestamp_nanosec,
+                                       std::chrono::steady_clock::time_point timestamp,
                                        const cv::Mat &src_img) {
   // 预处理：Letterbox 缩放
   // cv::Mat resized;
@@ -492,7 +492,7 @@ bool AdaptedTRTModule::processCallback(const cv::Mat resized_img,
                             output_sz_ / 21, transform_matrix);
   if (objs_result.size() > 10) {
     if (this->infer_callback_) {
-      this->infer_callback_(objs_result, timestamp_nanosec, src_img);
+      this->infer_callback_(objs_result, timestamp, src_img);
       return true;
     }
   }
@@ -514,7 +514,7 @@ bool AdaptedTRTModule::processCallback(const cv::Mat resized_img,
   }
 
   if (this->infer_callback_) {
-    this->infer_callback_(objs_result, timestamp_nanosec, src_img);
+    this->infer_callback_(objs_result, timestamp, src_img);
     return true;
   }
 
@@ -729,17 +729,19 @@ std::vector<ArmorObject> AdaptedTRTModule::postprocess(
 }
 
 void AdaptedTRTModule::pushInput(const cv::Mat &rgb_img,
-                                 int64_t timestamp_nanosec) {
+  std::chrono::steady_clock::time_point timestamp) {
   if (rgb_img.empty()) {
     return;
   }
 
   Eigen::Matrix3f transform_matrix;
   cv::Mat resized_img = letterbox(rgb_img, transform_matrix);
+  processCallback(resized_img, transform_matrix, timestamp,
+    rgb_img);
 
-  thread_pool_->enqueue(
-      [this, resized_img, transform_matrix, timestamp_nanosec, rgb_img]() {
-        this->processCallback(resized_img, transform_matrix, timestamp_nanosec,
-                              rgb_img);
-      });
+  // thread_pool_->enqueue(
+  //     [this, resized_img, transform_matrix, timestamp, rgb_img]() {
+  //       this->processCallback(resized_img, transform_matrix, timestamp,
+  //                             rgb_img);
+  //     });
 }

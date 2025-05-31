@@ -22,7 +22,7 @@ public:
   void aim_cbk(ReceiveAimINFO &aim_data);
   bool usbOk() const { return is_usb_ok_; }
   void sendData();
-  void transformGimbalCmd(GimbalCmd &gimbal_cmd);
+  void transformGimbalCmd(GimbalCmd &gimbal_cmd,bool appear);
 
   std::string device_name_;
   SerialPortConfig config_;

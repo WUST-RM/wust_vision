@@ -14,12 +14,11 @@ public:
 
   void init();
 
-  void processImage(const cv::Mat &frame, int64_t timestamp_nanosec);
+  void processImage(const cv::Mat &frame, std::chrono::steady_clock::time_point timestamp);
   void captureLoop();
 
   void printStats();
-  void DetectCallback(const std::vector<ArmorObject> &objs,
-                      int64_t timestamp_nanosec, const cv::Mat &src_img);
+  void DetectCallback(const std::vector<ArmorObject> &objs, std::chrono::steady_clock::time_point timestamp, const cv::Mat &src_img);
   void stop();
   void armorsCallback(Armors armors_, const cv::Mat &src_img);
   void initTF();

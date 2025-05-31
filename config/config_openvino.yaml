@@ -43,15 +43,15 @@ camera:
   invert_image: false
   camera_info_path: "/home/hy/wust_vision/config/camera_info.yaml"
   exposure_time_us: 3500
-  gain: 7.0
+  gain: 16.0
 
-detect_color: 0
+detect_color: 1
 tf:
   gimbal2camera_x:  0.0
   gimbal2camera_y:  0.0
   gimbal2camera_z:  0.0
-  gimbal2camera_roll: 0.0
-  gimbal2camera_pitch: 0.0
+  gimbal2camera_roll: 1.0
+  gimbal2camera_pitch: 6.0
   gimbal2camera_yaw: 180.0
 
 

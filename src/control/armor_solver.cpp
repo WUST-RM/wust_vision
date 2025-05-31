@@ -60,7 +60,8 @@ GimbalCmd Solver::solve(const Target &target,
   // 1. 获取最新的云台 RPY
   std::array<double, 3> rpy{};
   Transform tf_gimbal;
-  if (!tf_tree_.getTransform(target.frame_id, "gimbal_link", tf_gimbal)) {
+  auto now= std::chrono::steady_clock::now();
+  if (!tf_tree_.getTransform(target.frame_id, "gimbal_link",now, tf_gimbal)) {
     throw std::runtime_error("Failed to get gimbal_link transform");
   }
   tf2::Matrix3x3(tf_gimbal.orientation).getRPY(rpy[0], rpy[1], rpy[2]);

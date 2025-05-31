@@ -143,14 +143,14 @@ void WustVision::captureLoop() {
     using namespace std::chrono_literals;
 
     auto frame = capturer_->read();
-    int64_t timestamp_nanosec =
-        std::chrono::steady_clock::now().time_since_epoch().count();
+    
+      auto now =  std::chrono::steady_clock::now();
 
     if (!frame.empty()) {
 
       thread_pool_->enqueue(
-          [frame = std::move(frame), this, timestamp_nanosec]() {
-            processImage(frame, timestamp_nanosec);
+          [frame = std::move(frame), this, now]() {
+            processImage(frame, now);
           });
     }
   }
@@ -208,21 +208,21 @@ void WustVision::startTimer() {
 void WustVision::initTF() {
   // odom 是世界坐标系的根节点
   tf_tree_.setTransform("", "odom",
-                        createTf(0, 0, 0, tf2::Quaternion(0, 0, 0, 1)));
+                        createTf(0, 0, 0, tf2::Quaternion(0, 0, 0, 1)),true);
 
   // camera 相对于 odom，设置 odom -> camera 的变换
   tf_tree_.setTransform("odom", "gimbal_odom",
-                        createTf(0, 0, 0, tf2::Quaternion(0, 0, 0, 1)));
+                        createTf(0, 0, 0, tf2::Quaternion(0, 0, 0, 1)),true);
   tf_tree_.setTransform("gimbal_odom", "gimbal_link",
-                        createTf(0, 0, 0, tf2::Quaternion(0, 0, 0, 1)));
-  double gimbal2camera_roll = gimbal2camera_roll_ * M_PI / 180;
-  double gimbal2camera_pitch = gimbal2camera_pitch_ * M_PI / 180;
-  double gimbal2camera_yaw = gimbal2camera_yaw_ * M_PI / 180;
+                        createTf(0, 0, 0, tf2::Quaternion(0, 0, 0, 1)),false);
+  gimbal2camera_roll = gimbal2camera_roll_ * M_PI / 180;
+  gimbal2camera_pitch = gimbal2camera_pitch_ * M_PI / 180;
+  gimbal2camera_yaw = gimbal2camera_yaw_ * M_PI / 180;
   tf2::Quaternion origimbal2camera = eulerToQuaternion(
       gimbal2camera_roll, gimbal2camera_pitch, gimbal2camera_yaw);
   tf_tree_.setTransform("gimbal_link", "camera",
                         createTf(gimbal2camera_x_, gimbal2camera_y_,
-                                 gimbal2camera_z_, origimbal2camera));
+                                 gimbal2camera_z_, origimbal2camera),true);
 
   // camera_optical_frame 相对于 camera，设置 camera -> camera_optical_frame
   // 的旋转变换
@@ -234,7 +234,7 @@ void WustVision::initTF() {
   orientation.setRPY(roll, pitch, yaw);
 
   tf_tree_.setTransform("camera", "camera_optical_frame",
-                        createTf(0, 0, 0, orientation));
+                        createTf(0, 0, 0, orientation),true);
 }
 void WustVision::initSerial() {
   SerialPortConfig cfg{/*baud*/ 115200, /*csize*/ 8,
@@ -360,7 +360,7 @@ void WustVision::armorsCallback(Armors armors_, const cv::Mat &src_img) {
   }
   if (use_calculation_) {
     command_callback(armors_);
-    return;
+    //return;
   }
   Target target_;
   auto time = armors_.timestamp;
@@ -477,62 +477,56 @@ Armors WustVision::visualizeTargetProjection(Target armor_target_) {
   return armor_data;
 }
 void WustVision::DetectCallback(const std::vector<ArmorObject> &objs,
-                                int64_t timestamp_nanosec,
-                                const cv::Mat &src_img) {
-  std::lock_guard<std::mutex> lock(callback_mutex_);
-  detect_finish_count_++;
-  if (objs.size() >= 6) {
-    WUST_WARN(vision_logger) << "Detected " << objs.size() << " objects"
-                             << "too much";
-    infer_running_count_--;
-    return;
-  }
-  if (measure_tool_ == nullptr) {
-    WUST_WARN(vision_logger) << "NO camera info";
-    return;
-  }
-  Armors armors;
-  armors.timestamp = std::chrono::time_point_cast<std::chrono::nanoseconds>(
-      std::chrono::steady_clock::time_point(
-          std::chrono::nanoseconds(timestamp_nanosec)));
-  armors.frame_id = "camera_optical_frame";
-  try {
-    auto target_time = armors.timestamp;
-    Transform tf;
-    if (!tf_tree_.getTransform(armors.frame_id, target_frame_, target_time,
-                               tf)) {
-      throw std::runtime_error("Transform not found.");
-    }
+  std::chrono::steady_clock::time_point timestamp,
+ const cv::Mat &src_img) {
+std::lock_guard<std::mutex> lock(callback_mutex_);
+detect_finish_count_++;
+if (objs.size() >= 6) {
+WUST_WARN(vision_logger) << "Detected " << objs.size() << " objects"
+<< "too much";
+infer_running_count_--;
+return;
+}
+if (measure_tool_ == nullptr) {
+WUST_WARN(vision_logger) << "NO camera info";
+return;
+}
+Armors armors;
+armors.timestamp = timestamp;
+armors.frame_id = "camera_optical_frame";
+try {
+auto target_time = armors.timestamp;
+Transform tf;
+if (!tf_tree_.getTransform(armors.frame_id, target_frame_, target_time,
+tf)) {
+throw std::runtime_error("Transform not found.");
+}
 
-    tf2::Quaternion tf_quat = tf.orientation;
-    // std::cout<<tf.orientation.x<<" "<<tf.orientation.y<<"
-    // "<<tf.orientation.z<<" "<<tf.orientation.w<<std::endl;
-    Eigen::Quaterniond eigen_quat(tf_quat.w, tf_quat.x, tf_quat.y, tf_quat.z);
-    imu_to_camera_ = eigen_quat.toRotationMatrix(); // Eigen::Matrix3d
-    imu_to_camera_ =
-        Sophus::SO3d::fitToSO3(eigen_quat.toRotationMatrix()).matrix();
-    //  std::cout<<imu_to_camera_<<std::endl;
+tf2::Quaternion tf_quat = tf.orientation;
+// std::cout<<tf.orientation.x<<" "<<tf.orientation.y<<"
+// "<<tf.orientation.z<<" "<<tf.orientation.w<<std::endl;
+Eigen::Quaterniond eigen_quat(tf_quat.w, tf_quat.x, tf_quat.y, tf_quat.z);
+imu_to_camera_ = eigen_quat.toRotationMatrix(); // Eigen::Matrix3d
+imu_to_camera_ =
+Sophus::SO3d::fitToSO3(eigen_quat.toRotationMatrix()).matrix();
+//std::cout<<imu_to_camera_<<std::endl;
 
-  } catch (const std::exception &e) {
+} catch (const std::exception &e) {
 
-    return;
-  }
-  armors.armors =
-      armor_pose_estimator_->extractArmorPoses(objs, imu_to_camera_);
+return;
+}
+armors.armors =
+armor_pose_estimator_->extractArmorPoses(objs, imu_to_camera_);
 
-  measure_tool_->processDetectedArmors(objs, detect_color_, armors);
+measure_tool_->processDetectedArmors(objs, detect_color_, armors);
 
-  infer_running_count_--;
-  armorsCallback(armors, src_img);
+infer_running_count_--;
+armorsCallback(armors, src_img);
 
-  // thread_pool_->enqueue([this, armors = std::move(armors), src_img]() {
-  //   this->armorsCallback(armors, src_img);
-  // });
-
-  // drawresult(src_img,objs,timestamp_nanosec);
 }
 void WustVision::transformArmorData(Armors &armors) {
   for (auto &armor : armors.armors) {
+    //armor.number = ArmorNumber::OUTPOST;
     try {
       Transform tf(armor.pos, armor.ori, armors.timestamp);
       auto pose_in_target_frame = tf_tree_.transform(
@@ -544,6 +538,10 @@ void WustVision::transformArmorData(Armors &armors) {
 
       armor.yaw = getRPYFromQuaternion(armor.target_ori).yaw;
       double yaw = armor.yaw * 180 / M_PI;
+      //std::cout<<"Z"<< armor.target_pos.z<<std::endl;
+      // auto now = std::chrono::steady_clock::now();
+      // std::cout << "now (ns since epoch): " << now.time_since_epoch().count() << " ns" << std::endl;
+      // std::cout << "timestamp (ns): " << pose_in_target_frame.timestamp.time_since_epoch().count() << " ns" << std::endl;
       // std::cout<<"YAW:"<<yaw<<std::endl;
 
       //  WUST_DEBUG(vision_logger)<<"Z:"<<armor.target_pos.z;
@@ -557,6 +555,7 @@ void WustVision::transformArmorData(Armors &armors) {
 }
 
 void WustVision::timerCallback() {
+  static GimbalCmd aa;
 
   if (!is_inited_)
     return;
@@ -566,32 +565,42 @@ void WustVision::timerCallback() {
     std::lock_guard<std::mutex> lock(armor_target_mutex_);
     target = armor_target;
   }
+  bool appear ;
+  if(tracker_->tracker_state == Tracker::LOST)
+  {
+    appear = false;
+  }else
+  {
+    appear = true;
+  }
   auto now = std::chrono::steady_clock::now();
   auto latency_nano = std::chrono::duration_cast<std::chrono::nanoseconds>(
                           now - target.timestamp)
                           .count();
   latency_ms = static_cast<double>(latency_nano) / 1e6;
   GimbalCmd gimbal_cmd;
+  
   if (target.id != ArmorNumber::UNKNOWN) {
     if (target.tracking) {
       try {
         auto now = std::chrono::steady_clock::now();
         gimbal_cmd = solver_->solve(target, now);
+        aa=gimbal_cmd;
         if (gimbal_cmd.fire_advice) {
           fire_count_++;
         }
-        serial_.transformGimbalCmd(gimbal_cmd);
+        serial_.transformGimbalCmd(gimbal_cmd,appear);
       } catch (...) {
         WUST_ERROR(vision_logger) << "solver error";
-        serial_.transformGimbalCmd(gimbal_cmd);
+        serial_.transformGimbalCmd(aa,appear);
       }
     } else {
-      serial_.transformGimbalCmd(gimbal_cmd);
+      serial_.transformGimbalCmd(aa,appear);
     }
   } else {
-    serial_.transformGimbalCmd(gimbal_cmd);
+    serial_.transformGimbalCmd(aa,appear);
   }
-
+  
   if (debug_mode_) {
     Armors armor_data = visualizeTargetProjection(target);
 
@@ -599,7 +608,7 @@ void WustVision::timerCallback() {
       try {
         Transform tf(armor.pos, armor.ori);
         auto pose_in_target_frame =
-            tf_tree_.transform(tf, armor_data.frame_id, "camera_optical_frame");
+            tf_tree_.transform(tf, armor_data.frame_id, "camera_optical_frame",target.timestamp);
         // auto pose_in_target_frame = tf_tree_.transform(tf,
         // "camera_optical_frame", armor_data.frame_id, armor_data.timestamp);
         armor.target_pos = pose_in_target_frame.position;
@@ -613,10 +622,10 @@ void WustVision::timerCallback() {
     }
     Target_info target_info;
     target_info.select_id = gimbal_cmd.select_id;
-
+    
     if (!measure_tool_->reprojectArmorsCorners(armor_data, target_info))
       return;
-
+    dumpTargetToFile(target, "/tmp/target_status.txt");
     Tracker::State state = tracker_->tracker_state;
     cv::Mat src;
     {
@@ -624,7 +633,7 @@ void WustVision::timerCallback() {
       src = imgframe_.img.clone();
     }
 
-    dumpTargetToFile(target, "/tmp/target_status.txt");
+    
 
     Armors armors;
     {
@@ -637,7 +646,7 @@ void WustVision::timerCallback() {
   }
 }
 
-void WustVision::processImage(const cv::Mat &frame, int64_t timestamp_nanosec) {
+void WustVision::processImage(const cv::Mat &frame,std::chrono::steady_clock::time_point timestamp) {
 
   img_recv_count_++;
   if (infer_running_count_.load() >= max_infer_running_) {
@@ -646,7 +655,7 @@ void WustVision::processImage(const cv::Mat &frame, int64_t timestamp_nanosec) {
 
   infer_running_count_++;
   printStats();
-  detector_->pushInput(frame, timestamp_nanosec);
+  detector_->pushInput(frame, timestamp);
 }
 
 void WustVision::printStats() {
