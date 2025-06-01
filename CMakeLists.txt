@@ -4,23 +4,36 @@ project(wust_vision)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_BUILD_TYPE "Release")
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/cmake_modules)
+set(EXTERNAL_INCLUDE_DIRS ${G2O_INCLUDE_DIR})
+set(EXTERNAL_LIBS ${G2O_LIBRARIES})
 
 add_executable(${PROJECT_NAME}_trt
-  src/driver/hik.cpp
+ 
   src/wust_vision_trt.cpp
   src/detect/trt.cpp
   src/common/tools.cpp
   src/detect/mono_measure_tool.cpp
+
   src/detect/light_corner_corrector.cpp
   src/tracker/tracker.cpp
   src/tracker/extended_kalman_filter.cpp
-  src/driver/crc8_crc16.cpp
   src/driver/serial.cpp
+  src/common/gobal.cpp
+  src/driver/crc8_crc16.cpp
+  src/control/trajectory_compensator.cpp
   src/control/armor_solver.cpp
   src/control/manual_compensator.cpp
-  src/control/trajectory_compensator.cpp
-  src/common/gobal.cpp
   src/common/calculation.cpp
+  src/detect/pnp_solver.cpp
+  src/detect/graph_optimizer.cpp
+  src/detect/armor_pose_estimator.cpp
+  src/detect/ba_solver.cpp
+  src/driver/image_capturer.cpp
+  src/driver/hik.cpp
+
+
 )
 
 # 基础 include 路径
@@ -41,14 +54,17 @@ find_package(Eigen3 REQUIRED)
 find_package(CUDAToolkit REQUIRED)
 find_package(fmt REQUIRED)
 find_package(yaml-cpp REQUIRED)
-
+find_package(G2O REQUIRED)
 # 本项目 include 路径
 target_include_directories(${PROJECT_NAME}_trt PUBLIC
   ${OpenCV_INCLUDE_DIRS}
   ${EIGEN3_INCLUDE_DIRS}
   ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${CMAKE_CURRENT_SOURCE_DIR}/hikSDK/include
+  ${G2O_INCLUDE_DIRS}
 )
+link_directories(hikSDK/lib/arm64)
+
 
 # 相机 SDK 库路径
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
@@ -66,11 +82,10 @@ target_link_libraries(${PROJECT_NAME}_trt
   MvCameraControl
   MVRender
   MvUsb3vTL
-
+  
   ${OpenCV_LIBS}
   fmt::fmt
   yaml-cpp
-
   # CUDA runtime
   /usr/local/cuda/lib64/libcudart.so
 
@@ -79,4 +94,11 @@ target_link_libraries(${PROJECT_NAME}_trt
   nvonnxparser
   nvparsers
   nvinfer_plugin
+  g2o_core
+  g2o_stuff
+  g2o_solver_csparse
+  g2o_types_sba
+  g2o_types_slam3d
+  g2o_solver_dense
+
 )

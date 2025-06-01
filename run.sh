@@ -6,7 +6,7 @@ export MVCAM_GENICAM_CLPROTOCOL=/opt/MVS/lib/CLProtocol
 export ALLUSERSPROFILE=/opt/MVS/MVFG
 
 export LD_LIBRARY_PATH=/opt/MVS/lib/aarch64:/opt/MVS/lib/32:$LD_LIBRARY_PATH
-
+export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
 
 blue="\033[1;34m"
 yellow="\033[1;33m"

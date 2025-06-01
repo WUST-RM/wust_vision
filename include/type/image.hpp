@@ -1,14 +1,14 @@
 #ifndef IMAGE_HPP_
 #define IMAGE_HPP_
-#include "opencv2/opencv.hpp"
 #include "MvCameraControl.h"
+#include "opencv2/opencv.hpp"
 
 struct ImageFrame {
-    std::vector<uint8_t> data;
-    int width;
-    int height;
-    int step;
-    std::chrono::steady_clock::time_point timestamp;
+  std::vector<uint8_t> data;
+  int width;
+  int height;
+  int step;
+  std::chrono::steady_clock::time_point timestamp;
 };
 // struct ImageFrame {
 //     int width = 0, height = 0, step = 0;
@@ -18,17 +18,17 @@ struct ImageFrame {
 //     // 新增原始图像信息
 //     unsigned char* raw_data = nullptr;
 //     int raw_len = 0;
-   
+
 //     MvGvspPixelType         pixel_type  = PixelType_Gvsp_RGB8_Packed;
 // };
 
-inline cv::Mat convertToMat(const ImageFrame& frame) {
-    if (frame.data.empty()) {
-        return cv::Mat();
-    }
-    cv::Mat rgb(frame.height, frame.width, CV_8UC3);
-    memcpy(rgb.data, frame.data.data(), frame.height * frame.step);
-    return rgb;
+inline cv::Mat convertToMat(const ImageFrame &frame) {
+  if (frame.data.empty()) {
+    return cv::Mat();
+  }
+  cv::Mat rgb(frame.height, frame.width, CV_8UC3);
+  memcpy(rgb.data, frame.data.data(), frame.height * frame.step);
+  return rgb;
 }
 // inline cv::Mat convertToMat(const ImageFrame& frame) {
 //     if (frame.data.empty()) {
@@ -44,7 +44,8 @@ inline cv::Mat convertToMat(const ImageFrame& frame) {
 //         frame.step
 //     );
 
-//     // 3) OpenCV 默认使用 BGR 顺序，若你的后续算法需要 BGR，直接在这里转换一次
+//     // 3) OpenCV 默认使用 BGR 顺序，若你的后续算法需要
+//     BGR，直接在这里转换一次
 //     // cv::Mat bgr;
 //     // cv::cvtColor(rgb, bgr, cv::COLOR_RGB2BGR);
 
@@ -53,7 +54,5 @@ inline cv::Mat convertToMat(const ImageFrame& frame) {
 //     // 可在返回前加上一句： return bgr.clone();
 //     return rgb.clone();
 // }
-
-
 
 #endif

@@ -19,13 +19,13 @@
 #include <cstdint>
 #include <vector>
 
-
 const uint8_t SOF_RECEIVE = 0x5A;
 const uint8_t SOF_SEND = 0x5A;
 
 // Receive
-const uint8_t ID_DEBUG = 0x01;
-const uint8_t ID_IMU = 0x02;
+// const uint8_t ID_DEBUG = 0x01;
+const uint8_t ID_IMU = 0x01;
+const uint8_t ID_AIM_INFO = 0X02;
 const uint8_t ID_ROBOT_STATE_INFO = 0x03;
 const uint8_t ID_EVENT_DATA = 0x04;
 const uint8_t ID_PID_DEBUG = 0x05;
@@ -43,12 +43,11 @@ const uint8_t ID_ROBOT_CMD = 0x01;
 const uint8_t DEBUG_PACKAGE_NUM = 10;
 const uint8_t DEBUG_PACKAGE_NAME_LEN = 10;
 
-struct HeaderFrame
-{
-  uint8_t sof;  // 数据帧起始字节，固定值为 0x5A
-  uint8_t len;  // 数据段长度
-  uint8_t id;   // 数据段id
-  uint8_t crc;  // 数据帧头的 CRC8 校验
+struct HeaderFrame {
+  uint8_t sof; // 数据帧起始字节，固定值为 0x5A
+  uint8_t len; // 数据段长度
+  uint8_t id;  // 数据段id
+  uint8_t crc; // 数据帧头的 CRC8 校验
 } __attribute__((packed));
 
 /********************************************************/
@@ -56,35 +55,68 @@ struct HeaderFrame
 /********************************************************/
 
 // 串口调试数据包
-struct ReceiveDebugData
-{
-  HeaderFrame frame_header;
-  uint32_t time_stamp;
-  struct
-  {
-    uint8_t name[DEBUG_PACKAGE_NAME_LEN];
-    uint8_t type;
-    float data;
-  } __attribute__((packed)) packages[DEBUG_PACKAGE_NUM];
+// struct ReceiveDebugData
+// {
+//   HeaderFrame frame_header;
+//   uint32_t time_stamp;
+//   struct
+//   {
+//     uint8_t name[DEBUG_PACKAGE_NAME_LEN];
+//     uint8_t type;
+//     float data;
+//   } __attribute__((packed)) packages[DEBUG_PACKAGE_NUM];
 
-  uint16_t checksum;
+//   uint16_t checksum;
+// } __attribute__((packed));
+
+// 自瞄解算信息
+// struct ReceiveAimINFO {
+//   uint8_t cmd_ID;
+//   uint32_t time_stamp;
+
+//   float yaw;   // rad
+//   float pitch; // rad
+//   float roll;  // rad
+
+//   float yaw_vel;          // rad/s
+//   float pitch_vel;        // rad/s
+//   float roll_vel;         // rad/s
+//   float bullet_speed;     // m/s
+//   float controller_delay; // s
+//   int manual_reset_count;
+//   int detect_color; // 0 red 1 blue
+
+// } __attribute__((packed));
+struct ReceiveAimINFO {
+  uint8_t cmd_ID;      //命令码
+  uint32_t time_stamp; //时间戳
+
+  float yaw;   // rad
+  float pitch; // rad
+  float roll;  // rad
+
+  float yaw_vel;   // rad/s
+  float pitch_vel; // rad/s
+  float roll_vel;  // rad/s
+
+  float bullet_speed;     // m/s
+  float controller_delay; // s
+  uint8_t manual_reset_count;
+  uint8_t detect_color; // 0 red 1 blue
 } __attribute__((packed));
-
 // IMU 数据包
-struct ReceiveImuData
-{
+struct ReceiveImuData {
   HeaderFrame frame_header;
   uint32_t time_stamp;
 
-  struct
-  {
-    float yaw;    // rad
-    float pitch;  // rad
-    float roll;   // rad
+  struct {
+    float yaw;   // rad
+    float pitch; // rad
+    float roll;  // rad
 
-    float yaw_vel;    // rad/s
-    float pitch_vel;  // rad/s
-    float roll_vel;   // rad/s
+    float yaw_vel;   // rad/s
+    float pitch_vel; // rad/s
+    float roll_vel;  // rad/s
 
     // float x_accel;  // m/s^2
     // float y_accel;  // m/s^2
@@ -95,16 +127,13 @@ struct ReceiveImuData
 } __attribute__((packed));
 
 // 机器人信息数据包
-struct ReceiveRobotInfoData
-{
+struct ReceiveRobotInfoData {
   HeaderFrame frame_header;
   uint32_t time_stamp;
 
-  struct
-  {
+  struct {
     /// @brief 机器人部位类型 2 bytes
-    struct
-    {
+    struct {
       uint16_t chassis : 3;
       uint16_t gimbal : 3;
       uint16_t shoot : 3;
@@ -115,8 +144,7 @@ struct ReceiveRobotInfoData
 
     /// @brief 机器人部位状态 1 byte
     /// @note 0: 错误，1: 正常
-    struct
-    {
+    struct {
       uint8_t chassis : 1;
       uint8_t gimbal : 1;
       uint8_t shoot : 1;
@@ -130,13 +158,11 @@ struct ReceiveRobotInfoData
 } __attribute__((packed));
 
 // 事件数据包
-struct ReceiveEventData
-{
+struct ReceiveEventData {
   HeaderFrame frame_header;
   uint32_t time_stamp;
 
-  struct
-  {
+  struct {
     uint8_t non_overlapping_supply_zone : 1;
     uint8_t overlapping_supply_zone : 1;
     uint8_t supply_zone : 1;
@@ -157,12 +183,10 @@ struct ReceiveEventData
 } __attribute__((packed));
 
 // PID调参数据包
-struct ReceivePidDebugData
-{
+struct ReceivePidDebugData {
   HeaderFrame frame_header;
   uint32_t time_stamp;
-  struct
-  {
+  struct {
     float fdb;
     float ref;
     float pid_out;
@@ -172,13 +196,11 @@ struct ReceivePidDebugData
 } __attribute__((packed));
 
 // 全场机器人hp信息数据包
-struct ReceiveAllRobotHpData
-{
+struct ReceiveAllRobotHpData {
   HeaderFrame frame_header;
   uint32_t time_stamp;
 
-  struct
-  {
+  struct {
     uint16_t red_1_robot_hp;
     uint16_t red_2_robot_hp;
     uint16_t red_3_robot_hp;
@@ -200,13 +222,11 @@ struct ReceiveAllRobotHpData
 } __attribute__((packed));
 
 // 比赛信息数据包
-struct ReceiveGameStatusData
-{
+struct ReceiveGameStatusData {
   HeaderFrame frame_header;
   uint32_t time_stamp;
 
-  struct
-  {
+  struct {
     uint8_t game_progress;
     uint16_t stage_remain_time;
   } __attribute__((packed)) data;
@@ -215,15 +235,12 @@ struct ReceiveGameStatusData
 } __attribute__((packed));
 
 // 机器人运动数据包
-struct ReceiveRobotMotionData
-{
+struct ReceiveRobotMotionData {
   HeaderFrame frame_header;
   uint32_t time_stamp;
 
-  struct
-  {
-    struct
-    {
+  struct {
+    struct {
       float vx;
       float vy;
       float wz;
@@ -233,12 +250,10 @@ struct ReceiveRobotMotionData
 } __attribute__((packed));
 
 // 地面机器人位置数据包
-struct ReceiveGroundRobotPosition
-{
+struct ReceiveGroundRobotPosition {
   HeaderFrame frame_header;
   uint32_t time_stamp;
-  struct
-  {
+  struct {
     float hero_x;
     float hero_y;
 
@@ -258,13 +273,11 @@ struct ReceiveGroundRobotPosition
 } __attribute__((packed));
 
 // RFID 状态数据包
-struct ReceiveRfidStatus
-{
+struct ReceiveRfidStatus {
   HeaderFrame frame_header;
   uint32_t time_stamp;
 
-  struct
-  {
+  struct {
     uint32_t base_gain_point : 1;
     uint32_t central_highland_gain_point : 1;
     uint32_t enemy_central_highland_gain_point : 1;
@@ -295,14 +308,12 @@ struct ReceiveRfidStatus
 } __attribute__((packed));
 
 // 机器人状态数据包
-struct ReceiveRobotStatus
-{
+struct ReceiveRobotStatus {
   HeaderFrame frame_header;
 
   uint32_t time_stamp;
 
-  struct
-  {
+  struct {
     uint8_t robot_id;
     uint8_t robot_level;
     uint16_t current_up;
@@ -326,13 +337,11 @@ struct ReceiveRobotStatus
 } __attribute__((packed));
 
 // 云台状态数据包
-struct ReceiveJointState
-{
+struct ReceiveJointState {
   HeaderFrame frame_header;
   uint32_t time_stamp;
 
-  struct
-  {
+  struct {
     float pitch;
     float yaw;
   } __attribute__((packed)) data;
@@ -341,13 +350,11 @@ struct ReceiveJointState
 } __attribute__((packed));
 
 // 机器人增益和底盘能量数据包
-struct ReceiveBuff
-{
+struct ReceiveBuff {
   HeaderFrame frame_header;
   uint32_t time_stamp;
 
-  struct
-  {
+  struct {
     uint8_t recovery_buff;
     uint8_t cooling_buff;
     uint8_t defence_buff;
@@ -362,76 +369,38 @@ struct ReceiveBuff
 /* Send data                                            */
 /********************************************************/
 
-struct SendRobotCmdData
-{
-  HeaderFrame frame_header;
-
+struct SendRobotCmdData {
+  uint8_t cmd_ID; //命令码
   uint32_t time_stamp;
 
-  struct
-  {
-    // struct
-    // {
-    //   float vx;
-    //   float vy;
-    //   float wz;
-    // } __attribute__((packed)) speed_vector;
+  float pitch;
+  float yaw;
+  float distance;
 
-    // struct
-    // {
-    //   float roll;
-    //   float pitch;
-    //   float yaw;
-    //   float leg_lenth;
-    // } __attribute__((packed)) chassis;
+  uint8_t appear;
+  uint8_t fire;
+  float yaw_diff;
+  float pitch_diff;
 
-    struct
-    {
-      float pitch;
-      float yaw;
-      float distance;
-    } __attribute__((packed)) gimbal;
-
-    struct
-    {
-      uint8_t fire;
-      float yaw_diff;
-      float pitch_diff;
-      
-    } __attribute__((packed)) shoot;
-
-    struct
-    {
-     
-      int detect_color;//0 red 1 blue
-    } __attribute__((packed)) debug;
-  } __attribute__((packed)) data;
-
-  uint16_t checksum;
+  uint8_t detect_color; // 0 red 1 blue
 } __attribute__((packed));
 
 /********************************************************/
 /* template                                             */
 /********************************************************/
 
-template <typename T>
-inline T fromVector(const std::vector<uint8_t> & data)
-{
+template <typename T> inline T fromVector(const std::vector<uint8_t> &data) {
   T packet;
   std::copy(data.begin(), data.end(), reinterpret_cast<uint8_t *>(&packet));
   return packet;
 }
 
-template <typename T>
-inline std::vector<uint8_t> toVector(const T & data)
-{
+template <typename T> inline std::vector<uint8_t> toVector(const T &data) {
   std::vector<uint8_t> packet(sizeof(T));
-  std::copy(
-    reinterpret_cast<const uint8_t *>(&data), reinterpret_cast<const uint8_t *>(&data) + sizeof(T),
-    packet.begin());
+  std::copy(reinterpret_cast<const uint8_t *>(&data),
+            reinterpret_cast<const uint8_t *>(&data) + sizeof(T),
+            packet.begin());
   return packet;
 }
 
-
-
-#endif  // STANDARD_ROBOT_PP_ROS2__PACKET_TYPEDEF_HPP_
+#endif // STANDARD_ROBOT_PP_ROS2__PACKET_TYPEDEF_HPP_

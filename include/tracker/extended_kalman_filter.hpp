@@ -1,7 +1,8 @@
 // Copyright Chen Jun 2023. Licensed under the MIT License.
 // Copyright xinyang 2021.
 //
-// Additional modifications and features by Chengfu Zou, Labor. Licensed under Apache License 2.0.
+// Additional modifications and features by Chengfu Zou, Labor. Licensed under
+// Apache License 2.0.
 //
 // Copyright (C) FYT Vision Group. All rights reserved.
 //
@@ -27,7 +28,6 @@
 // ceres
 #include <ceres/jet.h>
 
-
 // Extended Kalman Filter with auto differentiation
 // N_X: state vector dimension
 // N_Z: measurement vector dimension
@@ -48,12 +48,10 @@ public:
   using UpdateQFunc = std::function<MatrixXX()>;
   using UpdateRFunc = std::function<MatrixZZ(const MatrixZ1 &z)>;
 
-  explicit ExtendedKalmanFilter(const PredicFunc &f,
-                                const MeasureFunc &h,
-                                const UpdateQFunc &u_q,
-                                const UpdateRFunc &u_r,
+  explicit ExtendedKalmanFilter(const PredicFunc &f, const MeasureFunc &h,
+                                const UpdateQFunc &u_q, const UpdateRFunc &u_r,
                                 const MatrixXX &P0) noexcept
-  : f(f), h(h), update_Q(u_q), update_R(u_r), P_post(P0) {
+      : f(f), h(h), update_Q(u_q), update_R(u_r), P_post(P0) {
     F = MatrixXX::Zero();
     H = MatrixZX::Zero();
   }
@@ -139,6 +137,4 @@ private:
   MatrixX1 x_post;
 };
 
-
-
-#endif  // RM_UTILS_KALMAN_FILTER_HPP_
+#endif // RM_UTILS_KALMAN_FILTER_HPP_
