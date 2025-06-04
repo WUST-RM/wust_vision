@@ -1,6 +1,12 @@
 cmake_minimum_required(VERSION 3.8)
 project(wust_vision)
 
+
+message(STATUS "C++ compiler: ${CMAKE_CXX_COMPILER}")
+if (NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  message(FATAL_ERROR "This project must be built with Clang! Use: cmake -DCMAKE_CXX_COMPILER=clang++")
+endif()
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -38,18 +44,18 @@ add_executable(${PROJECT_NAME}_trt
 
 # 基础 include 路径
 include_directories(
-  /usr/local/cuda/include
+  /usr/local/cuda-12.6/include
   /usr/include/aarch64-linux-gnu  # Jetson 上 TensorRT 的默认 include 路径
 )
 
 # TensorRT library 路径（Jetson 默认）
 link_directories(
-  /usr/local/cuda/lib64
+  /usr/local/cuda-12.6/lib64
   /usr/lib/aarch64-linux-gnu
 )
 
 # 查找依赖
-find_package(OpenCV REQUIRED)
+find_package(OpenCV 4.11 REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(CUDAToolkit REQUIRED)
 find_package(fmt REQUIRED)
@@ -87,12 +93,13 @@ target_link_libraries(${PROJECT_NAME}_trt
   fmt::fmt
   yaml-cpp
   # CUDA runtime
-  /usr/local/cuda/lib64/libcudart.so
+  /usr/local/cuda-12.6/lib64/libcudart.so
 
   # TensorRT 相关库
   nvinfer
+ 
   nvonnxparser
-  nvparsers
+
   nvinfer_plugin
   g2o_core
   g2o_stuff

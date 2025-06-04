@@ -9,12 +9,12 @@ logger:
   use_logcli:  true
 
 debug:
-  debug_mode: false
+  debug_mode: true
   debug_w: 640
   debug_h: 480
   debug_show_dt: 0.01
 
-max_infer_running: 5
+max_infer_running: 4
 
 classify_model_path: "/home/nvidia/wust_vision/model/lenet.onnx"
 classify_label_path: "/home/nvidia/wust_vision/model/label.txt"
@@ -30,9 +30,9 @@ model:
   top_k: 128
 
 light:
-  expand_ratio_w: 1.1
-  expand_ratio_h: 1.1
-  binary_thres: 85
+  expand_ratio_w: 1.05
+  expand_ratio_h: 1.05
+  binary_thres: 95
   min_ratio: 0.02
   max_ratio: 0.45
   max_angle: 40.0
@@ -40,10 +40,10 @@ light:
 control_rate: 1000
 camera:
   serial: ""
-  camera_info_path: "/home/nvidia/ros_Ws/wust_vision/config/camera_info.yaml"
-  acquisition_frame_rate: 120
-  exposure_time: 3500
-  gain: 12.0
+  camera_info_path: "/home/nvidia/wust_vision/config/camera_info.yaml"
+  acquisition_frame_rate: 110
+  exposure_time: 2500
+  gain: 7.0
   adc_bit_depth: "Bits_8"
   pixel_format: "BayerRG8"
 
@@ -51,11 +51,11 @@ camera:
 detect_color: 1
 
 tf:
-  gimbal2camera_x:  0.0
+  gimbal2camera_x:  -0.11
   gimbal2camera_y:  0.00
-  gimbal2camera_z:  0.00
+  gimbal2camera_z:  -0.05
   gimbal2camera_roll: 0.0
-  gimbal2camera_pitch: 5.5
+  gimbal2camera_pitch: 0.0
   gimbal2camera_yaw: 180.0
   odom2gimbal_roll: 0.0
   odom2gimbal_pitch: 0.0
@@ -64,10 +64,10 @@ tf:
 tracker:
   target_frame: "odom"
   max_match_distance: 0.5
-  max_match_yaw_diff: 0.7
-  max_match_z_diff: 0.1
+  max_match_yaw_diff: 0.5
+  max_match_z_diff: 0.10
   tracking_thres: 5
-  lost_time_thres: 0.1
+  lost_time_thres: 0.3
   obs_vyaw_buffer_thres: 5
   obs_yaw_stationary_thresh: 1.0
   pred_yaw_stationary_thresh: 0.5
@@ -82,15 +82,17 @@ tracker:
     s2qyaw: 30.0
     s2qr: 50.0
     s2qd_zc: 800.0
-    r_x: 0.0046302163
-    r_y: 0.0322467810
-    r_z: 0.2659587660
-    r_yaw: 0.3651087658
+    r_x: 0.0322467810
+    r_y: 0.0253446886
+    r_z: 0.0013191890
+    r_yaw: 0.1977688698
 
 solver:
+      shooting_range_w: 0.12
+      shooting_range_h: 0.12
       prediction_delay: 0.0
       controller_delay: 0.0
-      max_tracking_v_yaw: 180.0 #转速(rad/s)大于这个值时瞄准机器人中心 
+      max_tracking_v_yaw: 2.1 #转速(rad/s)大于这个值时瞄准机器人中心 
       side_angle: 20.0 
       bullet_speed: 25.0
       compenstator_type: "ideal"
@@ -99,7 +101,12 @@ solver:
       iteration_times: 120 # 补偿的迭代次数
       # ["距离下限, 距离上限, 高度下限, 高度下限, pitch轴补偿值, yaw轴补偿值"]
       pitch_offset: [
-        "5.0 6.0 -1.0 0.4 0.0 0.0",
+        "0.5 1.5 -1.0 0.4 -2.5 0.0",
+        "1.5 2.5 -1.0 0.4 -2.5 0.0",
+        "2.5 3.5 -1.0 0.4 -2.5 0.0",
+        "3.5 4.5 -1.0 0.4 -2.5 0.0",
+        "4.5 5.0 -1.0 0.4 -2.5 0.0",
+        "5.0 6.0 -1.0 0.4 -2.5 0.0",
         "5.0 6.0  0.4 0.8 0.0 0.0",
         "5.0 6.0  0.8 1.2 0.0 0.0",
         "6.0 7.0 -1.0 0.4 0.0 0.0",
@@ -124,3 +131,7 @@ solver:
 # R_y:0.0193988931
 # R_z:0.0253446886
 # R_yaw:0.1906375660
+# R_x: 0.0013191890
+# R_y: 0.0114758754
+# R_z: 0.0123173790
+# R_yaw: 0.1977688698

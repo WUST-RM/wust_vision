@@ -1,3 +1,4 @@
+
 #include "wust_vision_trt.hpp"
 #include "common/calculation.hpp"
 #include "common/gobal.hpp"
@@ -14,42 +15,31 @@
 
 WustVision::WustVision() { init(); }
 WustVision::~WustVision() {
-  WUST_INFO(vision_logger) << "Shutting down WustVision...";
-
-  is_inited_ = false;
-  stopTimer();
-
-  detector_.reset();
-
-  measure_tool_.reset();
-
-  if (thread_pool_) {
-    thread_pool_->waitUntilEmpty();
-    thread_pool_.reset();
-  }
-
-  WUST_INFO(vision_logger) << "WustVision shutdown complete.";
 }
 void WustVision::stop() {
   is_inited_ = false;
-  // capture_running_ = false;
-  // if (capture_thread_ && capture_thread_->joinable()) {
-  //   capture_thread_->join();
-  // }
+  
   stopTimer();
-
-  detector_.reset();
-  measure_tool_.reset();
+  camera_->stopCamera();
+  sleep (1);
   if (thread_pool_) {
     thread_pool_->waitUntilEmpty();
     thread_pool_.reset();
   }
 
-  serial_.stopThread();
+  camera_.reset();
+  detector_.reset();
+  
+  measure_tool_.reset();
 
-  if (thread_pool_) {
-    thread_pool_->waitUntilEmpty();
+  
+ 
+  if(use_serial)
+  {
+  serial_.stopThread();
   }
+
+   
 
   WUST_INFO(vision_logger) << "WustVision shutdown complete.";
 }
@@ -125,7 +115,7 @@ void WustVision::init() {
   armor_pose_estimator_ =
       std::make_unique<ArmorPoseEstimator>(camera_info_path, gimbal_to_camera_);
 
-  bool use_serial = config["use_serial"].as<bool>();
+  use_serial = config["use_serial"].as<bool>();
   if (use_serial) {
     initSerial();
   }
@@ -141,7 +131,7 @@ void WustVision::init() {
 
   detector_ = std::make_unique<AdaptedTRTModule>(
       model_path, params, expand_ratio_h, expand_ratio_w, binary_thres,
-      l_params, classify_model_path, classify_label_path);
+      l_params, classify_model_path, classify_label_path,max_infer_running_);
   detector_->setCallback(std::bind(&WustVision::DetectCallback, this,
                                    std::placeholders::_1, std::placeholders::_2,
                                    std::placeholders::_3));
@@ -151,24 +141,29 @@ void WustVision::init() {
 
   solver_ = std::make_unique<Solver>(config);
   std::string camera_serial = config["camera"]["serial"].as<std::string>("");
-  if (!camera_.initializeCamera(camera_serial)) {
+  camera_=std::make_unique<HikCamera>();
+  if (!camera_->initializeCamera(camera_serial)) {
     WUST_ERROR(vision_logger) << "Camera initialization failed.";
     return;
   }
 
-  camera_.setParameters(config["camera"]["acquisition_frame_rate"].as<int>(),
+  camera_->setParameters(config["camera"]["acquisition_frame_rate"].as<int>(),
                         config["camera"]["exposure_time"].as<int>(),
                         config["camera"]["gain"].as<double>(),
                         config["camera"]["adc_bit_depth"].as<std::string>(),
                         config["camera"]["pixel_format"].as<std::string>());
-  camera_.setFrameCallback([this](const ImageFrame &frame) {
+  camera_->setFrameCallback([this](const ImageFrame &frame) {
+    static bool first_is_inited = false;
+
     if (is_inited_) {
       thread_pool_->enqueue(
           [frame = std::move(frame), this]() { processImage(frame); });
+    }else {
+      return ;
     }
   });
 
-  camera_.startCamera();
+  camera_->startCamera();
 
   // bool trigger_mode = config["camera"]["trigger_mode"].as<bool>(false);
   // bool invert_image = config["camera"]["invert_image"].as<bool>(false);
@@ -553,7 +548,7 @@ void WustVision::DetectCallback(const std::vector<ArmorObject> &objs,
   armors.armors =
       armor_pose_estimator_->extractArmorPoses(objs, imu_to_camera_);
 
-  measure_tool_->processDetectedArmors(objs, detect_color_, armors);
+  //measure_tool_->processDetectedArmors(objs, detect_color_, armors);
 
   infer_running_count_--;
   armorsCallback(armors, src_img);
@@ -697,16 +692,15 @@ void WustVision::processImage(const ImageFrame &frame) {
     // ("<<infer_running_count_.load()<<"), dropping frame";
     return;
   }
+ 
 
   cv::Mat img = convertToMat(frame);
   infer_running_count_++;
   printStats();
-  // auto timestamp_nanosec =
-  // std::chrono::duration_cast<std::chrono::nanoseconds>(
-  //     frame.timestamp.time_since_epoch())
-  //     .count();
+
   detector_->pushInput(img, frame.timestamp);
 }
+
 void WustVision::printStats() {
   using namespace std::chrono;
 
@@ -733,21 +727,19 @@ void WustVision::printStats() {
   }
 }
 
+
+
 WustVision *global_vision = nullptr;
 std::mutex mtx;
 std::condition_variable c;
-bool exit_flag = false;
+std::atomic<bool> exit_flag(false); // 改为原子布尔类型
+
+
 
 void signalHandler(int signum) {
   WUST_INFO("main") << "Interrupt signal (" << signum << ") received.";
-  if (global_vision) {
-    global_vision->stop();
-  }
-  {
-    std::lock_guard<std::mutex> lk(mtx);
-    exit_flag = true;
-  }
-  c.notify_one();
+  exit_flag.store(true, std::memory_order_release);
+  
 }
 
 int main() {
@@ -756,10 +748,20 @@ int main() {
 
   std::signal(SIGINT, signalHandler);
 
+  std::thread wait_thread([] {
+    while (!exit_flag.load(std::memory_order_acquire)) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    c.notify_one();  // 可以安全使用 condition_variable
+  });
+
   {
     std::unique_lock<std::mutex> lk(mtx);
-    c.wait(lk, [] { return exit_flag; });
+    c.wait(lk, [] { return exit_flag.load(std::memory_order_acquire); });
   }
 
+  wait_thread.join();  // 确保线程安全退出
+  vision.stop();
   return 0;
 }
+

@@ -1,5 +1,7 @@
 #!/bin/bash
 cd "$(dirname "$0")"
+export PATH=/usr/local/cuda-12.6/bin:$PATH
+export LD_LIBRARY_PATH=/usr/local/cuda-12.6/lib64:$LD_LIBRARY_PATH
 export MVCAM_SDK_PATH=/opt/MVS
 export MVCAM_COMMON_RUNENV=/opt/MVS/lib
 export MVCAM_GENICAM_CLPROTOCOL=/opt/MVS/lib/CLProtocol
@@ -19,7 +21,10 @@ fi
 
 echo -e "${yellow}<--- Start CMake --->${reset}"
 cd build
-cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=YES .. 
+cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=YES ..  -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang \
+  -DCMAKE_CXX_COMPILER=clang++ \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CXX_FLAGS="--gcc-toolchain=/usr"
 if [ $? -ne 0 ]; then
     echo -e "${red}\n--- CMake Failed ---${reset}"
     exit 1

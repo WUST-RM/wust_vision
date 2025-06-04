@@ -33,7 +33,7 @@ public:
   void transformArmorData(Armors &armors);
   Armors visualizeTargetProjection(Target armor_target_);
 
-  HikCamera camera_;
+  std::unique_ptr<HikCamera> camera_;
   std::unique_ptr<AdaptedTRTModule> detector_;
   std::unique_ptr<ThreadPool> thread_pool_;
   bool is_inited_ = false;
@@ -45,7 +45,7 @@ public:
   int max_infer_running_;
   std::mutex callback_mutex_;
 
-  int detect_color_;
+ 
   std::string vision_logger = "tensorrt_vision";
   std::atomic<bool> run_loop_{false};
   double latency_ms;
@@ -71,7 +71,8 @@ public:
   Serial serial_;
   std::unique_ptr<Solver> solver_;
   bool use_calculation_ = false;
-
+  bool use_serial = false;
+  
   std::unique_ptr<ArmorPoseEstimator> armor_pose_estimator_;
   Eigen::Matrix3d imu_to_camera_;
 

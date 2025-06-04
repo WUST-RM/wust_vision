@@ -196,7 +196,7 @@ void Serial::aim_cbk(ReceiveAimINFO &aim_data) {
     return;
   }
 
-  // WUST_DEBUG("AAA")<<"roll:"<<aim_data.roll<<"pitch:"<<aim_data.pitch<<"yaw:"<<aim_data.yaw;
+  //WUST_DEBUG("AAA")<<"roll:"<<aim_data.roll<<"pitch:"<<aim_data.pitch<<"yaw:"<<aim_data.yaw<<"v_roll:"<<aim_data.roll_vel<<"v_pitch:"<<aim_data.pitch_vel<<"v_yaw:"<<aim_data.yaw_vel<<"time:"<<aim_data.time_stamp;
 
   // if (!out_of_order_detected) {
   //   if (aim_data.time_stamp <= last_time) {
@@ -235,26 +235,26 @@ void Serial::aim_cbk(ReceiveAimINFO &aim_data) {
   last_pitch = pitch;
   last_roll = roll;
   last_yaw = yaw;
-  if (aim_data.manual_reset_count != last_reset_count) {
-    WUST_INFO(serial_logger)
-        << "Manual reset count changed: " << last_reset_count << " -> "
-        << aim_data.manual_reset_count;
-    if_manual_reset = true;
-    last_reset_count = aim_data.manual_reset_count;
-  } else {
-    if_manual_reset = false;
-  }
+  // if (aim_data.manual_reset_count != last_reset_count) {
+  //   WUST_INFO(serial_logger)
+  //       << "Manual reset count changed: " << last_reset_count << " -> "
+  //       << aim_data.manual_reset_count;
+  //   if_manual_reset = true;
+  //   last_reset_count = aim_data.manual_reset_count;
+  // } else {
+  //   if_manual_reset = false;
+  // }
 
   tf2::Quaternion q;
 
-  q.setRPY(roll, -pitch, yaw);
+  q.setRPY(0, -pitch, yaw);
 
   Transform gimbal_tf(Position(0, 0, 0), q);
   tf_tree_.setTransform("gimbal_odom", "gimbal_link", gimbal_tf, false);
 
   detect_color_ = aim_data.detect_color;
   // controller_delay = aim_data.controller_delay;
-  velocity = 21;
+  velocity = aim_data.bullet_speed;
 
   if (debug_mode_) {
     dumpAimToFile(aim_data, "/tmp/aim_status.txt");
@@ -378,15 +378,32 @@ void Serial::sendData() {
   }
 }
 void Serial::transformGimbalCmd(GimbalCmd &gimbal_cmd, bool appear) {
-  // send_robot_cmd_data_.data.gimbal.yaw=gimbal_cmd.yaw;
-  // send_robot_cmd_data_.data.gimbal.pitch=gimbal_cmd.pitch;
-  // send_robot_cmd_data_.data.gimbal.distance=gimbal_cmd.distance;
-  // send_robot_cmd_data_.data.shoot.pitch_diff=gimbal_cmd.pitch_diff;
-  // send_robot_cmd_data_.data.shoot.yaw_diff=gimbal_cmd.yaw_diff;
-  // send_robot_cmd_data_.data.shoot.fire=gimbal_cmd.fire_advice;
-  // send_robot_cmd_data_.data.debug.detect_color=detect_color_;
-  send_robot_cmd_data_.yaw = gimbal_cmd.yaw;
-  send_robot_cmd_data_.pitch = gimbal_cmd.pitch;
+  double alpha_yaw = 0.9;
+  double alpha_pitch = 0.9;
+  double max_yaw_change = 10.0;
+  double max_pitch_change = 5.0;
+
+  if (appear) {
+    auto limit = [](double val, double max_change) {
+      return std::clamp(val, -max_change, max_change);
+    };
+
+    double delta_yaw = gimbal_cmd.yaw - lastyaw_;
+    double delta_pitch = gimbal_cmd.pitch - lastpitch_;
+
+    delta_yaw = limit(delta_yaw, max_yaw_change);
+    delta_pitch = limit(delta_pitch, max_pitch_change);
+
+    send_robot_cmd_data_.yaw = lastyaw_ + alpha_yaw * delta_yaw;
+    send_robot_cmd_data_.pitch = lastpitch_ + alpha_pitch * delta_pitch;
+
+    lastyaw_ = send_robot_cmd_data_.yaw;
+    lastpitch_ = send_robot_cmd_data_.pitch;
+  } else {
+    send_robot_cmd_data_.yaw = lastyaw_;
+    send_robot_cmd_data_.pitch = lastpitch_;
+  }
+
   send_robot_cmd_data_.distance = gimbal_cmd.distance;
   send_robot_cmd_data_.pitch_diff = gimbal_cmd.pitch_diff;
   send_robot_cmd_data_.yaw_diff = gimbal_cmd.yaw_diff;

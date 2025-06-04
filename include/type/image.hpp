@@ -30,6 +30,14 @@ inline cv::Mat convertToMat(const ImageFrame &frame) {
   memcpy(rgb.data, frame.data.data(), frame.height * frame.step);
   return rgb;
 }
+// inline cv::cuda::GpuMat convertToMat(const ImageFrame &frame) {
+//   if (frame.data.empty()) {
+//     return cv::cuda::GpuMat();
+//   }
+//   cv::cuda::GpuMat rgb(frame.height, frame.width, CV_8UC3);
+//   memcpy(rgb.data, frame.data.data(), frame.height * frame.step);
+//   return rgb;
+// }
 // inline cv::Mat convertToMat(const ImageFrame& frame) {
 //     if (frame.data.empty()) {
 //         return cv::Mat();

@@ -17,8 +17,8 @@ void Solver::init(const YAML::Node &config) {
   auto s = config["solver"];
 
   // 2. 基本标量参数
-  shooting_range_w = s["shooting_range_w"].as<double>(0.135);
-  shooting_range_h = s["shooting_range_h"].as<double>(0.135);
+  shooting_range_w = s["shooting_range_w"].as<double>(0.12);
+  shooting_range_h = s["shooting_range_h"].as<double>(0.12);
   max_tracking_v_yaw = s["max_tracking_v_yaw"].as<double>(60.0);
   prediction_delay = s["prediction_delay"].as<double>(0.0);
   controller_delay = s["controller_delay"].as<double>(0.0);
@@ -75,14 +75,12 @@ GimbalCmd Solver::solve(const Target &target,
   rpy[0] = last_roll;
   rpy[1] = last_pitch + gimbal2camera_pitch;
   rpy[2] = last_yaw;
-  // std::cout<<"roll: "<<rpy[0]/M_PI*180<<"pitch: "<<rpy[1]/M_PI*180<<"yaw:
-  // "<<rpy[2]/M_PI*180<<std::endl;
-  // std::cout<<"pitch: "<<rpy[1]/M_PI*180<<std::endl;
+
   //  2. 预测目标位置与朝向
   Eigen::Vector3d pos(target.position_.x, target.position_.y,
                       target.position_.z);
   double yaw = target.yaw;
-  // std::cout<<"yaw: "<<yaw/M_PI*180<<std::endl;
+
   using namespace std::chrono;
 
   double fly_t = trajectory_compensator_->getFlyingTime(pos);
@@ -107,7 +105,11 @@ GimbalCmd Solver::solve(const Target &target,
   double raw_yaw, raw_pitch;
   calcYawAndPitch(chosen, rpy, raw_yaw, raw_pitch);
   double distance = chosen.norm();
-
+  std::vector<double> offs ;
+  double pitch_off ;
+  double yaw_off ;
+  double fire_yaw;
+  double fire_pitch;
   // 4. 状态机逻辑
   bool fire_advice = false;
   switch (state_) {
@@ -134,8 +136,14 @@ GimbalCmd Solver::solve(const Target &target,
       }
       calcYawAndPitch(tmp, rpy, raw_yaw, raw_pitch);
       distance = tmp.norm();
+      
     }
-    fire_advice = isOnTarget(rpy[2], rpy[1], raw_yaw, raw_pitch, distance);
+    offs =  manual_compensator_->angleHardCorrect(distance, chosen.z());
+    yaw_off = offs[1] * M_PI / 180.0;
+    pitch_off = offs[0] * M_PI / 180.0;
+    fire_yaw =raw_yaw+yaw_off;
+    fire_pitch =raw_pitch+pitch_off;
+    fire_advice = isOnTarget(rpy[2], rpy[1], fire_yaw, fire_pitch, distance);
     break;
 
   case TRACKING_CENTER:
@@ -148,16 +156,38 @@ GimbalCmd Solver::solve(const Target &target,
       state_ = TRACKING_ARMOR;
       overflow_count_ = 0;
     }
-    fire_advice = true;
-    calcYawAndPitch(pos, rpy, raw_yaw, raw_pitch);
+    double raw_yaw_ ,raw_pitch_;
+    calcYawAndPitch(chosen, rpy, raw_yaw_, raw_pitch);
+    if (controller_delay != 0.0) {
+      pos += controller_delay * Eigen::Vector3d(target.velocity_.x,
+                                                target.velocity_.y,
+                                                target.velocity_.z);
+      yaw += controller_delay * target.v_yaw;
+      auto tmp = getArmorPositions(pos, yaw, target.radius_1, target.radius_2,
+                                   target.d_zc, target.d_za, target.armors_num)
+                     .at(idx);
+      if (tmp.norm() < 0.1) {
+        throw std::runtime_error("No valid armor after controller delay");
+      }
+      calcYawAndPitch(tmp, rpy, raw_yaw_, raw_pitch);
+      distance = tmp.norm();
+      
+    }
+    //fire_advice = true;
+    calcYawAndPitch(pos, rpy, raw_yaw, raw_pitch_);
     distance = pos.norm();
+    offs =  manual_compensator_->angleHardCorrect(distance, chosen.z());
+    yaw_off = offs[1] * M_PI / 180.0;
+    pitch_off = offs[0] * M_PI / 180.0;
+    //std::cout<<"pos"<<pos.norm()<<std::endl;
+    fire_yaw =raw_yaw_+yaw_off;
+    fire_pitch =raw_pitch+pitch_off;
+    fire_advice = isOnTarget(rpy[2], rpy[1], fire_yaw, fire_pitch, distance);
     break;
   }
 
   // 5. 弹道+手动补偿
-  auto offs = manual_compensator_->angleHardCorrect(distance, chosen.z());
-  double pitch_off = offs[0] * M_PI / 180.0;
-  double yaw_off = offs[1] * M_PI / 180.0;
+  
   double cmd_pitch = raw_pitch + pitch_off;
   double cmd_yaw = normalize_angle(raw_yaw + yaw_off);
 
@@ -233,11 +263,13 @@ void Solver::calcYawAndPitch(const Eigen::Vector3d &p,
   // Calculate yaw and pitch
   yaw = atan2(p.y(), p.x());
   pitch = atan2(p.z(), p.head(2).norm());
-
+  
   if (double temp_pitch = pitch;
       trajectory_compensator_->compensate(p, temp_pitch)) {
     pitch = temp_pitch;
   }
+ // std::cout << "yaw: " << yaw << " pitch: " << pitch << std::endl;
+
 }
 int Solver::selectBestArmor(const std::vector<Eigen::Vector3d> &armor_positions,
                             const Eigen::Vector3d &target_center,
@@ -249,12 +281,12 @@ int Solver::selectBestArmor(const std::vector<Eigen::Vector3d> &armor_positions,
   double beta = target_yaw;
 
   // clang-format off
-Eigen::Matrix2d R_odom2center;
-Eigen::Matrix2d R_odom2armor;
-R_odom2center << std::cos(alpha), std::sin(alpha), 
--std::sin(alpha), std::cos(alpha);
-R_odom2armor << std::cos(beta), std::sin(beta), 
--std::sin(beta), std::cos(beta);
+  Eigen::Matrix2d R_odom2center;
+  Eigen::Matrix2d R_odom2armor;
+  R_odom2center << std::cos(alpha), std::sin(alpha), 
+  -std::sin(alpha), std::cos(alpha);
+  R_odom2armor << std::cos(beta), std::sin(beta), 
+  -std::sin(beta), std::cos(beta);
   // clang-format on
   Eigen::Matrix2d R_center2armor = R_odom2center.transpose() * R_odom2armor;
 

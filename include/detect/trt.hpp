@@ -31,6 +31,7 @@
 #include "fmt/printf.h"
 #include "opencv2/opencv.hpp"
 
+
 // 定义检测框结构体，与 OpenVINO 模型输出对齐
 class AdaptedTRTModule {
 public:
@@ -47,13 +48,15 @@ public:
     float nms_threshold = 0.5;  // NMS阈值
     int top_k = 128;            // 最大检测框数
   };
+  
 
   // 构造函数：加载 ONNX 模型并构建 TensorRT 引擎
   explicit AdaptedTRTModule(const std::string &onnx_path, const Params &params,
                             double expand_ratio_w, double expand_ratio_h,
                             int binary_thres, LightParams light_params,
                             std::string classify_model_path,
-                            std::string classify_label_path);
+                            std::string classify_label_path,
+                          int max_infer_running);
 
   // 析构函数：释放资源
   ~AdaptedTRTModule();
@@ -67,6 +70,10 @@ public:
                        Eigen::Matrix3f transform_matrix,
                        std::chrono::steady_clock::time_point timestamp,
                        const cv::Mat &src_img);
+  bool processCallbacka(
+    const cv::Mat resized_img, Eigen::Matrix3f transform_matrix,
+    std::chrono::steady_clock::time_point timestamp, const cv::Mat &src_img,
+    nvinfer1::IExecutionContext* context);
   void setCallback(DetectorCallback callback);
   bool extractImage(const cv::Mat &src, ArmorObject &armor);
   std::vector<Light> findLights(const cv::Mat &rbg_img,
@@ -91,15 +98,18 @@ private:
               const Eigen::Matrix<float, 3, 3> &transform_matrix);
 
   // 成员变量
+
   Params params_;
   nvinfer1::ICudaEngine *engine_;
   nvinfer1::IExecutionContext *context_;
   void *device_buffers_[2]; // 输入输出显存指针
   float *output_buffer_;    // 输出数据主机内存
+  const char* input_name;
+  const char* output_name;
   cudaStream_t stream_;     // CUDA流
   int input_idx_, output_idx_;
   size_t input_sz_, output_sz_;
-  // Eigen::Matrix3f transform_matrix; // 变换矩阵
+
   TRTLogger g_logger_;
   std::unique_ptr<ThreadPool> thread_pool_;
   DetectorCallback infer_callback_;
@@ -112,6 +122,11 @@ private:
   std::string classify_model_path_;
   std::string classify_label_path_;
   std::vector<std::string> class_names_;
+
+
+  std::vector<nvinfer1::IExecutionContext*> contexts_;  // 创建时填充
+  std::atomic<int> next_context_id_{0}; // 用于分配 thread_local 初始 id
+
 };
 
 #endif // ARMOR_DETECTOR_TENSORRT__TRT_MODULE_HPP_

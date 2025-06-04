@@ -20,6 +20,11 @@
 #include "common/gobal.hpp"
 #include "common/logger.hpp"
 #include "cuda_runtime_api.h"
+#include <opencv2/core.hpp>
+#include <opencv2/cudawarping.hpp>
+#include <opencv2/cudaimgproc.hpp> 
+
+
 
 // #include <logger.h>
 #define TRT_ASSERT(expr)                                                       \
@@ -98,6 +103,9 @@ static cv::Mat letterbox(const cv::Mat &img, Eigen::Matrix3f &transform_matrix,
 
   return resized_img;
 }
+
+
+
 /**
  * @brief Calculate intersection area between two objects.
  * @param a Object a.
@@ -339,54 +347,126 @@ void AdaptedTRTModule::detect(ArmorObject &armor) {
   LightCornerCorrector corner_corrector;
   corner_corrector.correctCorners(armor);
 }
-// 构造函数：初始化参数并构建引擎
+
 AdaptedTRTModule::AdaptedTRTModule(const std::string &onnx_path,
                                    const Params &params, double expand_ratio_w,
                                    double expand_ratio_h, int binary_thres,
                                    LightParams light_params,
                                    std::string classify_model_path,
-                                   std::string classify_label_path)
+                                   std::string classify_label_path,
+                                  int max_infer_running)
     : params_(params), engine_(nullptr), context_(nullptr),
       output_buffer_(nullptr), runtime_(nullptr),
       expand_ratio_h_(expand_ratio_h), expand_ratio_w_(expand_ratio_w),
       binary_thres_(binary_thres), light_params_(light_params),
       classify_label_path_(classify_label_path),
       classify_model_path_(classify_model_path) {
-  buildEngine(onnx_path);
-  TRT_ASSERT(context_ = engine_->createExecutionContext());
-  TRT_ASSERT((input_idx_ = engine_->getBindingIndex("images")) == 0);
-  TRT_ASSERT((output_idx_ = engine_->getBindingIndex("output")) == 1);
+  
 
-  auto input_dims = engine_->getBindingDimensions(input_idx_);
-  auto output_dims = engine_->getBindingDimensions(output_idx_);
-  input_sz_ = input_dims.d[1] * input_dims.d[2] * input_dims.d[3];
-  output_sz_ = output_dims.d[1] * output_dims.d[2];
-  TRT_ASSERT(
-      cudaMalloc(&device_buffers_[input_idx_], input_sz_ * sizeof(float)) == 0);
-  TRT_ASSERT(cudaMalloc(&device_buffers_[output_idx_],
-                        output_sz_ * sizeof(float)) == 0);
+  buildEngine(onnx_path);
+
+
+  context_ = engine_->createExecutionContext();
+  TRT_ASSERT(context_ != nullptr);
+
+
+  input_name = engine_->getIOTensorName(0);
+  output_name = engine_->getIOTensorName(1);
+
+
+  TRT_ASSERT(context_->setInputShape(input_name, nvinfer1::Dims4{1, 3, INPUT_H, INPUT_W}));
+  TRT_ASSERT(context_->allInputShapesSpecified());
+
+
+  auto input_dims = context_->getTensorShape(input_name);
+  auto output_dims = context_->getTensorShape(output_name);
+
+
+  input_sz_ = 1;
+  for (int i = 0; i < input_dims.nbDims; ++i) {
+    input_sz_ *= input_dims.d[i];
+  }
+
+  output_sz_ = 1;
+  for (int i = 0; i < output_dims.nbDims; ++i) {
+    output_sz_ *= output_dims.d[i];
+  }
+
+
+
+
+  TRT_ASSERT(cudaMalloc(&device_buffers_[0], input_sz_ * sizeof(float)) == 0);
+  TRT_ASSERT(cudaMalloc(&device_buffers_[1], output_sz_ * sizeof(float)) == 0);
+
+
   output_buffer_ = new float[output_sz_];
+
+
+ 
   TRT_ASSERT(cudaStreamCreate(&stream_) == 0);
+  for (int i = 0; i < max_infer_running; ++i) {
+    contexts_.emplace_back(engine_->createExecutionContext());
+  }
   thread_pool_ =
       std::make_unique<ThreadPool>(std::thread::hardware_concurrency(), 100);
+
+  initNumberClassifier();
 }
 
 AdaptedTRTModule::~AdaptedTRTModule() {
-  delete[] output_buffer_;
-  cudaStreamDestroy(stream_);
-  cudaFree(device_buffers_[output_idx_]);
-  cudaFree(device_buffers_[input_idx_]);
-  if (context_)
-    context_->destroy();
-  if (engine_)
-    engine_->destroy();
-  if (runtime_)
-    runtime_->destroy();
-  thread_pool_.reset();
-  if (thread_pool_) {
-    thread_pool_->waitUntilEmpty();
+
+  if (context_) {
+    delete context_;
+    context_ = nullptr;
+  }
+  for (auto ctx : contexts_) {
+  if (ctx) {
+   delete  ctx;
+   ctx = nullptr;
   }
 }
+
+  if (engine_) {
+    delete engine_;
+    engine_ = nullptr;
+  }
+
+
+  if (runtime_) {
+    delete runtime_;
+    runtime_ = nullptr;
+  }
+
+  for (int i = 0; i < 2; ++i) {
+    if (device_buffers_[i]) {
+      cudaFree(device_buffers_[i]);
+      device_buffers_[i] = nullptr;
+    }
+  }
+
+
+  if (output_buffer_) {
+    delete[] output_buffer_;
+    output_buffer_ = nullptr;
+  }
+
+  if (stream_) {
+    cudaStreamDestroy(stream_);
+    stream_ = nullptr;
+  }
+  
+
+  if(thread_pool_)
+  {
+    thread_pool_->waitUntilEmpty();
+    thread_pool_.reset();
+  }
+
+
+  
+  WUST_INFO("TRTModule") << "AdaptedTRTModule resources released.";
+}
+
 
 void AdaptedTRTModule::buildEngine(const std::string &onnx_path) {
   std::string engine_path =
@@ -423,7 +503,14 @@ void AdaptedTRTModule::buildEngine(const std::string &onnx_path) {
   if (builder->platformHasFastFp16()) {
     config->setFlag(nvinfer1::BuilderFlag::kFP16);
   }
-  engine_ = builder->buildEngineWithConfig(*network, *config);
+  //engine_ = builder->buildEngineWithConfig(*network, *config);
+  nvinfer1::IHostMemory* serializedEngine = builder->buildSerializedNetwork(*network, *config);
+  nvinfer1::IRuntime* runtime_ = nvinfer1::createInferRuntime(g_logger_);
+  nvinfer1::ICudaEngine* engine_ = runtime_->deserializeCudaEngine(
+    serializedEngine->data(), 
+    serializedEngine->size()
+);
+ 
 
   // 保存引擎
   auto serialized_engine = engine_->serialize();
@@ -431,7 +518,7 @@ void AdaptedTRTModule::buildEngine(const std::string &onnx_path) {
   out_file.write(reinterpret_cast<const char *>(serialized_engine->data()),
                  serialized_engine->size());
   out_file.close();
-  serialized_engine->destroy();
+  delete serialized_engine;
 
   // 反序列化仍然需要 runtime_
   if (!runtime_) {
@@ -439,13 +526,14 @@ void AdaptedTRTModule::buildEngine(const std::string &onnx_path) {
   }
 
   // 清理
-  parser->destroy();
-  network->destroy();
-  config->destroy();
-  builder->destroy();
+  delete parser ;
+  delete network;
+  delete config;
+  delete builder;
 
   WUST_INFO("TRT") << "Build engine from " << onnx_path << " successfully.";
 }
+
 
 void AdaptedTRTModule::setCallback(DetectorCallback callback) {
   infer_callback_ = callback;
@@ -455,33 +543,100 @@ void AdaptedTRTModule::setCallback(DetectorCallback callback) {
 bool AdaptedTRTModule::processCallback(
     const cv::Mat resized_img, Eigen::Matrix3f transform_matrix,
     std::chrono::steady_clock::time_point timestamp, const cv::Mat &src_img) {
-  // 预处理：Letterbox 缩放
-  // cv::Mat resized;
-  // cv::resize(image, resized, cv::Size(params_.input_w, params_.input_h));
+    if( resized_img.empty()||src_img.empty())
+    return false;
+    cv::cuda::GpuMat gpu_img(resized_img);
+    cv::Mat blob = cv::dnn::blobFromImage(
+    gpu_img, 1., cv::Size(INPUT_W, INPUT_H), cv::Scalar(0, 0, 0), true);
 
-  //   Eigen::Matrix3f transform_matrix;  // transform matrix from resized image
-  //   to source image. cv::Mat resized = letterbox(image, transform_matrix);
+    auto context = engine_->createExecutionContext();
 
-  // cv::Mat blob =
-  //   cv::dnn::blobFromImage(resized, 1.0 / 255.0, cv::Size(), cv::Scalar(0, 0,
-  //   0), true);
-  //   auto end = std::chrono::steady_clock::now();
-  //     std::chrono::steady_clock::time_point timestamp_timepoint =
-  //     std::chrono::steady_clock::time_point(std::chrono::nanoseconds(timestamp_nanosec));
-  // auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end -
-  // timestamp_timepoint);
 
-  // WUST_INFO("TRT") << "Detect time: " << duration.count() << " ms";
+    
 
-  cv::Mat blob = cv::dnn::blobFromImage(
-      resized_img, 1., cv::Size(INPUT_W, INPUT_H), cv::Scalar(0, 0, 0), true);
-  // 拷贝数据到显存
-  cudaMemcpyAsync(device_buffers_[input_idx_], blob.ptr<float>(),
-                  input_sz_ * sizeof(float), cudaMemcpyHostToDevice, stream_);
-  context_->enqueueV2(device_buffers_, stream_, nullptr);
-  cudaMemcpyAsync(output_buffer_, device_buffers_[output_idx_],
-                  output_sz_ * sizeof(float), cudaMemcpyDeviceToHost, stream_);
-  cudaStreamSynchronize(stream_);
+    CV_Assert(blob.type() == CV_32F);
+
+    TRT_ASSERT(cudaMemcpyAsync(device_buffers_[0], blob.ptr<float>(), input_sz_ * sizeof(float),
+                              cudaMemcpyHostToDevice, stream_) == 0);
+
+    TRT_ASSERT(context->setInputTensorAddress(input_name, device_buffers_[0]));
+    TRT_ASSERT(context->setOutputTensorAddress(output_name, device_buffers_[1]));
+
+    TRT_ASSERT(context->enqueueV3(stream_));
+
+    TRT_ASSERT(cudaMemcpyAsync(output_buffer_, device_buffers_[1], output_sz_ * sizeof(float),
+                              cudaMemcpyDeviceToHost, stream_) == 0);
+
+    TRT_ASSERT(cudaStreamSynchronize(stream_) == 0);
+
+
+
+  std::vector<ArmorObject> objs_tmp, objs_result;
+  std::vector<cv::Rect> rects;
+  std::vector<float> scores;
+  // 后处理
+  objs_result = postprocess(objs_tmp, scores, rects, output_buffer_,
+                            output_sz_ / 21, transform_matrix);
+  if (objs_result.size() > 10) {
+    if (this->infer_callback_) {
+      this->infer_callback_(objs_result, timestamp, src_img);
+      return true;
+    }
+  }
+
+  for (auto &armor : objs_result) {
+    if (armor.color == ArmorColor::NONE || armor.color == ArmorColor::PURPLE) {
+      continue;
+    }
+    if (detect_color_ == 0 && armor.color != ArmorColor::RED) {
+      continue;
+    } else if (detect_color_ == 1 && armor.color != ArmorColor::BLUE) {
+      continue;
+    }
+
+    if (extractImage(src_img, armor)) {
+      classifyNumber(armor);
+      detect(armor);
+    }
+  }
+
+  if (this->infer_callback_) {
+    this->infer_callback_(objs_result, timestamp, src_img);
+    return true;
+  }
+
+  return true;
+}
+bool AdaptedTRTModule::processCallbacka(
+    const cv::Mat resized_img, Eigen::Matrix3f transform_matrix,
+    std::chrono::steady_clock::time_point timestamp, const cv::Mat &src_img,
+    nvinfer1::IExecutionContext* context) {
+    if( resized_img.empty()||src_img.empty())
+    return false;
+
+    cv::Mat blob = cv::dnn::blobFromImage(
+    resized_img, 1., cv::Size(INPUT_W, INPUT_H), cv::Scalar(0, 0, 0), true); 
+   
+    
+
+    
+
+    CV_Assert(blob.type() == CV_32F);
+
+    TRT_ASSERT(cudaMemcpyAsync(device_buffers_[0], blob.ptr<float>(), input_sz_ * sizeof(float),
+                              cudaMemcpyHostToDevice, stream_) == 0);
+
+    TRT_ASSERT(context->setInputTensorAddress(input_name, device_buffers_[0]));
+    TRT_ASSERT(context->setOutputTensorAddress(output_name, device_buffers_[1]));
+
+    TRT_ASSERT(context->enqueueV3(stream_));
+
+    TRT_ASSERT(cudaMemcpyAsync(output_buffer_, device_buffers_[1], output_sz_ * sizeof(float),
+                              cudaMemcpyDeviceToHost, stream_) == 0);
+
+    TRT_ASSERT(cudaStreamSynchronize(stream_) == 0);
+
+
 
   std::vector<ArmorObject> objs_tmp, objs_result;
   std::vector<cv::Rect> rects;
@@ -627,21 +782,7 @@ std::vector<ArmorObject> AdaptedTRTModule::postprocess(
     int grid0 = grid_strides[i].grid0;
     int grid1 = grid_strides[i].grid1;
     int stride = grid_strides[i].stride;
-    // // 第一个点（左上）
-    // box.pts[0].x = (det[0] + grid0) * stride;
-    // box.pts[0].y = (det[1] + grid1) * stride;
 
-    // // 第二个点（右上）
-    // box.pts[1].x = (det[2] + grid0) * stride;
-    // box.pts[1].y = (det[3] + grid1) * stride;
-
-    // // 第三个点（右下）
-    // box.pts[2].x = (det[4] + grid0) * stride;
-    // box.pts[2].y = (det[5] + grid1) * stride;
-
-    // // 第四个点（左下）
-    // box.pts[3].x = (det[6] + grid0) * stride;
-    // box.pts[3].y = (det[7] + grid1) * stride;
     cv::Point color_id, num_id;
 
     float x_1 = (det[0] + grid0) * stride;
@@ -727,19 +868,33 @@ std::vector<ArmorObject> AdaptedTRTModule::postprocess(
   return objs_result;
 }
 
+// void AdaptedTRTModule::pushInput(
+//     const cv::Mat &rgb_img, std::chrono::steady_clock::time_point timestamp) {
+//   if (rgb_img.empty()) {
+//     return;
+//   }
+
+//   Eigen::Matrix3f transform_matrix;
+//   cv::Mat resized_img = letterbox(rgb_img, transform_matrix);
+//   processCallback(resized_img, transform_matrix, timestamp, rgb_img);
+
+ 
+// }
 void AdaptedTRTModule::pushInput(
     const cv::Mat &rgb_img, std::chrono::steady_clock::time_point timestamp) {
-  if (rgb_img.empty()) {
-    return;
-  }
+  if (rgb_img.empty()) return;
 
   Eigen::Matrix3f transform_matrix;
   cv::Mat resized_img = letterbox(rgb_img, transform_matrix);
-  processCallback(resized_img, transform_matrix, timestamp, rgb_img);
 
-  // thread_pool_->enqueue(
-  //     [this, resized_img, transform_matrix, timestamp, rgb_img]() {
-  //       this->processCallback(resized_img, transform_matrix, timestamp,
-  //                             rgb_img);
-  //     });
+  thread_pool_->enqueue([=, this]() {
+    // thread_local 分配独立的 context id
+    thread_local int context_id = -1;
+    if (context_id == -1) {
+      context_id = next_context_id_++ % contexts_.size();
+    }
+
+    auto context = contexts_[context_id];
+    this->processCallbacka(resized_img, transform_matrix, timestamp, rgb_img, context);
+  });
 }

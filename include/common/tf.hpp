@@ -430,13 +430,13 @@ public:
       node.transforms[tf.timestamp] = tf;
       node.is_static = true;
       // 静态变换速度为零
-      node.linear_velocity = Eigen::Vector3d::Zero();
-      node.angular_velocity = Eigen::Vector3d::Zero();
+      // node.linear_velocity = Eigen::Vector3d::Zero();
+      // node.angular_velocity = Eigen::Vector3d::Zero();
     } else {
       // 动态变换：添加新变换，维护最近1000个变换
       node.is_static = false;
 
-      // 计算速度（如果有前一个变换）
+      //计算速度（如果有前一个变换）
       if (!node.transforms.empty()) {
         const auto &last_tf = node.transforms.rbegin()->second;
         double dt =

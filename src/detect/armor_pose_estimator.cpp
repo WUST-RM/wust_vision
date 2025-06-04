@@ -203,7 +203,7 @@ void ArmorPoseEstimator::sortPnPResult(const ArmorObject &armor,
   // double aa=rpy1[2]/M_PI*180;
   // double bb=rpy2[2]/M_PI*180;
 
-  //  std::cout<<aa<<""<<bb<<std::endl;
+  //  std::cout<<aa<<"  "<<bb<<"   "<<angle<<std::endl;
 
   // 根据倾斜角度选择解
   // 如果装甲板左倾（angle > 0），选择Yaw为负的解
