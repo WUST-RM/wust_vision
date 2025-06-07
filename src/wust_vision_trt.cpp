@@ -47,7 +47,7 @@ void WustVision::stopTimer() {
 }
 
 void WustVision::init() {
-  YAML::Node config =
+  config =
       YAML::LoadFile("/home/hy/wust_vision/config/config_trt.yaml");
   debug_mode_ = config["debug"]["debug_mode"].as<bool>();
   debug_w = config["debug"]["debug_w"].as<int>(640);
