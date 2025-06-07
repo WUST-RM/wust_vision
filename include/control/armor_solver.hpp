@@ -38,6 +38,12 @@ public:
   // Solve a new gimbal command; timestamp in seconds
   GimbalCmd solve(const Target &target,
                   std::chrono::steady_clock::time_point current_time);
+  GimbalCmd solve(const Target &target,
+                  std::chrono::steady_clock::time_point current_time,
+                  double extra_prediction_time);
+  std::vector<GimbalCmd>
+  solvePredictiveCommands(const Target &target,
+                          std::chrono::steady_clock::time_point current_time);
 
   // Retrieve a compensated trajectory (same API as before)
   std::vector<std::pair<double, double>> getTrajectory() const noexcept;

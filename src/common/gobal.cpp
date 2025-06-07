@@ -13,3 +13,7 @@ double last_roll;
 double last_pitch;
 double last_yaw;
 double gimbal2camera_yaw, gimbal2camera_roll, gimbal2camera_pitch;
+double odom2gimbal_yaw, odom2gimbal_roll, odom2gimbal_pitch;
+bool is_inited_ = false;
+YAML::Node config;
+std::atomic<bool> exit_flag(false);

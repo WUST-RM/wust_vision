@@ -1,5 +1,5 @@
 use_calculation: false
-use_serial: false
+detect_color: 1
 
 logger:
   log_level: "INFO"
@@ -37,24 +37,40 @@ light:
   max_ratio: 0.45
   max_angle: 40.0
 
-control_rate: 1000
+
 
 camera:
-  trigger_mode: false
-  invert_image: false
+  serial: ""
   camera_info_path: "/home/hy/wust_vision/config/camera_info.yaml"
-  exposure_time_us: 3500
-  gain: 7.0
+  acquisition_frame_rate: 200
+  exposure_time: 3500
+  gain: 10.0
+  adc_bit_depth: "Bits_8"
+  pixel_format: "BayerRG8"
 
-detect_color: 1
+
 
 tf:
-  gimbal2camera_x:  0.0
+  gimbal2camera_x:  0.07
   gimbal2camera_y:  0.0
-  gimbal2camera_z:  0.0
+  gimbal2camera_z:  -0.05
   gimbal2camera_roll: 0.0
   gimbal2camera_pitch: 0.0
   gimbal2camera_yaw: 180.0
+  odom2gimbal_roll: 0.0
+  odom2gimbal_pitch: 0.0
+  odom2gimbal_yaw: 0.0
+
+control:
+  use_serial: false
+  device_name: "/dev/ttyACM0"
+  control_rate: 1000
+  alpha_yaw: 0.9
+  alpha_pitch: 0.9
+  max_yaw_change: 10.0
+  max_pitch_change: 5.0
+
+
 
 tracker:
   target_frame: "odom"
@@ -71,11 +87,11 @@ tracker:
   rotation_inconsistent_cooldown_limit: 5
   jump_thresh: 0.4
   ekf:
-    s2qx: 7.0
-    s2qy: 7.0
+    s2qx: 10.0
+    s2qy: 10.0
     s2qz: 1.0
-    s2qyaw: 30.0
-    s2qr: 50.0
+    s2qyaw: 20.0
+    s2qr: 80.0
     s2qd_zc: 800.0
     r_x: 0.0046302163
     r_y: 0.0322467810
@@ -83,11 +99,13 @@ tracker:
     r_yaw: 0.3651087658
 
 solver:
+      shooting_range_w: 0.12
+      shooting_range_h: 0.12
       prediction_delay: 0.0
       controller_delay: 0.0
-      max_tracking_v_yaw: 180.0 #转速(rad/s)大于这个值时瞄准机器人中心 
+      max_tracking_v_yaw: 22.0 #转速(rad/s)大于这个值时瞄准机器人中心 
       side_angle: 20.0 
-      bullet_speed: 25.0
+      bullet_speed: 20.0
       compenstator_type: "ideal"
       gravity: 9.8
       resistance: 0.092

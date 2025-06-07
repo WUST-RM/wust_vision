@@ -19,7 +19,10 @@ fi
 
 echo -e "${yellow}<--- Start CMake --->${reset}"
 cd build
-cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=YES .. 
+cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=YES ..  -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang \
+  -DCMAKE_CXX_COMPILER=clang++ \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CXX_FLAGS="--gcc-toolchain=/usr"
 if [ $? -ne 0 ]; then
     echo -e "${red}\n--- CMake Failed ---${reset}"
     exit 1

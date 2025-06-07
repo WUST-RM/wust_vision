@@ -1,5 +1,5 @@
 use_calculation:  false
-use_serial: false
+detect_color: 1
 
 logger:
   log_level: "DEBUG"
@@ -36,16 +36,16 @@ light:
   max_ratio: 0.45
   max_angle: 40.0
 
-control_rate: 1000
+
 
 camera:
   trigger_mode: false
   invert_image: false
   camera_info_path: "/home/hy/wust_vision/config/camera_info.yaml"
   exposure_time_us: 3500
-  gain: 16.0
+  gain: 10.0
 
-detect_color: 1
+
 tf:
   gimbal2camera_x:  0.0
   gimbal2camera_y:  0.0
@@ -53,7 +53,20 @@ tf:
   gimbal2camera_roll: 1.0
   gimbal2camera_pitch: 6.0
   gimbal2camera_yaw: 180.0
+  odom2gimbal_roll: 0.0
+  odom2gimbal_pitch: 0.0
+  odom2gimbal_yaw: 0.0
 
+
+control:
+  use_serial: false
+  device_name: "/dev/ttyACM0"
+  control_rate: 1000
+  alpha_yaw: 0.9
+  alpha_pitch: 0.9
+  max_yaw_change: 10.0
+  max_pitch_change: 5.0
+  
 
 tracker:
   target_frame: "odom"
@@ -81,6 +94,8 @@ tracker:
     r_z: 0.0016992016
     r_yaw: 0.6092185450
 solver:
+      shooting_range_w: 0.12
+      shooting_range_h: 0.12
       prediction_delay: 0.05
       controller_delay: 0.0
       max_tracking_v_yaw: 180.0 #转速(rad/s)大于这个值时瞄准机器人中心 

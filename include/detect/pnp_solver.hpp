@@ -16,8 +16,8 @@
 #ifndef RM_UTILS_PNP_SOLVER_HPP_
 #define RM_UTILS_PNP_SOLVER_HPP_
 
-#include <iostream>
 #include <Eigen/Dense>
+#include <iostream>
 #include <opencv2/calib3d.hpp>
 #include <opencv2/imgproc.hpp>
 #include <unordered_map>

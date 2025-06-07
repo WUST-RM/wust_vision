@@ -5,7 +5,7 @@
 #include "type/type.hpp"
 
 // std
-#include <algorithm> // 如果需要转换大小写
+#include <algorithm>
 #include <cfloat>
 #include <fmt/format.h>
 #include <iostream>
@@ -100,6 +100,82 @@ void Tracker::update(const Armors &armors_msg) noexcept {
           position_diff_ = position_diff;
         }
       }
+    }
+
+    Armor *closest_armor = nullptr;
+    double min_diff = M_PI; // 初始化最小差值为最大可能值（π）
+
+    for (auto &armor : another_armors) {
+      double yaw_diff =
+          std::fabs(armor.yaw - tracked_armor.yaw); // 计算 yaw 差值
+      yaw_diff = std::fmod(yaw_diff, M_PI * 2); // 确保差值在 [0, 2π] 范围内
+
+      // 将差值限制到 [-π, π] 范围以获取最小的角度差
+      if (yaw_diff > M_PI) {
+        yaw_diff -= M_PI * 2;
+      }
+
+      double diff_to_90_deg = std::fabs(yaw_diff - M_PI / 2);
+
+      if (diff_to_90_deg < min_diff) {
+        min_diff = diff_to_90_deg;
+        closest_armor = &armor;
+      }
+    }
+
+    if (closest_armor != nullptr && min_diff > -0.09 && min_diff < 0.09) {
+      // std::cout << "Tracker armor: "
+      //           << tracked_armor.target_pos.x << " "
+      //           << tracked_armor.target_pos.y << " "
+      //           << tracked_armor.target_pos.z << " yaw "
+      //           << tracked_armor.yaw << std::endl;
+
+      // std::cout << "Best armor: "
+      //           << closest_armor->target_pos.x << " "
+      //           << closest_armor->target_pos.y << " "
+      //           << closest_armor->target_pos.z << " yaw (before adjust) "
+      //           << closest_armor->yaw << std::endl;
+
+      // 基于 Tracker yaw 构造 yaw2 = yaw1 - 90度（π/2）
+      double yaw1 = tracked_armor.yaw;
+      double yaw2 = yaw1 - M_PI / 2.0;
+
+      Eigen::Vector3d p1(tracked_armor.target_pos.x, tracked_armor.target_pos.y,
+                         tracked_armor.target_pos.z);
+      Eigen::Vector3d p2(closest_armor->target_pos.x,
+                         closest_armor->target_pos.y,
+                         closest_armor->target_pos.z);
+
+      // 反向方向向量
+      Eigen::Vector3d dir1(-std::cos(yaw1), -std::sin(yaw1), 0);
+      Eigen::Vector3d dir2(-std::cos(yaw2), -std::sin(yaw2), 0);
+
+      // 解最近点
+      Eigen::Vector3d delta = p1 - p2;
+      double a = dir1.dot(dir1);
+      double b = dir1.dot(dir2);
+      double c = dir2.dot(dir2);
+      double d = dir1.dot(delta);
+      double e = dir2.dot(delta);
+      double denom = a * c - b * b;
+
+      double s = (b * e - c * d) / denom;
+      double t = (a * e - b * d) / denom;
+
+      Eigen::Vector3d point1 = p1 + s * dir1;
+      Eigen::Vector3d point2 = p2 + t * dir2;
+      Eigen::Vector3d center = 0.5 * (point1 + point2);
+
+      double dist_to_p1 = (center - p1).norm();
+      double dist_to_p2 = (center - p2).norm();
+
+      // std::cout << "Estimated center (yaw diff 90°, Tracker is true): "
+      //           << center.x() << " " << center.y() << " " << center.z() <<
+      //           std::endl;
+
+      // std::cout << "Distance to Tracker armor: " << dist_to_p1 << " m" <<
+      // std::endl; std::cout << "Distance to Best armor: " << dist_to_p2 << "
+      // m" << std::endl;
     }
 
     if (min_position_diff < max_match_distance_ &&
@@ -228,45 +304,6 @@ void Tracker::handleArmorJump(const Armor &current_armor) noexcept {
 
   ekf->setState(target_state);
 }
-void Tracker::updateBestYawdiff(const Armor &armor1, const Armor &armor2) {
-  // 位置向量
-  Eigen::Vector3d p1(armor1.target_pos.x, armor1.target_pos.y,
-                     armor1.target_pos.z);
-  Eigen::Vector3d p2(armor2.target_pos.x, armor2.target_pos.y,
-                     armor2.target_pos.z);
-
-  // 获取 armor2 的朝向（假设为真值）
-  double yaw2 = orientationToYaw(armor2.target_ori);
-
-  // 从 armor2 朝向的 yaw 反向延长一定距离，用 armor1 的位置反推
-  // 方向向量：反向 unit vector（向后）
-  Eigen::Vector2d yaw_dir(-cos(yaw2), -sin(yaw2));
-
-  // armor1 和 armor2 之间的距离
-  Eigen::Vector2d p1_2d = p1.head<2>();
-  Eigen::Vector2d p2_2d = p2.head<2>();
-
-  // 估计圆心的位置
-  // 做法：从 p2 出发，沿反 yaw2 方向延长一段距离 r，使其接近 p1
-  // 解一个一元方程：||p1 - (p2 + r * dir)|| 最小 -> 最佳 r
-  double r_opt = (p1_2d - p2_2d).dot(yaw_dir); // 最佳延长距离（投影）
-
-  Eigen::Vector2d center = p2_2d + r_opt * yaw_dir;
-
-  // 计算两个半径
-  double r1 = (p1_2d - center).norm();
-  double r2 = (p2_2d - center).norm();
-
-  // 输出调试信息
-  WUST_INFO(tracker_logger) << fmt::format("rotation center: ({:.2f}, {:.2f})",
-                                           center.x(), center.y());
-  WUST_INFO(tracker_logger)
-      << fmt::format("radius1: {:.2f}, radius2: {:.2f}", r1, r2);
-
-  // 可选：保存结果
-  // rotation_center_ = Eigen::Vector3d(center.x(), center.y(), (p1.z() +
-  // p2.z()) / 2.0); radius1_ = r1; radius2_ = r2;
-}
 
 double Tracker::orientationToYaw(const tf2::Quaternion &q) noexcept {
   double roll, pitch, yaw;
@@ -351,64 +388,3 @@ void Tracker::updateYawStateConsistency(double measured_yaw) {
     track_update_count_ = 0;
   }
 }
-// void Tracker::updateXYVelocityConsistencyWithPosition(
-//   const Eigen::Vector2f& curr_position) {
-
-// xy_track_update_count_++;
-
-// // 计算 dt
-// double dt = std::chrono::duration_cast<std::chrono::duration<double>>(
-//   tracked_armor.timestamp - last_track_time_)
-//                 .count();
-
-// if (dt > 1e-5) {
-//   // 计算观测速度
-//   Eigen::Vector2f observed_velocity = (curr_position - last_obs_position_) /
-//   dt;
-
-//   // 存入 diff 缓冲区
-//   Eigen::Vector2f pred_velocity(target_state(4), target_state(5));
-//   Eigen::Vector2f diff = observed_velocity - pred_velocity;
-//   float diff_norm = diff.norm();
-
-//   xy_velocity_diff_buffer_.push_back(diff_norm);
-//   if (xy_velocity_diff_buffer_.size() > buffer_size_) {
-//     xy_velocity_diff_buffer_.pop_front();
-//   }
-
-//   float diff_avg = std::accumulate(
-//       xy_velocity_diff_buffer_.begin(),
-//       xy_velocity_diff_buffer_.end(), 0.0f) /
-//       xy_velocity_diff_buffer_.size();
-
-//   if (xy_track_update_count_ >= 10) {
-//     if (xy_inconsistent_cooldown_ == 0) {
-//       if (diff_avg > max_xy_velocity_diff_thresh_) {
-//         xy_inconsistent_count_++;
-//         if (xy_inconsistent_count_ >= max_xy_inconsistent_count_) {
-//           WUST_WARN(tracker_logger)
-//               << "XY velocity mismatch: OBS-PRED too large, correcting EKF";
-
-//           // 修正状态
-//           target_state(1) = observed_velocity.x();
-//           target_state(3) = observed_velocity.y();
-//           ekf->setState(target_state);
-
-//           xy_inconsistent_count_ = 0;
-//           xy_inconsistent_cooldown_ = xy_inconsistent_cooldown_limit_;
-//         }
-//       } else {
-//         xy_inconsistent_count_ = 0;
-//       }
-//     } else {
-//       xy_inconsistent_cooldown_--;
-//     }
-
-//     xy_track_update_count_ = 0;
-//   }
-// }
-
-// // 更新缓存
-// last_obs_position_ = curr_position;
-
-// }

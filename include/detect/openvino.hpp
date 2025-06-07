@@ -12,8 +12,9 @@
 
 class OpenVino {
 public:
-  using DetectorCallback = std::function<void(const std::vector<ArmorObject> &,
-                                              std::chrono::steady_clock::time_point, const cv::Mat &)>;
+  using DetectorCallback = std::function<void(
+      const std::vector<ArmorObject> &, std::chrono::steady_clock::time_point,
+      const cv::Mat &)>;
   // OpenVino();
   explicit OpenVino(const std::filesystem::path &model_path,
                     const std::string &classify_model_path,
@@ -29,12 +30,14 @@ public:
   void init();
   bool processCallback(const cv::Mat resized_img,
                        Eigen::Matrix3f transform_matrix,
-                       std::chrono::steady_clock::time_point timestamp, const cv::Mat &src_img);
+                       std::chrono::steady_clock::time_point timestamp,
+                       const cv::Mat &src_img);
 
   void drawresult(const cv::Mat &src_img,
                   std::vector<ArmorObject> &armor_objects);
 
-  void pushInput(const cv::Mat &rgb_img, std::chrono::steady_clock::time_point timestamp);
+  void pushInput(const cv::Mat &rgb_img,
+                 std::chrono::steady_clock::time_point timestamp);
   void initNumberClassifier();
   void setCallback(DetectorCallback callback);
   bool classifyNumber(ArmorObject &armor);

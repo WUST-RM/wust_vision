@@ -14,11 +14,14 @@ public:
 
   void init();
 
-  void processImage(const cv::Mat &frame, std::chrono::steady_clock::time_point timestamp);
+  void processImage(const cv::Mat &frame,
+                    std::chrono::steady_clock::time_point timestamp);
   void captureLoop();
 
   void printStats();
-  void DetectCallback(const std::vector<ArmorObject> &objs, std::chrono::steady_clock::time_point timestamp, const cv::Mat &src_img);
+  void DetectCallback(const std::vector<ArmorObject> &objs,
+                      std::chrono::steady_clock::time_point timestamp,
+                      const cv::Mat &src_img);
   void stop();
   void armorsCallback(Armors armors_, const cv::Mat &src_img);
   void initTF();
@@ -34,7 +37,7 @@ public:
   std::thread image_thread_;
   std::unique_ptr<ThreadPool> thread_pool_;
   std::unique_ptr<OpenVino> detector_;
-  bool is_inited_ = false;
+
   size_t img_recv_count_ = 0;
   size_t detect_finish_count_ = 0;
   size_t fire_count_ = 0;
@@ -67,12 +70,12 @@ public:
   double debug_show_dt_;
   imgframe imgframe_;
   std::mutex img_mutex_;
-  cv::VideoWriter video_writer_;
-  bool is_recording_;
+
   Serial serial_;
   std::unique_ptr<Solver> solver_;
 
   bool use_calculation_ = false;
+  bool use_serial = false;
 
   std::unique_ptr<ArmorPoseEstimator> armor_pose_estimator_;
   Eigen::Matrix3d imu_to_camera_;
@@ -80,4 +83,5 @@ public:
   std::unique_ptr<hikcamera::ImageCapturer> capturer_;
   std::unique_ptr<std::thread> capture_thread_;
   std::atomic<bool> capture_running_;
+  GimbalCmd last_cmd_;
 };

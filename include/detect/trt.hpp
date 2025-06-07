@@ -35,8 +35,9 @@
 class AdaptedTRTModule {
 public:
   // 初始化参数结构体
-  using DetectorCallback = std::function<void(const std::vector<ArmorObject> &,
-    std::chrono::steady_clock::time_point, const cv::Mat &)>;
+  using DetectorCallback = std::function<void(
+      const std::vector<ArmorObject> &, std::chrono::steady_clock::time_point,
+      const cv::Mat &)>;
   struct Params {
     int input_w = 416;          // 模型输入宽度
     int input_h = 416;          // 模型输入高度
@@ -59,11 +60,13 @@ public:
 
   // 推理接口：输入图像，返回检测框列表
   // std::vector<ArmorObject> detect(const cv::Mat & image);
-  void pushInput(const cv::Mat &rgb_img, std::chrono::steady_clock::time_point timestamp);
+  void pushInput(const cv::Mat &rgb_img,
+                 std::chrono::steady_clock::time_point timestamp);
 
   bool processCallback(const cv::Mat resized_img,
                        Eigen::Matrix3f transform_matrix,
-                       std::chrono::steady_clock::time_point timestamp, const cv::Mat &src_img);
+                       std::chrono::steady_clock::time_point timestamp,
+                       const cv::Mat &src_img);
   void setCallback(DetectorCallback callback);
   bool extractImage(const cv::Mat &src, ArmorObject &armor);
   std::vector<Light> findLights(const cv::Mat &rbg_img,

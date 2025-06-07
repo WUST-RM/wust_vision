@@ -188,8 +188,8 @@ bool AdaptedTRTModule::extractImage(const cv::Mat &src, ArmorObject &armor) {
   // 增加bbox尺寸和坐标合理性校验，避免异常
   if (bbox.width <= 0 || bbox.height <= 0 || bbox.x < 0 || bbox.y < 0 ||
       bbox.x + bbox.width > src.cols || bbox.y + bbox.height > src.rows) {
-    //   std::cerr << "[extractImage] Invalid bounding box: " << bbox <<
-    //   std::endl;
+    // std::cerr << "[extractImage] Invalid bounding box: " << bbox <<
+    // std::endl;
     return false;
   }
 
@@ -208,7 +208,7 @@ bool AdaptedTRTModule::extractImage(const cv::Mat &src, ArmorObject &armor) {
   if (new_width <= 0 || new_height <= 0) {
     // std::cerr << "[extractImage] Expanded ROI is invalid after clamp: "
     //            << new_width << "x" << new_height << std::endl;
-    return false;
+    // return false;
   }
 
   cv::Rect expanded_rect(new_x, new_y, new_width, new_height);
@@ -218,7 +218,7 @@ bool AdaptedTRTModule::extractImage(const cv::Mat &src, ArmorObject &armor) {
   cv::Mat litroi_color = src(expanded_rect).clone();
   if (litroi_color.empty()) {
     // std::cerr << "[extractImage] ROI color image is empty" << std::endl;
-    return false;
+    // return false;
   }
 
   cv::Mat litroi_gray;
@@ -281,6 +281,7 @@ bool AdaptedTRTModule::extractImage(const cv::Mat &src, ArmorObject &armor) {
   cv::resize(number_image, number_image, input_size);
 
   cv::Mat flipped_image;
+
   cv::flip(number_image, flipped_image, 0);
   armor.number_img = flipped_image;
 
@@ -367,6 +368,7 @@ AdaptedTRTModule::AdaptedTRTModule(const std::string &onnx_path,
                         output_sz_ * sizeof(float)) == 0);
   output_buffer_ = new float[output_sz_];
   TRT_ASSERT(cudaStreamCreate(&stream_) == 0);
+  initNumberClassifier();
   thread_pool_ =
       std::make_unique<ThreadPool>(std::thread::hardware_concurrency(), 100);
 }
@@ -452,10 +454,9 @@ void AdaptedTRTModule::setCallback(DetectorCallback callback) {
 }
 
 // 推理函数
-bool AdaptedTRTModule::processCallback(const cv::Mat resized_img,
-                                       Eigen::Matrix3f transform_matrix,
-                                       std::chrono::steady_clock::time_point timestamp,
-                                       const cv::Mat &src_img) {
+bool AdaptedTRTModule::processCallback(
+    const cv::Mat resized_img, Eigen::Matrix3f transform_matrix,
+    std::chrono::steady_clock::time_point timestamp, const cv::Mat &src_img) {
   // 预处理：Letterbox 缩放
   // cv::Mat resized;
   // cv::resize(image, resized, cv::Size(params_.input_w, params_.input_h));
@@ -728,16 +729,15 @@ std::vector<ArmorObject> AdaptedTRTModule::postprocess(
   return objs_result;
 }
 
-void AdaptedTRTModule::pushInput(const cv::Mat &rgb_img,
-  std::chrono::steady_clock::time_point timestamp) {
+void AdaptedTRTModule::pushInput(
+    const cv::Mat &rgb_img, std::chrono::steady_clock::time_point timestamp) {
   if (rgb_img.empty()) {
     return;
   }
 
   Eigen::Matrix3f transform_matrix;
   cv::Mat resized_img = letterbox(rgb_img, transform_matrix);
-  processCallback(resized_img, transform_matrix, timestamp,
-    rgb_img);
+  processCallback(resized_img, transform_matrix, timestamp, rgb_img);
 
   // thread_pool_->enqueue(
   //     [this, resized_img, transform_matrix, timestamp, rgb_img]() {
