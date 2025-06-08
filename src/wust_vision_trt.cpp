@@ -164,7 +164,7 @@ void WustVision::init() {
 
   // capturer_ = std::make_unique<hikcamera::ImageCapturer>(
   //     profile, nullptr, hikcamera::SyncMode::NONE);
-  control_rate = config["control"]["control_rate"].as<int>(100);
+  control_rate = config["control"]["control_rate"].as<int>();
   startTimer();
   // capture_running_ = true;
   // capture_thread_ =

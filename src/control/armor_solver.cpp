@@ -41,14 +41,21 @@ void Solver::init(const YAML::Node &config) {
 
   // 4. 手动补偿表（pitch_offset）
   manual_compensator_ = std::make_unique<ManualCompensator>();
-  if (s["pitch_offset"]) {
-    std::vector<std::string> raw_offsets =
-        s["pitch_offset"].as<std::vector<std::string>>();
+  std::vector<OffsetEntry> entries;
 
-    if (!manual_compensator_->updateMapFlow(raw_offsets)) {
-      WUST_WARN(solver_logger) << "Failed to update manual compensator";
+  if (s["pitch_offset"]) {
+    for (const auto &node : s["pitch_offset"]) {
+      OffsetEntry e;
+      e.d_min = node["d_min"].as<double>();
+      e.d_max = node["d_max"].as<double>();
+      e.h_min = node["h_min"].as<double>();
+      e.h_max = node["h_max"].as<double>();
+      e.pitch_off = node["pitch_off"].as<double>();
+      e.yaw_off = node["yaw_off"].as<double>();
+      entries.push_back(e);
     }
   }
+  manual_compensator_->updateMapFlow(entries);
 
   // 5. 状态机初值
   state_ = State::TRACKING_ARMOR;
