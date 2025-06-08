@@ -41,14 +41,7 @@ void Solver::init(const YAML::Node &config) {
 
   // 4. 手动补偿表（pitch_offset）
   manual_compensator_ = std::make_unique<ManualCompensator>();
-  // if (s["pitch_offset"]) {
-  //   std::vector<std::string> raw_offsets =
-  //       s["pitch_offset"].as<std::vector<std::string>>();
 
-  //   if (!manual_compensator_->updateMapFlow(raw_offsets)) {
-  //     WUST_WARN(solver_logger) << "Failed to update manual compensator";
-  //   }
-  // }
   std::vector<OffsetEntry> entries;
 
   if (s["pitch_offset"]) {
