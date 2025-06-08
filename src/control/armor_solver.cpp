@@ -41,14 +41,29 @@ void Solver::init(const YAML::Node &config) {
 
   // 4. 手动补偿表（pitch_offset）
   manual_compensator_ = std::make_unique<ManualCompensator>();
-  if (s["pitch_offset"]) {
-    std::vector<std::string> raw_offsets =
-        s["pitch_offset"].as<std::vector<std::string>>();
+  // if (s["pitch_offset"]) {
+  //   std::vector<std::string> raw_offsets =
+  //       s["pitch_offset"].as<std::vector<std::string>>();
 
-    if (!manual_compensator_->updateMapFlow(raw_offsets)) {
-      WUST_WARN(solver_logger) << "Failed to update manual compensator";
+  //   if (!manual_compensator_->updateMapFlow(raw_offsets)) {
+  //     WUST_WARN(solver_logger) << "Failed to update manual compensator";
+  //   }
+  // }
+  std::vector<OffsetEntry> entries;
+
+  if (s["pitch_offset"]) {
+    for (const auto &node : s["pitch_offset"]) {
+      OffsetEntry e;
+      e.d_min = node["d_min"].as<double>();
+      e.d_max = node["d_max"].as<double>();
+      e.h_min = node["h_min"].as<double>();
+      e.h_max = node["h_max"].as<double>();
+      e.pitch_off = node["pitch_off"].as<double>();
+      e.yaw_off = node["yaw_off"].as<double>();
+      entries.push_back(e);
     }
   }
+  manual_compensator_->updateMapFlow(entries);
 
   // 5. 状态机初值
   state_ = State::TRACKING_ARMOR;
@@ -105,9 +120,9 @@ GimbalCmd Solver::solve(const Target &target,
   double raw_yaw, raw_pitch;
   calcYawAndPitch(chosen, rpy, raw_yaw, raw_pitch);
   double distance = chosen.norm();
-  std::vector<double> offs ;
-  double pitch_off ;
-  double yaw_off ;
+  std::vector<double> offs;
+  double pitch_off;
+  double yaw_off;
   double fire_yaw;
   double fire_pitch;
   // 4. 状态机逻辑
@@ -136,13 +151,14 @@ GimbalCmd Solver::solve(const Target &target,
       }
       calcYawAndPitch(tmp, rpy, raw_yaw, raw_pitch);
       distance = tmp.norm();
-      
     }
-    offs =  manual_compensator_->angleHardCorrect(distance, chosen.z());
+    double ra;
+    calcYawAndPitch(pos, rpy, ra, raw_pitch);
+    offs = manual_compensator_->angleHardCorrect(distance, chosen.z());
     yaw_off = offs[1] * M_PI / 180.0;
     pitch_off = offs[0] * M_PI / 180.0;
-    fire_yaw =raw_yaw+yaw_off;
-    fire_pitch =raw_pitch+pitch_off;
+    fire_yaw = raw_yaw + yaw_off;
+    fire_pitch = raw_pitch + pitch_off;
     fire_advice = isOnTarget(rpy[2], rpy[1], fire_yaw, fire_pitch, distance);
     break;
 
@@ -156,7 +172,7 @@ GimbalCmd Solver::solve(const Target &target,
       state_ = TRACKING_ARMOR;
       overflow_count_ = 0;
     }
-    double raw_yaw_ ,raw_pitch_;
+    double raw_yaw_, raw_pitch_;
     calcYawAndPitch(chosen, rpy, raw_yaw_, raw_pitch);
     if (controller_delay != 0.0) {
       pos += controller_delay * Eigen::Vector3d(target.velocity_.x,
@@ -171,23 +187,22 @@ GimbalCmd Solver::solve(const Target &target,
       }
       calcYawAndPitch(tmp, rpy, raw_yaw_, raw_pitch);
       distance = tmp.norm();
-      
     }
-    //fire_advice = true;
-    calcYawAndPitch(pos, rpy, raw_yaw, raw_pitch_);
+    // fire_advice = true;
+    // calcYawAndPitch(pos, rpy, raw_yaw, raw_pitch_);
     distance = pos.norm();
-    offs =  manual_compensator_->angleHardCorrect(distance, chosen.z());
+    offs = manual_compensator_->angleHardCorrect(distance, chosen.z());
     yaw_off = offs[1] * M_PI / 180.0;
     pitch_off = offs[0] * M_PI / 180.0;
-    //std::cout<<"pos"<<pos.norm()<<std::endl;
-    fire_yaw =raw_yaw_+yaw_off;
-    fire_pitch =raw_pitch+pitch_off;
+    // std::cout<<"pos"<<pos.norm()<<std::endl;
+    fire_yaw = raw_yaw_ + yaw_off;
+    fire_pitch = raw_pitch + pitch_off;
     fire_advice = isOnTarget(rpy[2], rpy[1], fire_yaw, fire_pitch, distance);
     break;
   }
 
   // 5. 弹道+手动补偿
-  
+
   double cmd_pitch = raw_pitch + pitch_off;
   double cmd_yaw = normalize_angle(raw_yaw + yaw_off);
 
@@ -263,13 +278,12 @@ void Solver::calcYawAndPitch(const Eigen::Vector3d &p,
   // Calculate yaw and pitch
   yaw = atan2(p.y(), p.x());
   pitch = atan2(p.z(), p.head(2).norm());
-  
+
   if (double temp_pitch = pitch;
       trajectory_compensator_->compensate(p, temp_pitch)) {
     pitch = temp_pitch;
   }
- // std::cout << "yaw: " << yaw << " pitch: " << pitch << std::endl;
-
+  // std::cout << "yaw: " << yaw << " pitch: " << pitch << std::endl;
 }
 int Solver::selectBestArmor(const std::vector<Eigen::Vector3d> &armor_positions,
                             const Eigen::Vector3d &target_center,

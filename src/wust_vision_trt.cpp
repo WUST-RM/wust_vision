@@ -3,8 +3,10 @@
 #include "common/calculation.hpp"
 #include "common/gobal.hpp"
 #include "common/logger.hpp"
+#include "common/matplottools.hpp"
 #include "common/tf.hpp"
 #include "common/tools.hpp"
+#include "common/toolsgobal.hpp"
 #include "detect/mono_measure_tool.hpp"
 #include "string"
 #include "type/type.hpp"
@@ -12,47 +14,47 @@
 #include <iostream>
 #include <vector>
 #include <yaml-cpp/yaml.h>
-
 WustVision::WustVision() { init(); }
-WustVision::~WustVision() {
-}
+WustVision::~WustVision() {}
 void WustVision::stop() {
   is_inited_ = false;
-  
-  stopTimer();
+
   camera_->stopCamera();
-  sleep (1);
+
   if (thread_pool_) {
     thread_pool_->waitUntilEmpty();
     thread_pool_.reset();
   }
-
+  if (target_yaw_plot_thread_.joinable()) {
+    target_yaw_plot_thread_.join();
+  }
+  if (robot_cmd_plot_thread_.joinable()) {
+    robot_cmd_plot_thread_.join();
+  }
   camera_.reset();
+  stopTimer();
+
   detector_.reset();
-  
+
   measure_tool_.reset();
 
-  
- 
-  if(use_serial)
-  {
-  serial_.stopThread();
+  if (use_serial) {
+    serial_.stopThread();
   }
-
-   
 
   WUST_INFO(vision_logger) << "WustVision shutdown complete.";
 }
 void WustVision::stopTimer() {
+
   timer_running_ = false;
+
   if (timer_thread_.joinable()) {
-    timer_thread_.join();
+    timer_thread_.detach();
   }
 }
 
 void WustVision::init() {
-  YAML::Node config =
-      YAML::LoadFile("/home/nvidia/wust_vision/config/config_trt.yaml");
+  config = YAML::LoadFile("/home/nvidia/wust_vision/config/config_trt.yaml");
   debug_mode_ = config["debug"]["debug_mode"].as<bool>();
   debug_w = config["debug"]["debug_w"].as<int>(640);
   debug_h = config["debug"]["debug_h"].as<int>(480);
@@ -115,7 +117,7 @@ void WustVision::init() {
   armor_pose_estimator_ =
       std::make_unique<ArmorPoseEstimator>(camera_info_path, gimbal_to_camera_);
 
-  use_serial = config["use_serial"].as<bool>();
+  use_serial = config["control"]["use_serial"].as<bool>();
   if (use_serial) {
     initSerial();
   }
@@ -131,7 +133,7 @@ void WustVision::init() {
 
   detector_ = std::make_unique<AdaptedTRTModule>(
       model_path, params, expand_ratio_h, expand_ratio_w, binary_thres,
-      l_params, classify_model_path, classify_label_path,max_infer_running_);
+      l_params, classify_model_path, classify_label_path, max_infer_running_);
   detector_->setCallback(std::bind(&WustVision::DetectCallback, this,
                                    std::placeholders::_1, std::placeholders::_2,
                                    std::placeholders::_3));
@@ -141,25 +143,25 @@ void WustVision::init() {
 
   solver_ = std::make_unique<Solver>(config);
   std::string camera_serial = config["camera"]["serial"].as<std::string>("");
-  camera_=std::make_unique<HikCamera>();
+  camera_ = std::make_unique<HikCamera>();
   if (!camera_->initializeCamera(camera_serial)) {
     WUST_ERROR(vision_logger) << "Camera initialization failed.";
     return;
   }
 
   camera_->setParameters(config["camera"]["acquisition_frame_rate"].as<int>(),
-                        config["camera"]["exposure_time"].as<int>(),
-                        config["camera"]["gain"].as<double>(),
-                        config["camera"]["adc_bit_depth"].as<std::string>(),
-                        config["camera"]["pixel_format"].as<std::string>());
+                         config["camera"]["exposure_time"].as<int>(),
+                         config["camera"]["gain"].as<double>(),
+                         config["camera"]["adc_bit_depth"].as<std::string>(),
+                         config["camera"]["pixel_format"].as<std::string>());
   camera_->setFrameCallback([this](const ImageFrame &frame) {
     static bool first_is_inited = false;
 
     if (is_inited_) {
       thread_pool_->enqueue(
           [frame = std::move(frame), this]() { processImage(frame); });
-    }else {
-      return ;
+    } else {
+      return;
     }
   });
 
@@ -178,11 +180,12 @@ void WustVision::init() {
 
   // capturer_ = std::make_unique<hikcamera::ImageCapturer>(
   //     profile, nullptr, hikcamera::SyncMode::NONE);
-  control_rate = config["control_rate"].as<int>(100);
+  control_rate = config["control"]["control_rate"].as<int>();
   startTimer();
   // capture_running_ = true;
   // capture_thread_ =
   //     std::make_unique<std::thread>(&WustVision::captureLoop, this);
+  robot_cmd_plot_thread_ = std::thread(&robotCmdLoggerThread);
   is_inited_ = true;
 }
 // void WustVision::captureLoop() {
@@ -208,19 +211,27 @@ void WustVision::init() {
 //   }
 // }
 void WustVision::startTimer() {
-  if (timer_running_)
+  if (timer_running_) {
     return;
+  }
+  WUST_INFO(vision_logger) << "starting timer";
   timer_running_ = true;
+
   int ms_interval = 1000 / control_rate;
-  timer_thread_ = std::thread([this, &ms_interval]() {
-    const auto interval = std::chrono::microseconds(ms_interval);
+
+  timer_thread_ = std::thread([this, ms_interval]() {
+    const auto interval = std::chrono::milliseconds(ms_interval);
     auto next_time = std::chrono::steady_clock::now() + interval;
 
     while (timer_running_) {
       std::this_thread::sleep_until(next_time);
       if (!timer_running_)
         break;
+
+      // auto future = std::async(std::launch::async, [this]() {
       this->timerCallback();
+      // });
+
       next_time += interval;
     }
   });
@@ -272,7 +283,12 @@ void WustVision::initSerial() {
                        boost::asio::serial_port_base::stop_bits::one,
                        boost::asio::serial_port_base::flow_control::none};
 
-  serial_.init("/dev/ttyACM0", cfg);
+  std::string device_name = config["control"]["device_name"].as<std::string>();
+  serial_.init(device_name, cfg);
+  serial_.alpha_yaw = config["control"]["alpha_yaw"].as<double>();
+  serial_.alpha_pitch = config["control"]["alpha_pitch"].as<double>();
+  serial_.max_yaw_change = config["control"]["max_yaw_change"].as<double>();
+  serial_.max_pitch_change = config["control"]["max_pitch_change"].as<double>();
   serial_.startThread();
 }
 void WustVision::initTracker(const YAML::Node &config) {
@@ -548,7 +564,7 @@ void WustVision::DetectCallback(const std::vector<ArmorObject> &objs,
   armors.armors =
       armor_pose_estimator_->extractArmorPoses(objs, imu_to_camera_);
 
-  //measure_tool_->processDetectedArmors(objs, detect_color_, armors);
+  // measure_tool_->processDetectedArmors(objs, detect_color_, armors);
 
   infer_running_count_--;
   armorsCallback(armors, src_img);
@@ -561,22 +577,13 @@ void WustVision::transformArmorData(Armors &armors) {
       Transform tf(armor.pos, armor.ori, armors.timestamp);
       auto pose_in_target_frame = tf_tree_.transform(
           tf, armors.frame_id, target_frame_, armors.timestamp);
-      // auto pose_in_target_frame = tf_tree_.transform(tf,
-      // target_frame_,armors.frame_id,  armors.timestamp);
+
       armor.target_pos = pose_in_target_frame.position;
       armor.target_ori = pose_in_target_frame.orientation;
 
       armor.yaw = getRPYFromQuaternion(armor.target_ori).yaw;
       double yaw = armor.yaw * 180 / M_PI;
-      // std::cout<<"Z"<< armor.target_pos.z<<std::endl;
-      //  auto now = std::chrono::steady_clock::now();
-      //  std::cout << "now (ns since epoch): " <<
-      //  now.time_since_epoch().count() << " ns" << std::endl; std::cout <<
-      //  "timestamp (ns): " <<
-      //  pose_in_target_frame.timestamp.time_since_epoch().count() << " ns" <<
-      //  std::endl; std::cout<<"YAW:"<<yaw<<std::endl;
 
-      //  WUST_DEBUG(vision_logger)<<"Z:"<<armor.target_pos.z;
     } catch (const std::exception &e) {
       WUST_ERROR(vision_logger)
           << "Can't find transform from " << armors.frame_id << " to "
@@ -585,8 +592,61 @@ void WustVision::transformArmorData(Armors &armors) {
     }
   }
 }
+
+// void WustVision::processImage(const cv::Mat
+// &frame,std::chrono::steady_clock::time_point timestamp) {
+
+//   img_recv_count_++;
+//   if (infer_running_count_.load() >= max_infer_running_) {
+//     return;
+//   }
+
+//   infer_running_count_++;
+//   printStats();
+//   detector_->pushInput(frame, timestamp);
+// }
+void WustVision::processImage(const ImageFrame &frame) {
+
+  img_recv_count_++;
+  if (infer_running_count_.load() >= max_infer_running_) {
+    // WUST_WARN(vision_logger)<<"Infer running too much
+    // ("<<infer_running_count_.load()<<"), dropping frame";
+    return;
+  }
+
+  cv::Mat img = convertToMat(frame);
+  infer_running_count_++;
+  printStats();
+
+  detector_->pushInput(img, frame.timestamp);
+}
+
+void WustVision::printStats() {
+  using namespace std::chrono;
+
+  auto now = steady_clock::now();
+
+  if (last_stat_time_steady_.time_since_epoch().count() == 0) {
+    last_stat_time_steady_ = now;
+    return;
+  }
+
+  auto elapsed = duration_cast<duration<double>>(now - last_stat_time_steady_);
+  if (elapsed.count() >= 1.0) {
+    WUST_INFO(vision_logger)
+        << "Received: " << img_recv_count_
+        << ", Detected: " << detect_finish_count_
+        << ", FPS: " << detect_finish_count_ / elapsed.count()
+        << " Latency: " << latency_ms << "ms"
+        << "  Fire: " << fire_count_;
+
+    img_recv_count_ = 0;
+    detect_finish_count_ = 0;
+    fire_count_ = 0;
+    last_stat_time_steady_ = now;
+  }
+}
 void WustVision::timerCallback() {
-  static GimbalCmd aa;
 
   if (!is_inited_)
     return;
@@ -614,20 +674,21 @@ void WustVision::timerCallback() {
       try {
         auto now = std::chrono::steady_clock::now();
         gimbal_cmd = solver_->solve(target, now);
-        aa = gimbal_cmd;
+        last_cmd_ = gimbal_cmd;
         if (gimbal_cmd.fire_advice) {
           fire_count_++;
         }
         serial_.transformGimbalCmd(gimbal_cmd, appear);
       } catch (...) {
         WUST_ERROR(vision_logger) << "solver error";
-        serial_.transformGimbalCmd(aa, appear);
+        serial_.transformGimbalCmd(last_cmd_, appear);
       }
     } else {
-      serial_.transformGimbalCmd(aa, appear);
+      serial_.transformGimbalCmd(last_cmd_, appear);
     }
   } else {
-    serial_.transformGimbalCmd(aa, appear);
+
+    serial_.transformGimbalCmd(last_cmd_, appear);
   }
 
   if (debug_mode_) {
@@ -668,78 +729,59 @@ void WustVision::timerCallback() {
       armors = armors_gobal;
     }
 
-    draw_debug_overlay(imgframe_, &armors, &target_info, &target, state,
-                       gimbal_cmd);
+    draw_debug_overlaywrite(imgframe_, &armors, &target_info, &target, state,
+                            gimbal_cmd);
+
+    auto now = std::chrono::steady_clock::now();
+    double t = std::chrono::duration<double>(now - start_time_).count();
+    {
+      std::lock_guard<std::mutex> lock(yaw_log_mutex_);
+
+      target_yaw_log_.emplace_back(t, target.yaw);
+      if (target_yaw_log_.size() > 1000) {
+        target_yaw_log_.erase(target_yaw_log_.begin(),
+                              target_yaw_log_.begin() + target_yaw_log_.size() -
+                                  1000);
+      }
+    }
+
+    {
+      std::lock_guard<std::mutex> lock(robot_cmd_mutex_);
+      time_log_.push_back(t);
+      cmd_yaw_log_.push_back(last_cmd_.yaw);
+      cmd_pitch_log_.push_back(last_cmd_.pitch);
+      if (!armors.armors.empty()) {
+        auto min_armor_it = std::min_element(
+            armors.armors.begin(), armors.armors.end(),
+            [](const Armor &a, const Armor &b) {
+              return a.distance_to_image_center < b.distance_to_image_center;
+            });
+        const Armor &min_armor = *min_armor_it;
+        last_distance =
+            std::sqrt(min_armor.target_pos.x * min_armor.target_pos.x +
+                      min_armor.target_pos.y * min_armor.target_pos.y +
+                      min_armor.target_pos.z * min_armor.target_pos.z);
+        armor_dis_log_.push_back(last_distance);
+      } else {
+        armor_dis_log_.push_back(last_distance);
+      }
+
+      if (time_log_.size() > 100) {
+        time_log_.erase(time_log_.begin());
+        cmd_yaw_log_.erase(cmd_yaw_log_.begin());
+        cmd_pitch_log_.erase(cmd_pitch_log_.begin());
+        armor_dis_log_.erase(armor_dis_log_.begin());
+      }
+    }
   }
 }
-// void WustVision::processImage(const cv::Mat
-// &frame,std::chrono::steady_clock::time_point timestamp) {
-
-//   img_recv_count_++;
-//   if (infer_running_count_.load() >= max_infer_running_) {
-//     return;
-//   }
-
-//   infer_running_count_++;
-//   printStats();
-//   detector_->pushInput(frame, timestamp);
-// }
-void WustVision::processImage(const ImageFrame &frame) {
-
-  img_recv_count_++;
-  if (infer_running_count_.load() >= max_infer_running_) {
-    // WUST_WARN(vision_logger)<<"Infer running too much
-    // ("<<infer_running_count_.load()<<"), dropping frame";
-    return;
-  }
- 
-
-  cv::Mat img = convertToMat(frame);
-  infer_running_count_++;
-  printStats();
-
-  detector_->pushInput(img, frame.timestamp);
-}
-
-void WustVision::printStats() {
-  using namespace std::chrono;
-
-  auto now = steady_clock::now();
-
-  if (last_stat_time_steady_.time_since_epoch().count() == 0) {
-    last_stat_time_steady_ = now;
-    return;
-  }
-
-  auto elapsed = duration_cast<duration<double>>(now - last_stat_time_steady_);
-  if (elapsed.count() >= 1.0) {
-    WUST_INFO(vision_logger)
-        << "Received: " << img_recv_count_
-        << ", Detected: " << detect_finish_count_
-        << ", FPS: " << detect_finish_count_ / elapsed.count()
-        << " Latency: " << latency_ms << "ms"
-        << "  Fire: " << fire_count_;
-
-    img_recv_count_ = 0;
-    detect_finish_count_ = 0;
-    fire_count_ = 0;
-    last_stat_time_steady_ = now;
-  }
-}
-
-
 
 WustVision *global_vision = nullptr;
 std::mutex mtx;
 std::condition_variable c;
-std::atomic<bool> exit_flag(false); // 改为原子布尔类型
-
-
 
 void signalHandler(int signum) {
-  WUST_INFO("main") << "Interrupt signal (" << signum << ") received.";
   exit_flag.store(true, std::memory_order_release);
-  
 }
 
 int main() {
@@ -752,7 +794,7 @@ int main() {
     while (!exit_flag.load(std::memory_order_acquire)) {
       std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
-    c.notify_one();  // 可以安全使用 condition_variable
+    c.notify_one(); // 可以安全使用 condition_variable
   });
 
   {
@@ -760,8 +802,8 @@ int main() {
     c.wait(lk, [] { return exit_flag.load(std::memory_order_acquire); });
   }
 
-  wait_thread.join();  // 确保线程安全退出
+  wait_thread.join(); // 确保线程安全退出
+
   vision.stop();
   return 0;
 }
-

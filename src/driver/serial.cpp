@@ -102,7 +102,7 @@ void Serial::receiveData() {
   int retry_count = 0;
 
   while (running_) {
-    // 如果串口未就绪，等待并重试
+
     if (!is_usb_ok_) {
       WUST_WARN(serial_logger)
           << "eceive: usb is not ok! Retry count: " << retry_count++;
@@ -112,7 +112,7 @@ void Serial::receiveData() {
     }
 
     try {
-      // 读一个字节，检查 SOF
+
       sof_buf.resize(39);
       driver_.receive(sof_buf);
       // if (sof_buf[0] != SOF_RECEIVE) {
@@ -196,7 +196,7 @@ void Serial::aim_cbk(ReceiveAimINFO &aim_data) {
     return;
   }
 
-  //WUST_DEBUG("AAA")<<"roll:"<<aim_data.roll<<"pitch:"<<aim_data.pitch<<"yaw:"<<aim_data.yaw<<"v_roll:"<<aim_data.roll_vel<<"v_pitch:"<<aim_data.pitch_vel<<"v_yaw:"<<aim_data.yaw_vel<<"time:"<<aim_data.time_stamp;
+  // WUST_DEBUG("AAA")<<"roll:"<<aim_data.roll<<"pitch:"<<aim_data.pitch<<"yaw:"<<aim_data.yaw<<"v_roll:"<<aim_data.roll_vel<<"v_pitch:"<<aim_data.pitch_vel<<"v_yaw:"<<aim_data.yaw_vel<<"time:"<<aim_data.time_stamp;
 
   // if (!out_of_order_detected) {
   //   if (aim_data.time_stamp <= last_time) {
@@ -340,10 +340,7 @@ void Serial::sendData() {
   // send_robot_cmd_data_.frame_header.sof = SOF_SEND;
   send_robot_cmd_data_.cmd_ID = ID_ROBOT_CMD;
   // send_robot_cmd_data_.frame_header.len = sizeof(SendRobotCmdData) - 6;
-  //  send_robot_cmd_data_.data.speed_vector.vx = 0;
-  //  send_robot_cmd_data_.data.speed_vector.vy = 0;
-  //  send_robot_cmd_data_.data.speed_vector.wz = 0;
-  //  添加帧头crc8校验
+
   //  crc8::append_CRC8_check_sum(
   //      reinterpret_cast<uint8_t *>(&send_robot_cmd_data_),
   //      sizeof(HeaderFrame));
@@ -360,14 +357,11 @@ void Serial::sendData() {
     }
 
     try {
-      // 整包数据校验
-      // 添加数据段crc16校验
+
       // crc16::append_CRC16_check_sum(
       //     reinterpret_cast<uint8_t *>(&send_robot_cmd_data_),
       //     sizeof(SendRobotCmdData));
 
-      // 发送数据
-      // std::cout  << "send_robot_cmd_data_" << std::endl;
       std::vector<uint8_t> send_data = toVector(send_robot_cmd_data_);
       driver_.send(send_data);
     } catch (const std::exception &ex) {
@@ -378,10 +372,6 @@ void Serial::sendData() {
   }
 }
 void Serial::transformGimbalCmd(GimbalCmd &gimbal_cmd, bool appear) {
-  double alpha_yaw = 0.9;
-  double alpha_pitch = 0.9;
-  double max_yaw_change = 10.0;
-  double max_pitch_change = 5.0;
 
   if (appear) {
     auto limit = [](double val, double max_change) {

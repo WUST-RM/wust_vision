@@ -37,3 +37,13 @@ void draw_debug_overlay(
     const Target_info *target_info = nullptr, const Target *target = nullptr,
     const std::optional<Tracker::State> &state = std::nullopt,
     const std::optional<GimbalCmd> &gimbal_cmd = std::nullopt);
+cv::Mat draw_debug_overlayMat(const imgframe &src_img, const Armors *armors,
+                              const Target_info *target_info,
+                              const Target *target,
+                              const std::optional<Tracker::State> &state,
+                              const std::optional<GimbalCmd> &gimbal_cmd);
+void draw_debug_overlaywrite(const imgframe &src_img, const Armors *armors,
+                             const Target_info *target_info,
+                             const Target *target,
+                             const std::optional<Tracker::State> &state,
+                             const std::optional<GimbalCmd> &gimbal_cmd);

@@ -21,10 +21,8 @@
 #include "common/logger.hpp"
 #include "cuda_runtime_api.h"
 #include <opencv2/core.hpp>
+#include <opencv2/cudaimgproc.hpp>
 #include <opencv2/cudawarping.hpp>
-#include <opencv2/cudaimgproc.hpp> 
-
-
 
 // #include <logger.h>
 #define TRT_ASSERT(expr)                                                       \
@@ -103,8 +101,6 @@ static cv::Mat letterbox(const cv::Mat &img, Eigen::Matrix3f &transform_matrix,
 
   return resized_img;
 }
-
-
 
 /**
  * @brief Calculate intersection area between two objects.
@@ -354,33 +350,28 @@ AdaptedTRTModule::AdaptedTRTModule(const std::string &onnx_path,
                                    LightParams light_params,
                                    std::string classify_model_path,
                                    std::string classify_label_path,
-                                  int max_infer_running)
+                                   int max_infer_running)
     : params_(params), engine_(nullptr), context_(nullptr),
       output_buffer_(nullptr), runtime_(nullptr),
       expand_ratio_h_(expand_ratio_h), expand_ratio_w_(expand_ratio_w),
       binary_thres_(binary_thres), light_params_(light_params),
       classify_label_path_(classify_label_path),
       classify_model_path_(classify_model_path) {
-  
 
   buildEngine(onnx_path);
-
 
   context_ = engine_->createExecutionContext();
   TRT_ASSERT(context_ != nullptr);
 
-
   input_name = engine_->getIOTensorName(0);
   output_name = engine_->getIOTensorName(1);
 
-
-  TRT_ASSERT(context_->setInputShape(input_name, nvinfer1::Dims4{1, 3, INPUT_H, INPUT_W}));
+  TRT_ASSERT(context_->setInputShape(input_name,
+                                     nvinfer1::Dims4{1, 3, INPUT_H, INPUT_W}));
   TRT_ASSERT(context_->allInputShapesSpecified());
-
 
   auto input_dims = context_->getTensorShape(input_name);
   auto output_dims = context_->getTensorShape(output_name);
-
 
   input_sz_ = 1;
   for (int i = 0; i < input_dims.nbDims; ++i) {
@@ -392,17 +383,11 @@ AdaptedTRTModule::AdaptedTRTModule(const std::string &onnx_path,
     output_sz_ *= output_dims.d[i];
   }
 
-
-
-
   TRT_ASSERT(cudaMalloc(&device_buffers_[0], input_sz_ * sizeof(float)) == 0);
   TRT_ASSERT(cudaMalloc(&device_buffers_[1], output_sz_ * sizeof(float)) == 0);
 
-
   output_buffer_ = new float[output_sz_];
 
-
- 
   TRT_ASSERT(cudaStreamCreate(&stream_) == 0);
   for (int i = 0; i < max_infer_running; ++i) {
     contexts_.emplace_back(engine_->createExecutionContext());
@@ -420,17 +405,16 @@ AdaptedTRTModule::~AdaptedTRTModule() {
     context_ = nullptr;
   }
   for (auto ctx : contexts_) {
-  if (ctx) {
-   delete  ctx;
-   ctx = nullptr;
+    if (ctx) {
+      delete ctx;
+      ctx = nullptr;
+    }
   }
-}
 
   if (engine_) {
     delete engine_;
     engine_ = nullptr;
   }
-
 
   if (runtime_) {
     delete runtime_;
@@ -444,7 +428,6 @@ AdaptedTRTModule::~AdaptedTRTModule() {
     }
   }
 
-
   if (output_buffer_) {
     delete[] output_buffer_;
     output_buffer_ = nullptr;
@@ -454,19 +437,14 @@ AdaptedTRTModule::~AdaptedTRTModule() {
     cudaStreamDestroy(stream_);
     stream_ = nullptr;
   }
-  
 
-  if(thread_pool_)
-  {
+  if (thread_pool_) {
     thread_pool_->waitUntilEmpty();
     thread_pool_.reset();
   }
 
-
-  
   WUST_INFO("TRTModule") << "AdaptedTRTModule resources released.";
 }
-
 
 void AdaptedTRTModule::buildEngine(const std::string &onnx_path) {
   std::string engine_path =
@@ -503,14 +481,12 @@ void AdaptedTRTModule::buildEngine(const std::string &onnx_path) {
   if (builder->platformHasFastFp16()) {
     config->setFlag(nvinfer1::BuilderFlag::kFP16);
   }
-  //engine_ = builder->buildEngineWithConfig(*network, *config);
-  nvinfer1::IHostMemory* serializedEngine = builder->buildSerializedNetwork(*network, *config);
-  nvinfer1::IRuntime* runtime_ = nvinfer1::createInferRuntime(g_logger_);
-  nvinfer1::ICudaEngine* engine_ = runtime_->deserializeCudaEngine(
-    serializedEngine->data(), 
-    serializedEngine->size()
-);
- 
+  // engine_ = builder->buildEngineWithConfig(*network, *config);
+  nvinfer1::IHostMemory *serializedEngine =
+      builder->buildSerializedNetwork(*network, *config);
+  nvinfer1::IRuntime *runtime_ = nvinfer1::createInferRuntime(g_logger_);
+  nvinfer1::ICudaEngine *engine_ = runtime_->deserializeCudaEngine(
+      serializedEngine->data(), serializedEngine->size());
 
   // 保存引擎
   auto serialized_engine = engine_->serialize();
@@ -526,14 +502,13 @@ void AdaptedTRTModule::buildEngine(const std::string &onnx_path) {
   }
 
   // 清理
-  delete parser ;
+  delete parser;
   delete network;
   delete config;
   delete builder;
 
   WUST_INFO("TRT") << "Build engine from " << onnx_path << " successfully.";
 }
-
 
 void AdaptedTRTModule::setCallback(DetectorCallback callback) {
   infer_callback_ = callback;
@@ -543,33 +518,30 @@ void AdaptedTRTModule::setCallback(DetectorCallback callback) {
 bool AdaptedTRTModule::processCallback(
     const cv::Mat resized_img, Eigen::Matrix3f transform_matrix,
     std::chrono::steady_clock::time_point timestamp, const cv::Mat &src_img) {
-    if( resized_img.empty()||src_img.empty())
+  if (resized_img.empty() || src_img.empty())
     return false;
-    cv::cuda::GpuMat gpu_img(resized_img);
-    cv::Mat blob = cv::dnn::blobFromImage(
-    gpu_img, 1., cv::Size(INPUT_W, INPUT_H), cv::Scalar(0, 0, 0), true);
+  cv::cuda::GpuMat gpu_img(resized_img);
+  cv::Mat blob = cv::dnn::blobFromImage(gpu_img, 1., cv::Size(INPUT_W, INPUT_H),
+                                        cv::Scalar(0, 0, 0), true);
 
-    auto context = engine_->createExecutionContext();
+  auto context = engine_->createExecutionContext();
 
+  CV_Assert(blob.type() == CV_32F);
 
-    
+  TRT_ASSERT(cudaMemcpyAsync(device_buffers_[0], blob.ptr<float>(),
+                             input_sz_ * sizeof(float), cudaMemcpyHostToDevice,
+                             stream_) == 0);
 
-    CV_Assert(blob.type() == CV_32F);
+  TRT_ASSERT(context->setInputTensorAddress(input_name, device_buffers_[0]));
+  TRT_ASSERT(context->setOutputTensorAddress(output_name, device_buffers_[1]));
 
-    TRT_ASSERT(cudaMemcpyAsync(device_buffers_[0], blob.ptr<float>(), input_sz_ * sizeof(float),
-                              cudaMemcpyHostToDevice, stream_) == 0);
+  TRT_ASSERT(context->enqueueV3(stream_));
 
-    TRT_ASSERT(context->setInputTensorAddress(input_name, device_buffers_[0]));
-    TRT_ASSERT(context->setOutputTensorAddress(output_name, device_buffers_[1]));
+  TRT_ASSERT(cudaMemcpyAsync(output_buffer_, device_buffers_[1],
+                             output_sz_ * sizeof(float), cudaMemcpyDeviceToHost,
+                             stream_) == 0);
 
-    TRT_ASSERT(context->enqueueV3(stream_));
-
-    TRT_ASSERT(cudaMemcpyAsync(output_buffer_, device_buffers_[1], output_sz_ * sizeof(float),
-                              cudaMemcpyDeviceToHost, stream_) == 0);
-
-    TRT_ASSERT(cudaStreamSynchronize(stream_) == 0);
-
-
+  TRT_ASSERT(cudaStreamSynchronize(stream_) == 0);
 
   std::vector<ArmorObject> objs_tmp, objs_result;
   std::vector<cv::Rect> rects;
@@ -610,33 +582,29 @@ bool AdaptedTRTModule::processCallback(
 bool AdaptedTRTModule::processCallbacka(
     const cv::Mat resized_img, Eigen::Matrix3f transform_matrix,
     std::chrono::steady_clock::time_point timestamp, const cv::Mat &src_img,
-    nvinfer1::IExecutionContext* context) {
-    if( resized_img.empty()||src_img.empty())
+    nvinfer1::IExecutionContext *context) {
+  if (resized_img.empty() || src_img.empty())
     return false;
 
-    cv::Mat blob = cv::dnn::blobFromImage(
-    resized_img, 1., cv::Size(INPUT_W, INPUT_H), cv::Scalar(0, 0, 0), true); 
-   
-    
+  cv::Mat blob = cv::dnn::blobFromImage(
+      resized_img, 1., cv::Size(INPUT_W, INPUT_H), cv::Scalar(0, 0, 0), true);
 
-    
+  CV_Assert(blob.type() == CV_32F);
 
-    CV_Assert(blob.type() == CV_32F);
+  TRT_ASSERT(cudaMemcpyAsync(device_buffers_[0], blob.ptr<float>(),
+                             input_sz_ * sizeof(float), cudaMemcpyHostToDevice,
+                             stream_) == 0);
 
-    TRT_ASSERT(cudaMemcpyAsync(device_buffers_[0], blob.ptr<float>(), input_sz_ * sizeof(float),
-                              cudaMemcpyHostToDevice, stream_) == 0);
+  TRT_ASSERT(context->setInputTensorAddress(input_name, device_buffers_[0]));
+  TRT_ASSERT(context->setOutputTensorAddress(output_name, device_buffers_[1]));
 
-    TRT_ASSERT(context->setInputTensorAddress(input_name, device_buffers_[0]));
-    TRT_ASSERT(context->setOutputTensorAddress(output_name, device_buffers_[1]));
+  TRT_ASSERT(context->enqueueV3(stream_));
 
-    TRT_ASSERT(context->enqueueV3(stream_));
+  TRT_ASSERT(cudaMemcpyAsync(output_buffer_, device_buffers_[1],
+                             output_sz_ * sizeof(float), cudaMemcpyDeviceToHost,
+                             stream_) == 0);
 
-    TRT_ASSERT(cudaMemcpyAsync(output_buffer_, device_buffers_[1], output_sz_ * sizeof(float),
-                              cudaMemcpyDeviceToHost, stream_) == 0);
-
-    TRT_ASSERT(cudaStreamSynchronize(stream_) == 0);
-
-
+  TRT_ASSERT(cudaStreamSynchronize(stream_) == 0);
 
   std::vector<ArmorObject> objs_tmp, objs_result;
   std::vector<cv::Rect> rects;
@@ -869,7 +837,8 @@ std::vector<ArmorObject> AdaptedTRTModule::postprocess(
 }
 
 // void AdaptedTRTModule::pushInput(
-//     const cv::Mat &rgb_img, std::chrono::steady_clock::time_point timestamp) {
+//     const cv::Mat &rgb_img, std::chrono::steady_clock::time_point timestamp)
+//     {
 //   if (rgb_img.empty()) {
 //     return;
 //   }
@@ -878,11 +847,11 @@ std::vector<ArmorObject> AdaptedTRTModule::postprocess(
 //   cv::Mat resized_img = letterbox(rgb_img, transform_matrix);
 //   processCallback(resized_img, transform_matrix, timestamp, rgb_img);
 
- 
 // }
 void AdaptedTRTModule::pushInput(
     const cv::Mat &rgb_img, std::chrono::steady_clock::time_point timestamp) {
-  if (rgb_img.empty()) return;
+  if (rgb_img.empty())
+    return;
 
   Eigen::Matrix3f transform_matrix;
   cv::Mat resized_img = letterbox(rgb_img, transform_matrix);
@@ -895,6 +864,7 @@ void AdaptedTRTModule::pushInput(
     }
 
     auto context = contexts_[context_id];
-    this->processCallbacka(resized_img, transform_matrix, timestamp, rgb_img, context);
+    this->processCallbacka(resized_img, transform_matrix, timestamp, rgb_img,
+                           context);
   });
 }

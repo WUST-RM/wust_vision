@@ -38,6 +38,8 @@ add_executable(${PROJECT_NAME}_trt
   src/detect/ba_solver.cpp
   src/driver/image_capturer.cpp
   src/driver/hik.cpp
+  src/common/matplottools.cpp
+  src/common/toolsgobal.cpp
 
 
 )
@@ -61,6 +63,7 @@ find_package(CUDAToolkit REQUIRED)
 find_package(fmt REQUIRED)
 find_package(yaml-cpp REQUIRED)
 find_package(G2O REQUIRED)
+find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
 # 本项目 include 路径
 target_include_directories(${PROJECT_NAME}_trt PUBLIC
   ${OpenCV_INCLUDE_DIRS}
@@ -68,6 +71,7 @@ target_include_directories(${PROJECT_NAME}_trt PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${CMAKE_CURRENT_SOURCE_DIR}/hikSDK/include
   ${G2O_INCLUDE_DIRS}
+  ${Python3_INCLUDE_DIRS}
 )
 link_directories(hikSDK/lib/arm64)
 
@@ -107,5 +111,7 @@ target_link_libraries(${PROJECT_NAME}_trt
   g2o_types_sba
   g2o_types_slam3d
   g2o_solver_dense
+  ${OPENGL_gl_LIBRARY}
+  ${Python3_LIBRARIES}
 
 )

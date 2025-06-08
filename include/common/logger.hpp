@@ -249,7 +249,8 @@ public:
                          nvinfer1::ILogger::Severity::kWARNING)
       : severity_(severity) {}
 
-  void log(nvinfer1::ILogger::Severity severity, const char* msg) noexcept override {
+  void log(nvinfer1::ILogger::Severity severity,
+           const char *msg) noexcept override {
     if (severity <= severity_) {
       std::cerr << msg << std::endl;
     }

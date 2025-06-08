@@ -22,6 +22,12 @@
 
 constexpr size_t NORMAL_STR_NUM = 6;
 
+struct OffsetEntry {
+  double d_min, d_max;
+  double h_min, h_max;
+  double pitch_off, yaw_off;
+};
+
 class LineRegion {
 public:
   LineRegion(const double l, const double u) : lowwer_(l), upper_(u) {}
@@ -76,6 +82,27 @@ public:
   bool updateMapFlow(const std::vector<std::string> strs) {
     for (const auto &str : strs) {
       if (!updateMapByStr(str)) {
+        return false;
+      }
+    }
+    return true;
+  }
+  bool updateMapFlow(const std::vector<std::vector<double>> &nums_list) {
+    for (const auto &nums : nums_list) {
+      if (nums.size() < 6)
+        return false;
+      LineRegion d_region(nums[0], nums[1]);
+      LineRegion h_region(nums[2], nums[3]);
+      if (!updateMap(d_region, h_region, nums[4], nums[5])) {
+        return false;
+      }
+    }
+    return true;
+  }
+  bool updateMapFlow(const std::vector<OffsetEntry> &entries) {
+    for (const auto &e : entries) {
+      if (!updateMap(LineRegion(e.d_min, e.d_max), LineRegion(e.h_min, e.h_max),
+                     e.pitch_off, e.yaw_off)) {
         return false;
       }
     }

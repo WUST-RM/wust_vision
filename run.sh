@@ -14,7 +14,8 @@ blue="\033[1;34m"
 yellow="\033[1;33m"
 reset="\033[0m"
 red="\033[1;31m"
-
+sudo chmod 777 /dev/ttyACM_stm32
+rm /dev/shm/debug_frame.jpg  /dev/shm/cmd_log.json
 if [ ! -d "build" ]; then 
     mkdir build
 fi
