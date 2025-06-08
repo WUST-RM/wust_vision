@@ -47,8 +47,7 @@ void WustVision::stopTimer() {
 }
 
 void WustVision::init() {
-  config =
-      YAML::LoadFile("/home/hy/wust_vision/config/config_trt.yaml");
+  config = YAML::LoadFile("/home/hy/wust_vision/config/config_trt.yaml");
   debug_mode_ = config["debug"]["debug_mode"].as<bool>();
   debug_w = config["debug"]["debug_w"].as<int>(640);
   debug_h = config["debug"]["debug_h"].as<int>(480);
@@ -172,7 +171,7 @@ void WustVision::init() {
   //     std::make_unique<std::thread>(&WustVision::captureLoop, this);
 
   is_inited_ = true;
-  robot_cmd_plot_thread_ = std::thread(&plotRobotCmdThread);
+  robot_cmd_plot_thread_ = std::thread(&robotCmdLoggerThread);
 }
 // void WustVision::captureLoop() {
 //   while (capture_running_ && is_inited_) {
@@ -555,22 +554,13 @@ void WustVision::transformArmorData(Armors &armors) {
       Transform tf(armor.pos, armor.ori, armors.timestamp);
       auto pose_in_target_frame = tf_tree_.transform(
           tf, armors.frame_id, target_frame_, armors.timestamp);
-      // auto pose_in_target_frame = tf_tree_.transform(tf,
-      // target_frame_,armors.frame_id,  armors.timestamp);
+
       armor.target_pos = pose_in_target_frame.position;
       armor.target_ori = pose_in_target_frame.orientation;
 
       armor.yaw = getRPYFromQuaternion(armor.target_ori).yaw;
       double yaw = armor.yaw * 180 / M_PI;
-      // std::cout<<"Z"<< armor.target_pos.z<<std::endl;
-      //  auto now = std::chrono::steady_clock::now();
-      //  std::cout << "now (ns since epoch): " <<
-      //  now.time_since_epoch().count() << " ns" << std::endl; std::cout <<
-      //  "timestamp (ns): " <<
-      //  pose_in_target_frame.timestamp.time_since_epoch().count() << " ns" <<
-      //  std::endl; std::cout<<"YAW:"<<yaw<<std::endl;
 
-      //  WUST_DEBUG(vision_logger)<<"Z:"<<armor.target_pos.z;
     } catch (const std::exception &e) {
       WUST_ERROR(vision_logger)
           << "Can't find transform from " << armors.frame_id << " to "
@@ -662,8 +652,8 @@ void WustVision::timerCallback() {
       armors = armors_gobal;
     }
 
-    draw_debug_overlay(imgframe_, &armors, &target_info, &target, state,
-                       gimbal_cmd);
+    draw_debug_overlaywrite(imgframe_, &armors, &target_info, &target, state,
+                            gimbal_cmd);
 
     auto now = std::chrono::steady_clock::now();
     double t = std::chrono::duration<double>(now - start_time_).count();
@@ -677,17 +667,33 @@ void WustVision::timerCallback() {
                                   1000);
       }
     }
+
     {
       std::lock_guard<std::mutex> lock(robot_cmd_mutex_);
       time_log_.push_back(t);
       cmd_yaw_log_.push_back(last_cmd_.yaw);
       cmd_pitch_log_.push_back(last_cmd_.pitch);
+      if (!armors.armors.empty()) {
+        auto min_armor_it = std::min_element(
+            armors.armors.begin(), armors.armors.end(),
+            [](const Armor &a, const Armor &b) {
+              return a.distance_to_image_center < b.distance_to_image_center;
+            });
+        const Armor &min_armor = *min_armor_it;
+        last_distance =
+            std::sqrt(min_armor.target_pos.x * min_armor.target_pos.x +
+                      min_armor.target_pos.y * min_armor.target_pos.y +
+                      min_armor.target_pos.z * min_armor.target_pos.z);
+        armor_dis_log_.push_back(last_distance);
+      } else {
+        armor_dis_log_.push_back(last_distance);
+      }
 
-      // 控制最大存储容量，防止内存无限增长
       if (time_log_.size() > 100) {
         time_log_.erase(time_log_.begin());
         cmd_yaw_log_.erase(cmd_yaw_log_.begin());
         cmd_pitch_log_.erase(cmd_pitch_log_.begin());
+        armor_dis_log_.erase(armor_dis_log_.begin());
       }
     }
   }

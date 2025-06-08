@@ -28,6 +28,7 @@ add_executable(${PROJECT_NAME}_openvino
   src/detect/ba_solver.cpp
   src/driver/image_capturer.cpp
   src/common/matplottools.cpp
+  src/driver/hik.cpp
   src/common/toolsgobal.cpp
 )
 add_executable(${PROJECT_NAME}_trt

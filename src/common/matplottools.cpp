@@ -1,6 +1,7 @@
 #include "common/matplottools.hpp"
 #include "common/logger.hpp"
 #include <chrono>
+#include <nlohmann/json.hpp>
 #include <vector>
 void plotYawThread() {
   try {
@@ -65,7 +66,27 @@ void plotYawThread() {
 
   WUST_DEBUG("matplot") << "[plotYawThread] Fully terminated.";
 }
+void write_cmd_log_to_json() {
+  nlohmann::json j;
+  {
+    std::lock_guard<std::mutex> lock(robot_cmd_mutex_);
+    j["time"] = time_log_;
+    j["yaw"] = cmd_yaw_log_;
+    j["pitch"] = cmd_pitch_log_;
+    j["armor_dis"] = armor_dis_log_;
+  }
 
+  std::ofstream file("/dev/shm/cmd_log.json");
+  if (file.is_open()) {
+    file << j.dump(); // 可选加上 4 缩进：j.dump(4)
+  }
+}
+void robotCmdLoggerThread() {
+  while (is_inited_) {
+    write_cmd_log_to_json();
+    std::this_thread::sleep_for(std::chrono::milliseconds(50)); // 20Hz
+  }
+}
 void plotRobotCmdThread() {
 
   matplotlibcpp::ion();

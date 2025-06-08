@@ -17,3 +17,5 @@ double odom2gimbal_yaw, odom2gimbal_roll, odom2gimbal_pitch;
 bool is_inited_ = false;
 YAML::Node config;
 std::atomic<bool> exit_flag(false);
+bool use_calculation_ = false;
+bool use_serial = false;

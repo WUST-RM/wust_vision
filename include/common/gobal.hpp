@@ -21,3 +21,5 @@ extern double odom2gimbal_yaw, odom2gimbal_roll, odom2gimbal_pitch;
 extern bool is_inited_;
 extern std::atomic<bool> exit_flag;
 extern YAML::Node config;
+extern bool use_calculation_;
+extern bool use_serial;

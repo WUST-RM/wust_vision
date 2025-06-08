@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>崇实战队网页调试器</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: #f0f0f0;
+        }
+        .video-container {
+            margin-top: 20px;
+            display: inline-block;
+            border: 3px solid #333;
+            background-color: #fff;
+            padding: 10px;
+        }
+        .chart-container {
+            margin-top: 40px;
+            display: inline-block;
+            background-color: #fff;
+            padding: 10px;
+            border: 3px solid #333;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div style="display: flex; align-items: center; position: absolute; top: 10px; left: 10px; z-index: 999;">
+        <img src="/static/logo.JPG" alt="Logo" style="
+            width: 100px;
+            height: auto;
+            margin-right: 20px; /* 图片与文字之间的间距 */
+        ">
+    
+        <!-- 新增容器用于包裹标题和访问地址 -->
+        <div style="display: flex; flex-direction: column;">
+            <h1>崇实战队自瞄系统网页调试器</h1>
+            <p style="margin-top: 5px; font-size: 14px; color: #555;">访问地址：{{ server_url }}</p>
+        </div>
+    </div>
+
+    <div class="video-container">
+        <img src="{{ url_for('video_feed') }}" width="640" alt="视频流">
+    </div>
+
+    <div class="chart-container">
+        <canvas id="waveformChart" width="640" height="300"></canvas>
+    </div>
+
+    <div class="chart-container">
+        <canvas id="armorChart" width="640" height="300"></canvas>
+    </div>
+    
+
+    <script>
+        const yawPitchCtx = document.getElementById('waveformChart').getContext('2d');
+        const armorCtx = document.getElementById('armorChart').getContext('2d');
+    
+        const yawPitchChart = new Chart(yawPitchCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'Yaw',
+                        data: [],
+                        borderColor: 'red',
+                        fill: false,
+                        tension: 0.2
+                    },
+                    {
+                        label: 'Pitch',
+                        data: [],
+                        borderColor: 'blue',
+                        fill: false,
+                        tension: 0.2
+                    }
+                ]
+            },
+            options: {
+                animation: false,
+                responsive: false,
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Time (s)'
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Angle (rad)'
+                        },
+                        min: -20,
+                        max: 20
+                    }
+                }
+            }
+        });
+    
+        const armorChart = new Chart(armorCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'Armor Distance',
+                        data: [],
+                        borderColor: 'green',
+                        fill: false,
+                        tension: 0.2
+                    }
+                ]
+            },
+            options: {
+                animation: false,
+                responsive: false,
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Time (s)'
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Distance (m)'
+                        },
+                        min: 0,
+                        max: 10
+                    }
+                }
+            }
+        });
+    
+        async function fetchDataAndUpdateCharts() {
+            try {
+                const response = await fetch('/data');
+                const json = await response.json();
+    
+                if (json.time && json.yaw && json.pitch && json.armor_dis) {
+                    // 更新 yaw/pitch 图
+                    yawPitchChart.data.labels = json.time;
+                    yawPitchChart.data.datasets[0].data = json.yaw;
+                    yawPitchChart.data.datasets[1].data = json.pitch;
+                    yawPitchChart.update('none');
+    
+                    // 更新 armor_dis 图
+                    armorChart.data.labels = json.time;
+                    armorChart.data.datasets[0].data = json.armor_dis;
+                    armorChart.update('none');
+                }
+            } catch (e) {
+                console.error('Failed to fetch data:', e);
+            }
+        }
+    
+        setInterval(fetchDataAndUpdateCharts, 20); // 每 20ms 更新一次
+    </script>
+    
+    
+    
+</body>
+</html>

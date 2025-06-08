@@ -188,7 +188,6 @@ static void nms_merge_sorted_bboxes(std::vector<ArmorObject> &faceobjects,
             b.pts.push_back(a.pts[i]);
           }
         }
-
       }
     }
 

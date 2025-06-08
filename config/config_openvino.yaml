@@ -38,12 +38,20 @@ light:
 
 
 
+# camera:
+#   trigger_mode: false
+#   invert_image: false
+#   camera_info_path: "/home/hy/wust_vision/config/camera_info.yaml"
+#   exposure_time_us: 3500
+#   gain: 10.0
 camera:
-  trigger_mode: false
-  invert_image: false
+  serial: ""
   camera_info_path: "/home/hy/wust_vision/config/camera_info.yaml"
-  exposure_time_us: 3500
+  acquisition_frame_rate: 200
+  exposure_time: 3500
   gain: 10.0
+  adc_bit_depth: "Bits_8"
+  pixel_format: "BayerRG8"
 
 
 tf:

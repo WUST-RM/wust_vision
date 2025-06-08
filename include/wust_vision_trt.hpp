@@ -37,17 +37,13 @@ public:
   std::unique_ptr<AdaptedTRTModule> detector_;
   std::unique_ptr<ThreadPool> thread_pool_;
 
-  size_t img_recv_count_ = 0;
-  size_t detect_finish_count_ = 0;
-  size_t fire_count_ = 0;
-  std::chrono::steady_clock::time_point last_stat_time_steady_;
-  std::atomic<int> infer_running_count_{0};
   int max_infer_running_;
+  std::atomic<int> infer_running_count_{0};
   std::mutex callback_mutex_;
+  std::chrono::steady_clock::time_point last_time_;
 
   std::string vision_logger = "tensorrt_vision";
   std::atomic<bool> run_loop_{false};
-  double latency_ms;
 
   std::atomic<bool> timer_running_{false};
   std::thread timer_thread_;
@@ -62,16 +58,11 @@ public:
   double gimbal2camera_x_, gimbal2camera_y_, gimbal2camera_z_,
       gimbal2camera_yaw_, gimbal2camera_roll_, gimbal2camera_pitch_;
   std::string target_frame_;
-  std::chrono::steady_clock::time_point last_time_;
+
   double dt_;
-  double debug_show_dt_;
-  imgframe imgframe_;
-  std::mutex img_mutex_;
+
   Serial serial_;
   std::unique_ptr<Solver> solver_;
-  bool use_calculation_ = false;
-  bool use_serial = false;
-  GimbalCmd last_cmd_;
 
   std::unique_ptr<ArmorPoseEstimator> armor_pose_estimator_;
   Eigen::Matrix3d imu_to_camera_;

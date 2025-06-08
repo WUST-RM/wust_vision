@@ -372,10 +372,6 @@ void Serial::sendData() {
   }
 }
 void Serial::transformGimbalCmd(GimbalCmd &gimbal_cmd, bool appear) {
-  double alpha_yaw = 0.9;
-  double alpha_pitch = 0.9;
-  double max_yaw_change = 10.0;
-  double max_pitch_change = 5.0;
 
   if (appear) {
     auto limit = [](double val, double max_change) {
