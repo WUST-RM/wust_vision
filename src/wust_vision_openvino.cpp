@@ -639,7 +639,7 @@ void WustVision::timerCallback() {
 
     if (!measure_tool_->reprojectArmorsCorners(armor_data, target_info))
       return;
-    dumpTargetToFile(target, "/tmp/target_status.txt");
+    write_target_log_to_json(target);
     Tracker::State state = tracker_->tracker_state;
     cv::Mat src;
     {
