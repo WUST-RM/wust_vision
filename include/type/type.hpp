@@ -24,7 +24,11 @@ struct Light : public cv::RotatedRect {
       : cv::RotatedRect(cv::minAreaRect(contour)) {
 
     center = std::accumulate(contour.begin(), contour.end(), cv::Point2f(0, 0),
+<<<<<<< HEAD
                              [n = static_cast<double>(contour.size())](
+=======
+                             [n = static_cast<float>(contour.size())](
+>>>>>>> ec64a0b (update nuc)
                                  const cv::Point2f &a, const cv::Point &b) {
                                return a + cv::Point2f(b.x, b.y) / n;
                              });
@@ -54,7 +58,11 @@ struct Light : public cv::RotatedRect {
   cv::Point2f axis;
   double length;
   double width;
+<<<<<<< HEAD
   double tilt_angle;
+=======
+  float tilt_angle;
+>>>>>>> ec64a0b (update nuc)
 };
 struct LightParams {
   // width / height
@@ -127,7 +135,11 @@ typedef struct ArmorObject {
 
   ArmorColor color;
   ArmorNumber number;
+<<<<<<< HEAD
   double prob;
+=======
+  float prob;
+>>>>>>> ec64a0b (update nuc)
   std::vector<cv::Point2f> pts;
   std::vector<cv::Point2f> pts_binary;
   cv::Rect box;
@@ -188,8 +200,13 @@ struct Armor {
   tf2::Quaternion ori;
   Position target_pos;
   tf2::Quaternion target_ori;
+<<<<<<< HEAD
   double distance_to_image_center;
   double yaw;
+=======
+  float distance_to_image_center;
+  float yaw;
+>>>>>>> ec64a0b (update nuc)
   std::chrono::steady_clock::time_point timestamp;
 };
 struct Armors {
@@ -207,6 +224,7 @@ struct Target {
 
   Position position_ = Position();
   Position velocity_ = Position();
+<<<<<<< HEAD
   double yaw = 0;
   double v_yaw = 0;
   double radius_1 = 0.24;
@@ -215,6 +233,16 @@ struct Target {
   double d_zc = 0;
   double yaw_diff;
   double position_diff;
+=======
+  float yaw = 0;
+  float v_yaw = 0;
+  float radius_1 = 0.24;
+  float radius_2 = 0.24;
+  float d_za = 0;
+  float d_zc = 0;
+  float yaw_diff;
+  float position_diff;
+>>>>>>> ec64a0b (update nuc)
 
   void clear() {
     id = ArmorNumber::UNKNOWN;
@@ -243,11 +271,19 @@ struct SyncedData {
 };
 struct GimbalCmd {
   std::chrono::steady_clock::time_point timestamp;
+<<<<<<< HEAD
   double pitch = 0;
   double yaw = 0;
   double yaw_diff = 0;
   double pitch_diff = 0;
   double distance = -1;
+=======
+  float pitch = 0;
+  float yaw = 0;
+  float yaw_diff = 0;
+  float pitch_diff = 0;
+  float distance = -1;
+>>>>>>> ec64a0b (update nuc)
   bool fire_advice = false;
   int select_id = -1;
 };

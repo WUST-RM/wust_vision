@@ -22,8 +22,14 @@ public:
   void aim_cbk(ReceiveAimINFO &aim_data);
   bool usbOk() const { return is_usb_ok_; }
   void sendData();
+<<<<<<< HEAD
   void transformGimbalCmd(GimbalCmd &gimbal_cmd,bool appear);
 
+=======
+  void transformGimbalCmd(GimbalCmd &gimbal_cmd, bool appear);
+  double lastyaw_;
+  double lastpitch_;
+>>>>>>> ec64a0b (update nuc)
   std::string device_name_;
   SerialPortConfig config_;
   std::atomic<bool> is_usb_ok_;
@@ -34,4 +40,11 @@ public:
   SerialDriver driver_;
   std::string serial_logger = "serial";
   SendRobotCmdData send_robot_cmd_data_;
+<<<<<<< HEAD
+=======
+  double alpha_yaw;
+  double alpha_pitch;
+  double max_yaw_change;
+  double max_pitch_change;
+>>>>>>> ec64a0b (update nuc)
 };

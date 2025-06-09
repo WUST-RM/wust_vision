@@ -6,7 +6,11 @@ export MVCAM_GENICAM_CLPROTOCOL=/opt/MVS/lib/CLProtocol
 export ALLUSERSPROFILE=/opt/MVS/MVFG
 
 export LD_LIBRARY_PATH=/opt/MVS/lib/64:/opt/MVS/lib/32:$LD_LIBRARY_PATH
+<<<<<<< HEAD
 export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+=======
+export LD_LIBRARY_PATH=/home/hy/TensorRT-8.5.2.2/lib:$LD_LIBRARY_PATH
+>>>>>>> ec64a0b (update nuc)
 
 blue="\033[1;34m"
 yellow="\033[1;33m"
@@ -19,7 +23,14 @@ fi
 
 echo -e "${yellow}<--- Start CMake --->${reset}"
 cd build
+<<<<<<< HEAD
 cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=YES .. 
+=======
+cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=YES ..  -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang \
+  -DCMAKE_CXX_COMPILER=clang++ \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CXX_FLAGS="--gcc-toolchain=/usr"
+>>>>>>> ec64a0b (update nuc)
 if [ $? -ne 0 ]; then
     echo -e "${red}\n--- CMake Failed ---${reset}"
     exit 1
@@ -50,12 +61,20 @@ echo -e "${blue}        $total${reset}"
 if [ "$1" == "build" ]; then
     echo -e "${yellow}\n<--- Only building and copying both executables --->${reset}"
     # Copy the executables to /usr/local/bin
+<<<<<<< HEAD
     #sudo cp ./wust_vision_trt /usr/local/bin/
+=======
+    sudo cp ./wust_vision_trt /usr/local/bin/
+>>>>>>> ec64a0b (update nuc)
     if [ $? -ne 0 ]; then
         echo -e "${red}\n--- Failed to copy wust_vision_trt to /usr/local/bin ---${reset}"
         exit 1
     fi
+<<<<<<< HEAD
     #sudo cp ./wust_vision_openvino /usr/local/bin/
+=======
+    sudo cp ./wust_vision_openvino /usr/local/bin/
+>>>>>>> ec64a0b (update nuc)
     if [ $? -ne 0 ]; then
         echo -e "${red}\n--- Failed to copy wust_vision_openvino to /usr/local/bin ---${reset}"
         exit 1
@@ -64,21 +83,34 @@ if [ "$1" == "build" ]; then
     exit 0
 fi
 
+<<<<<<< HEAD
 #sudo cp ./wust_vision_trt /usr/local/bin/
+=======
+sudo cp ./wust_vision_trt /usr/local/bin/
+>>>>>>> ec64a0b (update nuc)
 if [ $? -ne 0 ]; then
     echo -e "${red}\n--- Failed to copy wust_vision_trt to /usr/local/bin ---${reset}"
     exit 1
 fi
+<<<<<<< HEAD
 #sudo cp ./wust_vision_openvino /usr/local/bin/
+=======
+sudo cp ./wust_vision_openvino /usr/local/bin/
+>>>>>>> ec64a0b (update nuc)
 if [ $? -ne 0 ]; then
     echo -e "${red}\n--- Failed to copy wust_vision_openvino to /usr/local/bin ---${reset}"
     exit 1
 fi
 echo -e "${blue}\n----- Both executables copied to /usr/local/bin -----${reset}"
 
+<<<<<<< HEAD
 rm /tmp/calculation.txt 
 rm /tmp/aim_status.txt
 rm /tmp/target_status.txt
+=======
+
+
+>>>>>>> ec64a0b (update nuc)
 # Check input argument to decide which program to run
 if [ "$1" == "trt" ]; then
     echo -e "${yellow}\n<--- Running TensorRT version --->${reset}"

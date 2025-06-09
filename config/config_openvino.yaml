@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 use_calculation:  false
 use_serial: true
 
@@ -114,3 +115,152 @@ solver:
 # R_y:0.0214626785
 # R_z:0.0006992016
 # R_yaw:0.6092185450
+=======
+camera:
+  acquisition_frame_rate: 200
+  adc_bit_depth: Bits_8
+  camera_info_path: /home/hy/wust_vision/config/camera_info.yaml
+  exposure_time: 3500
+  gain: 10
+  pixel_format: BayerRG8
+  serial: ''
+classify_label_path: /home/hy/wust_vision/model/label.txt
+classify_model_path: /home/hy/wust_vision/model/lenet.onnx
+control:
+  alpha_pitch: 0.9
+  alpha_yaw: 0.9
+  control_rate: 1000
+  device_name: /dev/ttyACM0
+  max_pitch_change: 5
+  max_yaw_change: 10
+  use_serial: false
+debug:
+  debug_h: 1080
+  debug_mode: true
+  debug_show_dt: 0.05
+  debug_w: 1440
+detect_color: 1
+light:
+  binary_thres: 85
+  expand_ratio_h: 1.1
+  expand_ratio_w: 1.1
+  max_angle: 40
+  max_ratio: 0.45
+  min_ratio: 0.02
+logger:
+  log_level: DEBUG
+  log_path: /home/hy/wust_log
+  use_logcli: true
+  use_logfile: false
+  use_simplelog: true
+max_infer_running: 4
+model:
+  conf_threshold: 0.7
+  device_type: GPU
+  model_path: /home/hy/wust_vision/model/opt-1208-001.onnx
+  nms_threshold: 0.3
+  top_k: 128
+solver:
+  bullet_speed: 25
+  compenstator_type: ideal
+  controller_delay: 0
+  gravity: 9.8
+  iteration_times: 20
+  max_tracking_v_yaw: 180
+  pitch_offset:
+  - d_max: 6
+    d_min: 5
+    h_max: 0.4
+    h_min: -1
+    pitch_off: 0
+    yaw_off: 0
+  - d_max: 6
+    d_min: 5
+    h_max: 0.8
+    h_min: 0.4
+    pitch_off: 0
+    yaw_off: 0
+  - d_max: 6
+    d_min: 5
+    h_max: 1.2
+    h_min: 0.8
+    pitch_off: 0
+    yaw_off: 0
+  - d_max: 7
+    d_min: 6
+    h_max: 0.4
+    h_min: -1
+    pitch_off: 0
+    yaw_off: 0
+  - d_max: 7
+    d_min: 6
+    h_max: 0.8
+    h_min: 0.4
+    pitch_off: 0
+    yaw_off: 0
+  - d_max: 7
+    d_min: 6
+    h_max: 1.2
+    h_min: 0.8
+    pitch_off: 0
+    yaw_off: 0
+  - d_max: 8
+    d_min: 7
+    h_max: 0.4
+    h_min: -1
+    pitch_off: 0
+    yaw_off: 0
+  - d_max: 8
+    d_min: 7
+    h_max: 0.8
+    h_min: 0.4
+    pitch_off: 0
+    yaw_off: 0
+  - d_max: 8
+    d_min: 7
+    h_max: 1.2
+    h_min: 0.8
+    pitch_off: 0
+    yaw_off: 0
+  prediction_delay: 0.05
+  resistance: 0.092
+  shooting_range_h: 0.12
+  shooting_range_w: 0.12
+  side_angle: 20
+tf:
+  gimbal2camera_pitch: 6
+  gimbal2camera_roll: 1
+  gimbal2camera_x: 0
+  gimbal2camera_y: 0
+  gimbal2camera_yaw: 180
+  gimbal2camera_z: 0
+  odom2gimbal_pitch: 0
+  odom2gimbal_roll: 0
+  odom2gimbal_yaw: 0
+tracker:
+  ekf:
+    r_x: 0.0180952234
+    r_y: 0.0214626785
+    r_yaw: 0.609218545
+    r_z: 0.0016992016
+    s2qd_zc: 800
+    s2qr: 80
+    s2qx: 10
+    s2qy: 10
+    s2qyaw: 20
+    s2qz: 1
+  jump_thresh: 0.4
+  lost_time_thres: 0.2
+  max_inconsistent_count: 2
+  max_match_distance: 0.5
+  max_match_yaw_diff: 0.5
+  max_match_z_diff: 0.1
+  min_valid_velocity_thresh: 0.01
+  obs_vyaw_buffer_thres: 6
+  obs_yaw_stationary_thresh: 0.7
+  pred_yaw_stationary_thresh: 0.6
+  rotation_inconsistent_cooldown_limit: 5
+  target_frame: odom
+  tracking_thres: 5
+use_calculation: false
+>>>>>>> ec64a0b (update nuc)

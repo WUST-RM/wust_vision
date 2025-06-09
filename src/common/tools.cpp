@@ -1,5 +1,9 @@
 #include "common/tools.hpp"
 #include "common/gobal.hpp"
+<<<<<<< HEAD
+=======
+#include "common/matplotlibcpp.h"
+>>>>>>> ec64a0b (update nuc)
 #include "common/tf.hpp"
 #include "detect/mono_measure_tool.hpp"
 #include "fmt/format.h"
@@ -862,7 +866,11 @@ void draw_debug_overlay(const imgframe &src_img, const Armors *armors,
   }
 
   auto now = std::chrono::steady_clock::now();
+<<<<<<< HEAD
   constexpr double min_interval_ms = 1000.0 / 90.0;
+=======
+  constexpr double min_interval_ms = 1000.0 / 45.0;
+>>>>>>> ec64a0b (update nuc)
   double elapsed_ms =
       std::chrono::duration<double, std::milli>(now - last_show_time).count();
   if (elapsed_ms < min_interval_ms)
@@ -1097,6 +1105,524 @@ void draw_debug_overlay(const imgframe &src_img, const Armors *armors,
   cv::imshow("debug_overlay", debug_img);
   cv::waitKey(1);
 }
+<<<<<<< HEAD
+=======
+void draw_debug_overlaywrite(const imgframe &src_img, const Armors *armors,
+                             const Target_info *target_info,
+                             const Target *target,
+                             const std::optional<Tracker::State> &state,
+                             const std::optional<GimbalCmd> &gimbal_cmd) {
+  static auto last_show_time = std::chrono::steady_clock::now();
+  // static bool window_initialized = false;
+  static int brightness_slider = 200;
+
+  if (src_img.img.empty())
+    return;
+
+  // if (!window_initialized) {
+  //   cv::namedWindow("debug_overlay", cv::WINDOW_NORMAL);
+  //   cv::resizeWindow("debug_overlay", debug_w, debug_h);
+  //   cv::createTrackbar("Brightness", "debug_overlay", &brightness_slider,
+  //   400); window_initialized = true;
+  // }
+
+  auto now = std::chrono::steady_clock::now();
+  constexpr double min_interval_ms = 1000.0 / 45.0;
+  double elapsed_ms =
+      std::chrono::duration<double, std::milli>(now - last_show_time).count();
+  if (elapsed_ms < min_interval_ms)
+    return;
+  last_show_time = now;
+
+  // 图像亮度调整
+  double brightness_factor = brightness_slider / 100.0;
+  cv::Mat debug_img;
+  src_img.img.convertTo(debug_img, -1, brightness_factor, 0);
+  cv::cvtColor(debug_img, debug_img, cv::COLOR_BGR2RGB);
+
+  // ========= 绘制 Armors =========
+  static float yaw_diff = 0;
+  if (armors) {
+    static const int next_indices[] = {2, 0, 3, 1};
+
+    for (const auto &armor : armors->armors) {
+      std::vector<cv::Point2f> pts;
+      if (!measure_tool_->reprojectArmorCorners_raw(armor, pts))
+        continue;
+
+      for (size_t i = 0; i < 4; ++i)
+        cv::line(debug_img, pts[i], pts[(i + 1) % 4], cv::Scalar(0, 255, 0), 2);
+
+      std::string yaw_info =
+          fmt::format("Yaw: {:.2f}", armor.yaw * 180.0 / M_PI);
+      cv::putText(debug_img, yaw_info, pts[0] + cv::Point2f(0, -50),
+                  cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0, 200, 200), 2);
+
+      std::string armor_str;
+      switch (armor.number) {
+      case ArmorNumber::SENTRY:
+        armor_str = "SENTRY";
+        break;
+      case ArmorNumber::BASE:
+        armor_str = "BASE";
+        break;
+      case ArmorNumber::OUTPOST:
+        armor_str = "OUTPOST";
+        break;
+      case ArmorNumber::NO1:
+        armor_str = "NO1";
+        break;
+      case ArmorNumber::NO2:
+        armor_str = "NO2";
+        break;
+      case ArmorNumber::NO3:
+        armor_str = "NO3";
+        break;
+      case ArmorNumber::NO4:
+        armor_str = "NO4";
+        break;
+      case ArmorNumber::NO5:
+        armor_str = "NO5";
+        break;
+      default:
+        armor_str = "UNKNOWN";
+        break;
+      }
+
+      cv::putText(debug_img, armor_str, pts[1] + cv::Point2f(0, 50),
+                  cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0, 200, 200), 2);
+    }
+
+    if (armors->armors.size() == 2) {
+      double diff = armors->armors[0].yaw - armors->armors[1].yaw;
+      while (diff > M_PI)
+        diff -= 2 * M_PI;
+      while (diff < -M_PI)
+        diff += 2 * M_PI;
+      yaw_diff = std::abs(diff);
+    }
+
+    std::string yaw_diff_str =
+        fmt::format("Yaw_diff: {:.2f}", yaw_diff * 180.0 / M_PI);
+    cv::putText(debug_img, yaw_diff_str, cv::Point(100, 150),
+                cv::FONT_HERSHEY_SIMPLEX, 2.0, cv::Scalar(40, 255, 40), 2);
+
+    double latency =
+        std::chrono::duration<double, std::milli>(now - armors->timestamp)
+            .count();
+    std::string latency_str = fmt::format("Latency: {:.2f}ms", latency);
+    cv::putText(debug_img, latency_str, cv::Point(10, 30),
+                cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(255, 255, 255), 2);
+  }
+
+  // ========= 绘制 Target =========
+  std::vector<cv::Point2f> all_corners;
+  if (target_info && target) {
+    for (size_t i = 0; i < target_info->pts.size(); ++i) {
+      const auto &pts = target_info->pts[i];
+      const auto &pos = target_info->pos[i];
+      const auto &ori = target_info->ori[i];
+
+      for (size_t j = 0; j < 4; ++j)
+        cv::line(debug_img, pts[j], pts[(j + 1) % 4], cv::Scalar(255, 0, 0), 2);
+
+      all_corners.insert(all_corners.end(), pts.begin(), pts.end());
+
+      double yaw = getYawFromQuaternion(ori);
+      double distance =
+          std::sqrt(pos.x * pos.x + pos.y * pos.y + pos.z * pos.z);
+
+      std::vector<std::string> info_lines = {
+          fmt::format("Dis: {:.1f}cm", distance * 100),
+          fmt::format("X: {:.2f}", pos.x), fmt::format("Y: {:.2f}", pos.y),
+          fmt::format("Z: {:.2f}", pos.z),
+          fmt::format("Yaw: {:.2f}", yaw * 180.0 / M_PI)};
+
+      cv::Point2f text_org = pts[0] + cv::Point2f(0, 200);
+      for (int k = 0; k < info_lines.size(); ++k) {
+        cv::putText(debug_img, info_lines[k],
+                    text_org + cv::Point2f(0, -10 - 20 * k),
+                    cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(50, 255, 255), 1);
+      }
+    }
+
+    if (target_info->select_id != -1 &&
+        !target_info->pts[target_info->select_id].empty()) {
+      cv::Point2f center(0.f, 0.f);
+      for (int i = 0; i < 4; ++i)
+        center += target_info->pts[target_info->select_id][i];
+      center *= 0.25f;
+      cv::circle(debug_img, center + cv::Point2f(0, -200), 20,
+                 cv::Scalar(0, 0, 255), 5);
+    }
+
+    if (!all_corners.empty()) {
+      cv::Point2f avg(0.f, 0.f);
+      for (const auto &pt : all_corners)
+        avg += pt;
+      avg *= 1.0f / all_corners.size();
+      cv::circle(debug_img, avg, 5, cv::Scalar(0, 255, 0), -1);
+    }
+
+    auto latency = std::chrono::duration_cast<std::chrono::microseconds>(
+                       now - target->timestamp)
+                       .count() /
+                   1000.0;
+    auto latency_img_target =
+        std::chrono::duration_cast<std::chrono::microseconds>(
+            src_img.timestamp - target->timestamp)
+            .count() /
+        1000.0;
+
+    cv::putText(debug_img,
+                fmt::format("Img-Frame Delay: {:.2f}ms", latency_img_target),
+                cv::Point(10, 60), cv::FONT_HERSHEY_SIMPLEX, 0.8,
+                cv::Scalar(255, 255, 255), 2);
+  }
+
+  int baseline = 0;
+  if (state.has_value()) {
+    std::string state_str;
+    switch (state.value()) {
+    case Tracker::LOST:
+      state_str = "LOST";
+      break;
+    case Tracker::DETECTING:
+      state_str = "DETECTING";
+      break;
+    case Tracker::TRACKING:
+      state_str = "TRACKING";
+      break;
+    case Tracker::TEMP_LOST:
+      state_str = "TEMP_LOST";
+      break;
+    default:
+      state_str = "UNKNOWN";
+      break;
+    }
+    cv::Size state_size =
+        cv::getTextSize(state_str, cv::FONT_HERSHEY_SIMPLEX, 2.5, 2, &baseline);
+    int x = std::max(0, debug_img.cols - state_size.width - 10);
+    int y = std::min(debug_img.rows - 1, state_size.height + 10);
+    cv::putText(debug_img, state_str, {x, y}, cv::FONT_HERSHEY_SIMPLEX, 2.5,
+                cv::Scalar(0, 0, 255), 2);
+  }
+
+  if (target) {
+    auto armorName = [](ArmorNumber num) {
+      switch (num) {
+      case ArmorNumber::SENTRY:
+        return "SENTRY";
+      case ArmorNumber::BASE:
+        return "BASE";
+      case ArmorNumber::OUTPOST:
+        return "OUTPOST";
+      case ArmorNumber::NO1:
+        return "NO1";
+      case ArmorNumber::NO2:
+        return "NO2";
+      case ArmorNumber::NO3:
+        return "NO3";
+      case ArmorNumber::NO4:
+        return "NO4";
+      case ArmorNumber::NO5:
+        return "NO5";
+      default:
+        return "UNKNOWN";
+      }
+    };
+    std::string id_str = fmt::format("Attack: {}", armorName(target->id));
+    cv::Size id_size =
+        cv::getTextSize(id_str, cv::FONT_HERSHEY_SIMPLEX, 1.6, 2, &baseline);
+    int x = std::max(0, debug_img.cols - id_size.width - 10);
+    int y = std::min(debug_img.rows - 1, 100);
+    cv::putText(debug_img, id_str, {x, y}, cv::FONT_HERSHEY_SIMPLEX, 1.6,
+                cv::Scalar(255, 0, 255), 2);
+  }
+  std::string fire_str = gimbal_cmd && gimbal_cmd->fire_advice ? "Fire!" : "";
+  cv::Size fire_size =
+      cv::getTextSize(fire_str, cv::FONT_HERSHEY_SIMPLEX, 1.2, 2, &baseline);
+  int fire_x = 1440 / 2 - fire_size.width - 10;
+  int fire_y = 200;
+
+  cv::putText(debug_img, fire_str, {fire_x, fire_y}, cv::FONT_HERSHEY_SIMPLEX,
+              2.85, cv::Scalar(0, 0, 255), 2);
+
+  if (gimbal_cmd.has_value()) {
+    std::string gimbal_str = fmt::format(
+        "Pitch: {:.2f}, Yaw: {:.2f}, Pitch_diff: {:.2f}, Yaw_diff: {:.2f}",
+        gimbal_cmd->pitch, gimbal_cmd->yaw, gimbal_cmd->pitch_diff,
+        gimbal_cmd->yaw_diff);
+    cv::putText(debug_img, gimbal_str, {10, debug_img.rows - 30},
+                cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(255, 255, 0), 2);
+  }
+
+  cv::circle(debug_img, cv::Point2i(1440 / 2, 1080 / 2), 5,
+             cv::Scalar(255, 255, 255), 2);
+  std::vector<uchar> buf;
+  cv::imencode(".jpg", debug_img, buf);
+  std::ofstream ofs("/dev/shm/debug_frame.jpg.tmp", std::ios::binary);
+  ofs.write(reinterpret_cast<const char *>(buf.data()), buf.size());
+  ofs.close();
+  std::rename("/dev/shm/debug_frame.jpg.tmp", "/dev/shm/debug_frame.jpg");
+}
+cv::Mat draw_debug_overlayMat(const imgframe &src_img, const Armors *armors,
+                              const Target_info *target_info,
+                              const Target *target,
+                              const std::optional<Tracker::State> &state,
+                              const std::optional<GimbalCmd> &gimbal_cmd) {
+  static auto last_show_time = std::chrono::steady_clock::now();
+  static bool window_initialized = false;
+  static int brightness_slider = 200;
+
+  if (src_img.img.empty())
+    return cv::Mat();
+
+  // if (!window_initialized) {
+  // cv::namedWindow("debug_overlay", cv::WINDOW_NORMAL);
+  // cv::resizeWindow("debug_overlay", debug_w, debug_h);
+  // cv::createTrackbar("Brightness", "debug_overlay", &brightness_slider, 400);
+  // window_initialized = true;
+  // }
+
+  auto now = std::chrono::steady_clock::now();
+  // constexpr double min_interval_ms = 1000.0 / 45.0;
+  // double elapsed_ms =
+  // std::chrono::duration<double, std::milli>(now - last_show_time).count();
+  // if (elapsed_ms < min_interval_ms)
+  // return cv::Mat();
+  // last_show_time = now;
+
+  // 图像亮度调整
+  // double brightness_factor = brightness_slider / 100.0;
+  cv::Mat debug_img;
+  src_img.img.convertTo(debug_img, -1, 1, 0);
+  cv::cvtColor(debug_img, debug_img, cv::COLOR_BGR2RGB);
+
+  // ========= 绘制 Armors =========
+  static float yaw_diff = 0;
+  if (armors) {
+    static const int next_indices[] = {2, 0, 3, 1};
+
+    for (const auto &armor : armors->armors) {
+      std::vector<cv::Point2f> pts;
+      if (!measure_tool_->reprojectArmorCorners_raw(armor, pts))
+        continue;
+
+      for (size_t i = 0; i < 4; ++i)
+        cv::line(debug_img, pts[i], pts[(i + 1) % 4], cv::Scalar(0, 255, 0), 2);
+
+      std::string yaw_info =
+          fmt::format("Yaw: {:.2f}", armor.yaw * 180.0 / M_PI);
+      cv::putText(debug_img, yaw_info, pts[0] + cv::Point2f(0, -50),
+                  cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0, 200, 200), 2);
+
+      std::string armor_str;
+      switch (armor.number) {
+      case ArmorNumber::SENTRY:
+        armor_str = "SENTRY";
+        break;
+      case ArmorNumber::BASE:
+        armor_str = "BASE";
+        break;
+      case ArmorNumber::OUTPOST:
+        armor_str = "OUTPOST";
+        break;
+      case ArmorNumber::NO1:
+        armor_str = "NO1";
+        break;
+      case ArmorNumber::NO2:
+        armor_str = "NO2";
+        break;
+      case ArmorNumber::NO3:
+        armor_str = "NO3";
+        break;
+      case ArmorNumber::NO4:
+        armor_str = "NO4";
+        break;
+      case ArmorNumber::NO5:
+        armor_str = "NO5";
+        break;
+      default:
+        armor_str = "UNKNOWN";
+        break;
+      }
+
+      cv::putText(debug_img, armor_str, pts[1] + cv::Point2f(0, 50),
+                  cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0, 200, 200), 2);
+    }
+
+    if (armors->armors.size() == 2) {
+      double diff = armors->armors[0].yaw - armors->armors[1].yaw;
+      while (diff > M_PI)
+        diff -= 2 * M_PI;
+      while (diff < -M_PI)
+        diff += 2 * M_PI;
+      yaw_diff = std::abs(diff);
+    }
+
+    std::string yaw_diff_str =
+        fmt::format("Yaw_diff: {:.2f}", yaw_diff * 180.0 / M_PI);
+    cv::putText(debug_img, yaw_diff_str, cv::Point(100, 150),
+                cv::FONT_HERSHEY_SIMPLEX, 2.0, cv::Scalar(40, 255, 40), 2);
+
+    double latency =
+        std::chrono::duration<double, std::milli>(now - armors->timestamp)
+            .count();
+    std::string latency_str = fmt::format("Latency: {:.2f}ms", latency);
+    cv::putText(debug_img, latency_str, cv::Point(10, 30),
+                cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(255, 255, 255), 2);
+  }
+
+  // ========= 绘制 Target =========
+  std::vector<cv::Point2f> all_corners;
+  if (target_info && target) {
+    for (size_t i = 0; i < target_info->pts.size(); ++i) {
+      const auto &pts = target_info->pts[i];
+      const auto &pos = target_info->pos[i];
+      const auto &ori = target_info->ori[i];
+
+      for (size_t j = 0; j < 4; ++j)
+        cv::line(debug_img, pts[j], pts[(j + 1) % 4], cv::Scalar(255, 0, 0), 2);
+
+      all_corners.insert(all_corners.end(), pts.begin(), pts.end());
+
+      double yaw = getYawFromQuaternion(ori);
+      double distance =
+          std::sqrt(pos.x * pos.x + pos.y * pos.y + pos.z * pos.z);
+
+      std::vector<std::string> info_lines = {
+          fmt::format("Dis: {:.1f}cm", distance * 100),
+          fmt::format("X: {:.2f}", pos.x), fmt::format("Y: {:.2f}", pos.y),
+          fmt::format("Z: {:.2f}", pos.z),
+          fmt::format("Yaw: {:.2f}", yaw * 180.0 / M_PI)};
+
+      cv::Point2f text_org = pts[0] + cv::Point2f(0, 200);
+      for (int k = 0; k < info_lines.size(); ++k) {
+        cv::putText(debug_img, info_lines[k],
+                    text_org + cv::Point2f(0, -10 - 20 * k),
+                    cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(50, 255, 255), 1);
+      }
+    }
+
+    if (target_info->select_id != -1 &&
+        !target_info->pts[target_info->select_id].empty()) {
+      cv::Point2f center(0.f, 0.f);
+      for (int i = 0; i < 4; ++i)
+        center += target_info->pts[target_info->select_id][i];
+      center *= 0.25f;
+      cv::circle(debug_img, center + cv::Point2f(0, -200), 20,
+                 cv::Scalar(0, 0, 255), 5);
+    }
+
+    if (!all_corners.empty()) {
+      cv::Point2f avg(0.f, 0.f);
+      for (const auto &pt : all_corners)
+        avg += pt;
+      avg *= 1.0f / all_corners.size();
+      cv::circle(debug_img, avg, 5, cv::Scalar(0, 255, 0), -1);
+    }
+
+    auto latency = std::chrono::duration_cast<std::chrono::microseconds>(
+                       now - target->timestamp)
+                       .count() /
+                   1000.0;
+    auto latency_img_target =
+        std::chrono::duration_cast<std::chrono::microseconds>(
+            src_img.timestamp - target->timestamp)
+            .count() /
+        1000.0;
+
+    cv::putText(debug_img,
+                fmt::format("Img-Frame Delay: {:.2f}ms", latency_img_target),
+                cv::Point(10, 60), cv::FONT_HERSHEY_SIMPLEX, 0.8,
+                cv::Scalar(255, 255, 255), 2);
+  }
+
+  int baseline = 0;
+  if (state.has_value()) {
+    std::string state_str;
+    switch (state.value()) {
+    case Tracker::LOST:
+      state_str = "LOST";
+      break;
+    case Tracker::DETECTING:
+      state_str = "DETECTING";
+      break;
+    case Tracker::TRACKING:
+      state_str = "TRACKING";
+      break;
+    case Tracker::TEMP_LOST:
+      state_str = "TEMP_LOST";
+      break;
+    default:
+      state_str = "UNKNOWN";
+      break;
+    }
+    cv::Size state_size =
+        cv::getTextSize(state_str, cv::FONT_HERSHEY_SIMPLEX, 2.5, 2, &baseline);
+    int x = std::max(0, debug_img.cols - state_size.width - 10);
+    int y = std::min(debug_img.rows - 1, state_size.height + 10);
+    cv::putText(debug_img, state_str, {x, y}, cv::FONT_HERSHEY_SIMPLEX, 2.5,
+                cv::Scalar(0, 0, 255), 2);
+  }
+
+  if (target) {
+    auto armorName = [](ArmorNumber num) {
+      switch (num) {
+      case ArmorNumber::SENTRY:
+        return "SENTRY";
+      case ArmorNumber::BASE:
+        return "BASE";
+      case ArmorNumber::OUTPOST:
+        return "OUTPOST";
+      case ArmorNumber::NO1:
+        return "NO1";
+      case ArmorNumber::NO2:
+        return "NO2";
+      case ArmorNumber::NO3:
+        return "NO3";
+      case ArmorNumber::NO4:
+        return "NO4";
+      case ArmorNumber::NO5:
+        return "NO5";
+      default:
+        return "UNKNOWN";
+      }
+    };
+    std::string id_str = fmt::format("Attack: {}", armorName(target->id));
+    cv::Size id_size =
+        cv::getTextSize(id_str, cv::FONT_HERSHEY_SIMPLEX, 1.6, 2, &baseline);
+    int x = std::max(0, debug_img.cols - id_size.width - 10);
+    int y = std::min(debug_img.rows - 1, 100);
+    cv::putText(debug_img, id_str, {x, y}, cv::FONT_HERSHEY_SIMPLEX, 1.6,
+                cv::Scalar(255, 0, 255), 2);
+  }
+  std::string fire_str = gimbal_cmd && gimbal_cmd->fire_advice ? "Fire!" : "";
+  cv::Size fire_size =
+      cv::getTextSize(fire_str, cv::FONT_HERSHEY_SIMPLEX, 1.2, 2, &baseline);
+  int fire_x = 1440 / 2 - fire_size.width - 10;
+  int fire_y = 200;
+
+  cv::putText(debug_img, fire_str, {fire_x, fire_y}, cv::FONT_HERSHEY_SIMPLEX,
+              2.85, cv::Scalar(0, 0, 255), 2);
+
+  if (gimbal_cmd.has_value()) {
+    std::string gimbal_str = fmt::format(
+        "Pitch: {:.2f}, Yaw: {:.2f}, Pitch_diff: {:.2f}, Yaw_diff: {:.2f}",
+        gimbal_cmd->pitch, gimbal_cmd->yaw, gimbal_cmd->pitch_diff,
+        gimbal_cmd->yaw_diff);
+    cv::putText(debug_img, gimbal_str, {10, debug_img.rows - 30},
+                cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(255, 255, 0), 2);
+  }
+
+  cv::circle(debug_img, cv::Point2i(1440 / 2, 1080 / 2), 5,
+             cv::Scalar(255, 255, 255), 2);
+  return debug_img;
+  // cv::imshow("debug_overlay", debug_img);
+  // cv::waitKey(1);
+}
+>>>>>>> ec64a0b (update nuc)
 
 std::string formatTargetInfo(const Target &target) {
   std::ostringstream oss;
@@ -1117,11 +1643,15 @@ std::string formatTargetInfo(const Target &target) {
 
   oss << "\n-- Position --\n";
   oss << "x: " << target.position_.x << ", y: " << target.position_.y
+<<<<<<< HEAD
        << " ，z: " << target.position_.z << ", normal: " << 
       ", Distance to Origin: " << std::sqrt(target.position_.x * target.position_.x + 
                                            target.position_.y * target.position_.y + 
                                            target.position_.z * target.position_.z) << " m\n";
 
+=======
+      << ", z: " << target.position_.z << "\n";
+>>>>>>> ec64a0b (update nuc)
 
   oss << "\n-- Velocity --\n";
   oss << "vx: " << target.velocity_.x << ", vy: " << target.velocity_.y
@@ -1147,7 +1677,10 @@ void dumpTargetToFile(const Target &target, const std::string &path) {
   std::ofstream file(path);
   if (file.is_open()) {
     file << formatTargetInfo(target);
+<<<<<<< HEAD
     //std::cout << "Target info dumped to " << path << std::endl;
+=======
+>>>>>>> ec64a0b (update nuc)
     file.close();
   }
 }

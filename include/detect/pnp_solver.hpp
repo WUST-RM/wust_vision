@@ -16,8 +16,13 @@
 #ifndef RM_UTILS_PNP_SOLVER_HPP_
 #define RM_UTILS_PNP_SOLVER_HPP_
 
+<<<<<<< HEAD
 #include <iostream>
 #include <Eigen/Dense>
+=======
+#include <Eigen/Dense>
+#include <iostream>
+>>>>>>> ec64a0b (update nuc)
 #include <opencv2/calib3d.hpp>
 #include <opencv2/imgproc.hpp>
 #include <unordered_map>

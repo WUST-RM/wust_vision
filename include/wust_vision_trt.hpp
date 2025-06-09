@@ -3,6 +3,10 @@
 #include "control/armor_solver.hpp"
 #include "detect/armor_pose_estimator.hpp"
 #include "detect/trt.hpp"
+<<<<<<< HEAD
+=======
+#include "driver/hik.hpp"
+>>>>>>> ec64a0b (update nuc)
 #include "driver/image_capturer.hpp"
 #include "driver/serial.hpp"
 #include "tracker/tracker.hpp"
@@ -14,12 +18,22 @@ public:
   WustVision();
   ~WustVision();
   void init();
+<<<<<<< HEAD
 
   void processImage(const cv::Mat &frame, int64_t timestamp_nanosec);
   void captureLoop();
   void printStats();
   void DetectCallback(const std::vector<ArmorObject> &objs,
                       int64_t timestamp_nanosec, const cv::Mat &src_img);
+=======
+  void processImage(const ImageFrame &frame);
+  // void processImage(const cv::Mat &frame,
+  // std::chrono::steady_clock::time_point timestamp); void captureLoop();
+  void printStats();
+  void DetectCallback(const std::vector<ArmorObject> &objs,
+                      std::chrono::steady_clock::time_point timestamp,
+                      const cv::Mat &src_img);
+>>>>>>> ec64a0b (update nuc)
   void stop();
   void armorsCallback(Armors armors_, const cv::Mat &src_img);
   void initTF();
@@ -31,6 +45,7 @@ public:
   void transformArmorData(Armors &armors);
   Armors visualizeTargetProjection(Target armor_target_);
 
+<<<<<<< HEAD
   std::unique_ptr<AdaptedTRTModule> detector_;
   std::unique_ptr<ThreadPool> thread_pool_;
   bool is_inited_ = false;
@@ -46,6 +61,19 @@ public:
   std::string vision_logger = "tensorrt_vision";
   std::atomic<bool> run_loop_{false};
   double latency_ms;
+=======
+  std::unique_ptr<HikCamera> camera_;
+  std::unique_ptr<AdaptedTRTModule> detector_;
+  std::unique_ptr<ThreadPool> thread_pool_;
+
+  int max_infer_running_;
+  std::atomic<int> infer_running_count_{0};
+  std::mutex callback_mutex_;
+  std::chrono::steady_clock::time_point last_time_;
+
+  std::string vision_logger = "tensorrt_vision";
+  std::atomic<bool> run_loop_{false};
+>>>>>>> ec64a0b (update nuc)
 
   std::atomic<bool> timer_running_{false};
   std::thread timer_thread_;
@@ -60,6 +88,7 @@ public:
   double gimbal2camera_x_, gimbal2camera_y_, gimbal2camera_z_,
       gimbal2camera_yaw_, gimbal2camera_roll_, gimbal2camera_pitch_;
   std::string target_frame_;
+<<<<<<< HEAD
   std::chrono::steady_clock::time_point last_time_;
   double dt_;
   double debug_show_dt_;
@@ -68,11 +97,24 @@ public:
   Serial serial_;
   std::unique_ptr<Solver> solver_;
   bool use_calculation_ = false;
+=======
+
+  double dt_;
+
+  Serial serial_;
+  std::unique_ptr<Solver> solver_;
+>>>>>>> ec64a0b (update nuc)
 
   std::unique_ptr<ArmorPoseEstimator> armor_pose_estimator_;
   Eigen::Matrix3d imu_to_camera_;
 
+<<<<<<< HEAD
   std::unique_ptr<hikcamera::ImageCapturer> capturer_;
   std::unique_ptr<std::thread> capture_thread_;
   std::atomic<bool> capture_running_;
+=======
+  // std::unique_ptr<hikcamera::ImageCapturer> capturer_;
+  // std::unique_ptr<std::thread> capture_thread_;
+  // std::atomic<bool> capture_running_;
+>>>>>>> ec64a0b (update nuc)
 };

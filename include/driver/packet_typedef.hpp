@@ -87,6 +87,7 @@ struct HeaderFrame {
 //   int detect_color; // 0 red 1 blue
 
 // } __attribute__((packed));
+<<<<<<< HEAD
 struct ReceiveAimINFO
 {
   uint8_t cmd_ID;//命令码
@@ -104,6 +105,24 @@ struct ReceiveAimINFO
   float controller_delay; //s
   uint8_t manual_reset_count;
   uint8_t detect_color;//0 red 1 blue
+=======
+struct ReceiveAimINFO {
+  uint8_t cmd_ID;      //命令码
+  uint32_t time_stamp; //时间戳
+
+  float yaw;   // rad
+  float pitch; // rad
+  float roll;  // rad
+
+  float yaw_vel;   // rad/s
+  float pitch_vel; // rad/s
+  float roll_vel;  // rad/s
+
+  float bullet_speed;     // m/s
+  float controller_delay; // s
+  uint8_t manual_reset_count;
+  uint8_t detect_color; // 0 red 1 blue
+>>>>>>> ec64a0b (update nuc)
 } __attribute__((packed));
 // IMU 数据包
 struct ReceiveImuData {
@@ -370,6 +389,7 @@ struct ReceiveBuff {
 /* Send data                                            */
 /********************************************************/
 
+<<<<<<< HEAD
 struct SendRobotCmdData
 {
   uint8_t cmd_ID;//命令码
@@ -379,12 +399,27 @@ struct SendRobotCmdData
   float yaw;
   float distance;
    
+=======
+struct SendRobotCmdData {
+  uint8_t cmd_ID; //命令码
+  uint32_t time_stamp;
+
+  float pitch;
+  float yaw;
+  float distance;
+
+>>>>>>> ec64a0b (update nuc)
   uint8_t appear;
   uint8_t fire;
   float yaw_diff;
   float pitch_diff;
+<<<<<<< HEAD
       
   uint8_t detect_color;//0 red 1 blue
+=======
+
+  uint8_t detect_color; // 0 red 1 blue
+>>>>>>> ec64a0b (update nuc)
 } __attribute__((packed));
 
 /********************************************************/

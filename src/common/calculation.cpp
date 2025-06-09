@@ -1,6 +1,10 @@
 #include "type/type.hpp"
 #include <fstream>
+<<<<<<< HEAD
 #include <iomanip>  // for std::setprecision
+=======
+#include <iomanip> // for std::setprecision
+>>>>>>> ec64a0b (update nuc)
 
 double R_x = 0.0;
 double R_y = 0.0;
@@ -72,6 +76,7 @@ void command_callback(Armors &armors) {
         double v_z = (current_z - last_z_) / delta_time;
         double v_yaw = (current_yaw - last_yaw_) / delta_time;
 
+<<<<<<< HEAD
         s2qx = exp(-(abs(v_x) + 0.5 * abs(v_yaw))) * (s2qx_max - s2qx_min) + s2qx_min;
         ex(s2qx, s2qx_min, s2qx_max);
         s2qy = exp(-(abs(v_y) + 0.5 * abs(v_yaw))) * (s2qy_max - s2qy_min) + s2qy_min;
@@ -79,6 +84,19 @@ void command_callback(Armors &armors) {
         s2qz = exp(-(abs(v_z) + 0.5 * abs(v_yaw))) * (s2qz_max - s2qz_min) + s2qz_min;
         ex(s2qz, s2qz_min, s2qz_max);
         s2qyaw = exp(-(abs(v_x) + 0.5 * abs(v_z))) * (s2qyaw_max - s2qyaw_min) + s2qyaw_min;
+=======
+        s2qx = exp(-(abs(v_x) + 0.5 * abs(v_yaw))) * (s2qx_max - s2qx_min) +
+               s2qx_min;
+        ex(s2qx, s2qx_min, s2qx_max);
+        s2qy = exp(-(abs(v_y) + 0.5 * abs(v_yaw))) * (s2qy_max - s2qy_min) +
+               s2qy_min;
+        ex(s2qy, s2qy_min, s2qy_max);
+        s2qz = exp(-(abs(v_z) + 0.5 * abs(v_yaw))) * (s2qz_max - s2qz_min) +
+               s2qz_min;
+        ex(s2qz, s2qz_min, s2qz_max);
+        s2qyaw = exp(-(abs(v_x) + 0.5 * abs(v_z))) * (s2qyaw_max - s2qyaw_min) +
+                 s2qyaw_min;
+>>>>>>> ec64a0b (update nuc)
         ex(s2qyaw, s2qyaw_min, s2qyaw_max);
       }
 
@@ -107,14 +125,24 @@ void command_callback(Armors &armors) {
     double mean_z = all_z / time_;
     double mean_yaw = all_yaw / time_;
 
+<<<<<<< HEAD
     double variance_x = 0.0, variance_y = 0.0, variance_z = 0.0, variance_yaw = 0.0;
+=======
+    double variance_x = 0.0, variance_y = 0.0, variance_z = 0.0,
+           variance_yaw = 0.0;
+>>>>>>> ec64a0b (update nuc)
 
     for (int i = 0; i < 5000; i++) {
       if (!datas[i].armors.empty()) {
         variance_x += pow(mean_x - datas[i].armors[0].target_pos.x, 2);
         variance_y += pow(mean_y - datas[i].armors[0].target_pos.y, 2);
         variance_z += pow(mean_z - datas[i].armors[0].target_pos.z, 2);
+<<<<<<< HEAD
         variance_yaw += pow(mean_yaw - orientationToYaw(datas[i].armors[0].target_ori), 2);
+=======
+        variance_yaw +=
+            pow(mean_yaw - orientationToYaw(datas[i].armors[0].target_ori), 2);
+>>>>>>> ec64a0b (update nuc)
       }
     }
 

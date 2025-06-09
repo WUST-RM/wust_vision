@@ -188,7 +188,10 @@ static void nms_merge_sorted_bboxes(std::vector<ArmorObject> &faceobjects,
             b.pts.push_back(a.pts[i]);
           }
         }
+<<<<<<< HEAD
         // cout<<b.pts_x.size()<<endl;
+=======
+>>>>>>> ec64a0b (update nuc)
       }
     }
 
@@ -605,7 +608,11 @@ void OpenVino::setCallback(DetectorCallback callback) {
 }
 bool OpenVino::processCallback(const cv::Mat resized_img,
                                Eigen::Matrix3f transform_matrix,
+<<<<<<< HEAD
                                 std::chrono::steady_clock::time_point timestamp,
+=======
+                               std::chrono::steady_clock::time_point timestamp,
+>>>>>>> ec64a0b (update nuc)
                                const cv::Mat &src_img) {
   // BGR->RGB, u8(0-255)->f32(0.0-1.0), HWC->NCHW
   // note: TUP's model no need to normalize
@@ -710,6 +717,7 @@ bool OpenVino::processCallback(const cv::Mat resized_img,
 void OpenVino::pushInput(const cv::Mat &rgb_img,
                          std::chrono::steady_clock::time_point timestamp) {
   Eigen::Matrix3f transform_matrix;
+<<<<<<< HEAD
   cv::Mat resized_img = letterbox(rgb_img, transform_matrix);  // ✅ 保证先定义
 
   // 异步执行 processCallback
@@ -717,3 +725,13 @@ void OpenVino::pushInput(const cv::Mat &rgb_img,
     this->processCallback(resized_img, transform_matrix, timestamp, rgb_img);
   });
 }
+=======
+  cv::Mat resized_img = letterbox(rgb_img, transform_matrix); // ✅ 保证先定义
+  processCallback(resized_img, transform_matrix, timestamp, rgb_img);
+  // 异步执行 processCallback
+  // thread_pool_->enqueue([this, resized_img, transform_matrix, timestamp,
+  // rgb_img]() {
+  //   this->processCallback(resized_img, transform_matrix, timestamp, rgb_img);
+  // });
+}
+>>>>>>> ec64a0b (update nuc)

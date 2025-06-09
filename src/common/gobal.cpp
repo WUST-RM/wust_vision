@@ -8,8 +8,22 @@ int debug_h;
 double controller_delay = 0.0;
 double velocity = 15.0;
 bool if_manual_reset = false;
+<<<<<<< HEAD
 int control_rate = 1000;
 double last_roll;
 double last_pitch;
 double last_yaw;
 double gimbal2camera_yaw, gimbal2camera_roll, gimbal2camera_pitch;
+=======
+int control_rate ;
+double last_roll;
+double last_pitch;
+double last_yaw;
+double gimbal2camera_yaw, gimbal2camera_roll, gimbal2camera_pitch;
+double odom2gimbal_yaw, odom2gimbal_roll, odom2gimbal_pitch;
+bool is_inited_ = false;
+YAML::Node config;
+std::atomic<bool> exit_flag(false);
+bool use_calculation_ = false;
+bool use_serial = false;
+>>>>>>> ec64a0b (update nuc)
