@@ -54,6 +54,23 @@ def get_data():
         return jsonify(data)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+@app.route('/aim_log')
+def aim_log():
+    try:
+        with open('/dev/shm/aim_log.json', 'r') as f:
+            data = json.load(f)
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/target_log')
+def target_log():
+    try:
+        with open('/dev/shm/target_log.json', 'r') as f:
+            data = json.load(f)
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 # 配置数据（YAML）：读取和保存
 @app.route('/config', methods=['GET', 'POST'])

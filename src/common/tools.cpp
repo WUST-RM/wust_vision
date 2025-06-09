@@ -15,6 +15,7 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include <nlohmann/json.hpp>
 void drawGimbalDirection(cv::Mat &debug_img, const GimbalCmd &gimbal_cmd) {
   // 1. 云台坐标系下的方向向量（右手系：Z 前，X 右，Y 下）
   Eigen::Vector3f dir_gimbal;
@@ -1105,7 +1106,7 @@ void draw_debug_overlaywrite(const imgframe &src_img, const Armors *armors,
                              const std::optional<GimbalCmd> &gimbal_cmd) {
   static auto last_show_time = std::chrono::steady_clock::now();
   // static bool window_initialized = false;
-  static int brightness_slider = 200;
+ 
 
   if (src_img.img.empty())
     return;
@@ -1126,9 +1127,9 @@ void draw_debug_overlaywrite(const imgframe &src_img, const Armors *armors,
   last_show_time = now;
 
   // 图像亮度调整
-  double brightness_factor = brightness_slider / 100.0;
+
   cv::Mat debug_img;
-  src_img.img.convertTo(debug_img, -1, brightness_factor, 0);
+  src_img.img.convertTo(debug_img, -1, 1, 0);
   cv::cvtColor(debug_img, debug_img, cv::COLOR_BGR2RGB);
 
   // ========= 绘制 Armors =========
@@ -1770,5 +1771,87 @@ void dumpAimToFile(const ReceiveAimINFO &aim, const std::string &path) {
   if (file.is_open()) {
     file << formatAimInfo(aim);
     file.close();
+  }
+}
+void write_aim_log_to_json(const ReceiveAimINFO &aim) {
+  nlohmann::json j;
+
+  j["timestamp"] = aim.time_stamp;
+  j["yaw"] = aim.yaw;
+  j["pitch"] = aim.pitch;
+  j["roll"] = aim.roll;
+
+  j["yaw_vel"] = aim.yaw_vel;
+  j["pitch_vel"] = aim.pitch_vel;
+  j["roll_vel"] = aim.roll_vel;
+
+  j["yaw_deg"] = aim.yaw * 180.0 / M_PI;
+  j["pitch_deg"] = aim.pitch * 180.0 / M_PI;
+  j["roll_deg"] = aim.roll * 180.0 / M_PI;
+
+  j["bullet_speed"] = aim.bullet_speed;
+  j["controller_delay"] = aim.controller_delay;
+  j["detect_color"] = (aim.detect_color == 0 ? "Red" : "Blue");
+
+  // FPS 统计
+  static int frame_count = 0;
+  static double fps = 0.0;
+  static auto last_time = std::chrono::steady_clock::now();
+
+  ++frame_count;
+  auto now = std::chrono::steady_clock::now();
+  double elapsed = std::chrono::duration<double>(now - last_time).count();
+  if (elapsed >= 1.0) {
+    fps = frame_count / elapsed;
+    frame_count = 0;
+    last_time = now;
+  }
+  j["fps"] = fps;
+
+  std::ofstream file("/dev/shm/aim_log.json");
+  if (file.is_open()) {
+    file << j.dump(2);
+  }
+}
+void write_target_log_to_json(const Target &target) {
+  nlohmann::json j;
+
+  j["frame_id"] = target.frame_id;
+  j["type"] = target.type;
+  j["tracking"] = target.tracking;
+  j["id"] = static_cast<int>(target.id);
+  j["armors_num"] = target.armors_num;
+
+  auto now = std::chrono::steady_clock::now();
+  auto age_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+      now - target.timestamp).count();
+  j["timestamp_age_ms"] = age_ms;
+
+  j["position"] = {
+    {"x", target.position_.x},
+    {"y", target.position_.y},
+    {"z", target.position_.z}
+  };
+
+  j["velocity"] = {
+    {"x", target.velocity_.x},
+    {"y", target.velocity_.y},
+    {"z", target.velocity_.z}
+  };
+
+  j["yaw"] = target.yaw;
+  j["v_yaw"] = target.v_yaw;
+  j["yaw_diff"] = target.yaw_diff;
+
+  j["radius_1"] = target.radius_1;
+  j["radius_2"] = target.radius_2;
+  j["d_za"] = target.d_za;
+  j["d_zc"] = target.d_zc;
+  j["position_diff"] = target.position_diff;
+  j["z_diff"] = std::abs(target.d_za) + std::abs(target.d_zc);
+
+  std::ofstream file("/dev/shm/target_log.json");
+  if (file.is_open()) {
+    file << j.dump(2);
   }
 }
