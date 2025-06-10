@@ -4,9 +4,15 @@
 #include "common/tools.hpp"
 #include "driver/crc8_crc16.hpp"
 #include "driver/packet_typedef.hpp"
+#include "driver/sharetype.hpp"
 #include "type/type.hpp"
 #include <cmath>
+#include <fcntl.h>
 #include <iostream>
+#include <pthread.h>
+#include <stdio.h>
+#include <sys/mman.h>
+#include <unistd.h>
 Serial::Serial()
     : device_name_(""), config_(SerialPortConfig()), is_usb_ok_(false),
       running_(false), driver_() {}
@@ -19,11 +25,16 @@ void Serial::init(std::string device_name, SerialPortConfig config) {
   device_name_ = device_name;
   config_ = config;
 }
-void Serial::startThread() {
+void Serial::startThread(bool if_use_serial, bool if_use_nav) {
   running_ = true;
-  protect_thread_ = std::thread(&Serial::serialPortProtect, this);
-  receive_thread_ = std::thread(&Serial::receiveData, this);
-  send_thread_ = std::thread(&Serial::sendData, this);
+  if (if_use_nav) {
+    shm_thread_ = std::thread(&Serial::shmTheard, this);
+  }
+  if (if_use_serial) {
+    protect_thread_ = std::thread(&Serial::serialPortProtect, this);
+    receive_thread_ = std::thread(&Serial::receiveData, this);
+    send_thread_ = std::thread(&Serial::sendData, this);
+  }
 }
 
 void Serial::stopThread() {
@@ -36,6 +47,9 @@ void Serial::stopThread() {
   }
   if (send_thread_.joinable()) {
     send_thread_.join();
+  }
+  if (shm_thread_.joinable()) {
+    shm_thread_.join();
   }
   if (driver_.is_open()) {
     driver_.close();
@@ -400,4 +414,37 @@ void Serial::transformGimbalCmd(GimbalCmd &gimbal_cmd, bool appear) {
   send_robot_cmd_data_.fire = gimbal_cmd.fire_advice;
   send_robot_cmd_data_.detect_color = detect_color_;
   send_robot_cmd_data_.appear = appear;
+}
+void Serial::shmTheard() {
+
+  while (!is_inited_) {
+    usleep(10000); // 每10ms检查一次，避免占用 CPU
+  }
+
+  const char *SHM_NAME = "/cmd_vel";
+  const size_t SHM_SIZE = sizeof(TwistData);
+
+  int shm_fd = shm_open(SHM_NAME, O_RDONLY, 0666);
+  if (shm_fd == -1) {
+    perror("shm_open");
+    WUST_ERROR(serial_logger) << "Error opening shared memory";
+    return;
+  }
+
+  void *ptr = mmap(0, SHM_SIZE, PROT_READ, MAP_SHARED, shm_fd, 0);
+  if (ptr == MAP_FAILED) {
+    perror("mmap");
+    WUST_ERROR(serial_logger) << "Error mapping shared memory";
+    return;
+  }
+
+  TwistData *data = static_cast<TwistData *>(ptr);
+
+  while (is_inited_) {
+
+    usleep(50000); // 50ms
+  }
+
+  WUST_INFO(serial_logger) << "shmTheard end";
+  return;
 }

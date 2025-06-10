@@ -60,7 +60,7 @@ public:
   std::string target_frame_;
 
   double dt_;
-
+  bool only_nav_enable;
   Serial serial_;
   std::unique_ptr<Solver> solver_;
 

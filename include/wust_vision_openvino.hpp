@@ -60,7 +60,7 @@ public:
   std::chrono::steady_clock::time_point last_time_;
   std::unique_ptr<ArmorPoseEstimator> armor_pose_estimator_;
   Eigen::Matrix3d imu_to_camera_;
-
+  bool only_nav_enable;
   std::unique_ptr<hikcamera::ImageCapturer> capturer_;
   std::unique_ptr<std::thread> capture_thread_;
   std::atomic<bool> capture_running_;

@@ -1,3 +1,4 @@
+only_nav_enable: true
 camera:
   acquisition_frame_rate: 200
   adc_bit_depth: Bits_8
@@ -16,6 +17,7 @@ control:
   max_pitch_change: 5
   max_yaw_change: 10
   use_serial: false
+  use_nav:  true
 debug:
   debug_h: 1080
   debug_mode: true

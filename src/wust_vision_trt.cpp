@@ -16,26 +16,25 @@ WustVision::WustVision() { init(); }
 WustVision::~WustVision() {}
 void WustVision::stop() {
   is_inited_ = false;
+  if (!only_nav_enable) {
+    stopTimer();
+    camera_->stopCamera();
 
-  stopTimer();
-  camera_->stopCamera();
+    if (thread_pool_) {
+      thread_pool_->waitUntilEmpty();
+      thread_pool_.reset();
+    }
+    if (robot_cmd_plot_thread_.joinable()) {
+      robot_cmd_plot_thread_.join();
+    }
 
-  if (thread_pool_) {
-    thread_pool_->waitUntilEmpty();
-    thread_pool_.reset();
+    camera_.reset();
+    detector_.reset();
+
+    measure_tool_.reset();
   }
-  if (robot_cmd_plot_thread_.joinable()) {
-    robot_cmd_plot_thread_.join();
-  }
 
-  camera_.reset();
-  detector_.reset();
-
-  measure_tool_.reset();
-
-  if (use_serial) {
-    serial_.stopThread();
-  }
+  serial_.stopThread();
 
   WUST_INFO(vision_logger) << "WustVision shutdown complete.";
 }
@@ -59,119 +58,123 @@ void WustVision::init() {
   bool use_logfile = config["logger"]["use_logfile"].as<bool>();
   bool use_simplelog = config["logger"]["use_simplelog"].as<bool>();
   initLogger(log_level_, log_path_, use_logcli, use_logfile, use_simplelog);
+  control_rate = config["control"]["control_rate"].as<int>();
+  only_nav_enable = config["only_nav_enable"].as<bool>();
+  if (!only_nav_enable) {
+    debug_show_dt_ = config["debug"]["debug_show_dt"].as<double>(0.05);
+    use_calculation_ = config["use_calculation"].as<bool>();
+    // 模型参数
+    const std::string model_path = config["model_path"].as<std::string>();
+    auto classify_model_path = config["classify_model_path"].as<std::string>();
+    auto classify_label_path = config["classify_label_path"].as<std::string>();
+    AdaptedTRTModule::Params params;
+    params.input_w = config["model"]["input_w"].as<int>();
+    params.input_h = config["model"]["input_h"].as<int>();
+    params.num_classes = config["model"]["num_classes"].as<int>();
+    params.num_colors = config["model"]["num_colors"].as<int>();
+    params.conf_threshold = config["model"]["conf_threshold"].as<float>();
+    params.nms_threshold = config["model"]["nms_threshold"].as<float>();
+    params.top_k = config["model"]["top_k"].as<int>();
+    float expand_ratio_w = config["light"]["expand_ratio_w"].as<float>();
+    float expand_ratio_h = config["light"]["expand_ratio_h"].as<float>();
+    int binary_thres = config["light"]["binary_thres"].as<int>();
+    gimbal2camera_x_ = config["tf"]["gimbal2camera_x"].as<double>();
+    gimbal2camera_y_ = config["tf"]["gimbal2camera_y"].as<double>();
+    gimbal2camera_z_ = config["tf"]["gimbal2camera_z"].as<double>();
+    gimbal2camera_roll_ = config["tf"]["gimbal2camera_roll"].as<double>();
+    gimbal2camera_pitch_ = config["tf"]["gimbal2camera_pitch"].as<double>();
+    gimbal2camera_yaw_ = config["tf"]["gimbal2camera_yaw"].as<double>();
+    odom2gimbal_pitch = config["tf"]["odom2gimbal_pitch"].as<double>();
+    odom2gimbal_roll = config["tf"]["odom2gimbal_roll"].as<double>();
+    odom2gimbal_yaw = config["tf"]["odom2gimbal_yaw"].as<double>();
 
-  debug_show_dt_ = config["debug"]["debug_show_dt"].as<double>(0.05);
-  use_calculation_ = config["use_calculation"].as<bool>();
-  // 模型参数
-  const std::string model_path = config["model_path"].as<std::string>();
-  auto classify_model_path = config["classify_model_path"].as<std::string>();
-  auto classify_label_path = config["classify_label_path"].as<std::string>();
-  AdaptedTRTModule::Params params;
-  params.input_w = config["model"]["input_w"].as<int>();
-  params.input_h = config["model"]["input_h"].as<int>();
-  params.num_classes = config["model"]["num_classes"].as<int>();
-  params.num_colors = config["model"]["num_colors"].as<int>();
-  params.conf_threshold = config["model"]["conf_threshold"].as<float>();
-  params.nms_threshold = config["model"]["nms_threshold"].as<float>();
-  params.top_k = config["model"]["top_k"].as<int>();
-  float expand_ratio_w = config["light"]["expand_ratio_w"].as<float>();
-  float expand_ratio_h = config["light"]["expand_ratio_h"].as<float>();
-  int binary_thres = config["light"]["binary_thres"].as<int>();
-  gimbal2camera_x_ = config["tf"]["gimbal2camera_x"].as<double>();
-  gimbal2camera_y_ = config["tf"]["gimbal2camera_y"].as<double>();
-  gimbal2camera_z_ = config["tf"]["gimbal2camera_z"].as<double>();
-  gimbal2camera_roll_ = config["tf"]["gimbal2camera_roll"].as<double>();
-  gimbal2camera_pitch_ = config["tf"]["gimbal2camera_pitch"].as<double>();
-  gimbal2camera_yaw_ = config["tf"]["gimbal2camera_yaw"].as<double>();
-  odom2gimbal_pitch = config["tf"]["odom2gimbal_pitch"].as<double>();
-  odom2gimbal_roll = config["tf"]["odom2gimbal_roll"].as<double>();
-  odom2gimbal_yaw = config["tf"]["odom2gimbal_yaw"].as<double>();
+    LightParams l_params = {
+        .min_ratio = config["light"]["min_ratio"].as<double>(),
+        .max_ratio = config["light"]["max_ratio"].as<double>(),
+        .max_angle = config["light"]["max_angle"].as<double>()};
 
-  LightParams l_params = {
-      .min_ratio = config["light"]["min_ratio"].as<double>(),
-      .max_ratio = config["light"]["max_ratio"].as<double>(),
-      .max_angle = config["light"]["max_angle"].as<double>()};
+    // 相机参数
+    const std::string camera_info_path =
+        config["camera"]["camera_info_path"].as<std::string>();
+    measure_tool_ = std::make_unique<MonoMeasureTool>(camera_info_path);
+    initTF();
 
-  // 相机参数
-  const std::string camera_info_path =
-      config["camera"]["camera_info_path"].as<std::string>();
-  measure_tool_ = std::make_unique<MonoMeasureTool>(camera_info_path);
-  initTF();
+    armor_pose_estimator_ =
+        std::make_unique<ArmorPoseEstimator>(camera_info_path);
 
-  armor_pose_estimator_ =
-      std::make_unique<ArmorPoseEstimator>(camera_info_path);
+    use_serial = config["control"]["use_serial"].as<bool>();
 
-  use_serial = config["control"]["use_serial"].as<bool>();
-  if (use_serial) {
-    initSerial();
-  }
-  initTracker(config["tracker"]);
+    initTracker(config["tracker"]);
 
-  detect_color_ = config["detect_color"].as<int>(0);
-  max_infer_running_ = config["max_infer_running"].as<int>(4);
+    detect_color_ = config["detect_color"].as<int>(0);
+    max_infer_running_ = config["max_infer_running"].as<int>(4);
 
-  if (model_path.empty()) {
-    WUST_ERROR(vision_logger) << "Model path is empty.";
-    return;
-  }
-
-  detector_ = std::make_unique<AdaptedTRTModule>(
-      model_path, params, expand_ratio_h, expand_ratio_w, binary_thres,
-      l_params, classify_model_path, classify_label_path);
-  detector_->setCallback(std::bind(&WustVision::DetectCallback, this,
-                                   std::placeholders::_1, std::placeholders::_2,
-                                   std::placeholders::_3));
-
-  thread_pool_ =
-      std::make_unique<ThreadPool>(std::thread::hardware_concurrency(), 100);
-
-  solver_ = std::make_unique<Solver>(config);
-  std::string camera_serial = config["camera"]["serial"].as<std::string>("");
-  camera_ = std::make_unique<HikCamera>();
-  if (!camera_->initializeCamera(camera_serial)) {
-    WUST_ERROR(vision_logger) << "Camera initialization failed.";
-    return;
-  }
-
-  camera_->setParameters(config["camera"]["acquisition_frame_rate"].as<int>(),
-                         config["camera"]["exposure_time"].as<int>(),
-                         config["camera"]["gain"].as<double>(),
-                         config["camera"]["adc_bit_depth"].as<std::string>(),
-                         config["camera"]["pixel_format"].as<std::string>());
-  camera_->setFrameCallback([this](const ImageFrame &frame) {
-    static bool first_is_inited = false;
-
-    if (is_inited_) {
-      thread_pool_->enqueue(
-          [frame = std::move(frame), this]() { processImage(frame); });
-    } else {
+    if (model_path.empty()) {
+      WUST_ERROR(vision_logger) << "Model path is empty.";
       return;
     }
-  });
 
-  camera_->startCamera();
+    detector_ = std::make_unique<AdaptedTRTModule>(
+        model_path, params, expand_ratio_h, expand_ratio_w, binary_thres,
+        l_params, classify_model_path, classify_label_path);
+    detector_->setCallback(
+        std::bind(&WustVision::DetectCallback, this, std::placeholders::_1,
+                  std::placeholders::_2, std::placeholders::_3));
 
-  // bool trigger_mode = config["camera"]["trigger_mode"].as<bool>(false);
-  // bool invert_image = config["camera"]["invert_image"].as<bool>(false);
-  // int exposure_time_us = config["camera"]["exposure_time_us"].as<int>(3500);
-  // float gain = config["camera"]["gain"].as<float>(7.0f);
+    thread_pool_ =
+        std::make_unique<ThreadPool>(std::thread::hardware_concurrency(), 100);
 
-  // hikcamera::ImageCapturer::CameraProfile profile;
-  // profile.trigger_mode = trigger_mode;
-  // profile.invert_image = invert_image;
-  // profile.exposure_time = std::chrono::microseconds(exposure_time_us);
-  // profile.gain = gain;
+    solver_ = std::make_unique<Solver>(config);
+    std::string camera_serial = config["camera"]["serial"].as<std::string>("");
+    camera_ = std::make_unique<HikCamera>();
+    if (!camera_->initializeCamera(camera_serial)) {
+      WUST_ERROR(vision_logger) << "Camera initialization failed.";
+      return;
+    }
 
-  // capturer_ = std::make_unique<hikcamera::ImageCapturer>(
-  //     profile, nullptr, hikcamera::SyncMode::NONE);
-  control_rate = config["control"]["control_rate"].as<int>();
-  startTimer();
-  // capture_running_ = true;
-  // capture_thread_ =
-  //     std::make_unique<std::thread>(&WustVision::captureLoop, this);
+    camera_->setParameters(config["camera"]["acquisition_frame_rate"].as<int>(),
+                           config["camera"]["exposure_time"].as<int>(),
+                           config["camera"]["gain"].as<double>(),
+                           config["camera"]["adc_bit_depth"].as<std::string>(),
+                           config["camera"]["pixel_format"].as<std::string>());
+    camera_->setFrameCallback([this](const ImageFrame &frame) {
+      static bool first_is_inited = false;
 
+      if (is_inited_) {
+        thread_pool_->enqueue(
+            [frame = std::move(frame), this]() { processImage(frame); });
+      } else {
+        return;
+      }
+    });
+
+    camera_->startCamera();
+
+    // bool trigger_mode = config["camera"]["trigger_mode"].as<bool>(false);
+    // bool invert_image = config["camera"]["invert_image"].as<bool>(false);
+    // int exposure_time_us =
+    // config["camera"]["exposure_time_us"].as<int>(3500); float gain =
+    // config["camera"]["gain"].as<float>(7.0f);
+
+    // hikcamera::ImageCapturer::CameraProfile profile;
+    // profile.trigger_mode = trigger_mode;
+    // profile.invert_image = invert_image;
+    // profile.exposure_time = std::chrono::microseconds(exposure_time_us);
+    // profile.gain = gain;
+
+    // capturer_ = std::make_unique<hikcamera::ImageCapturer>(
+    //     profile, nullptr, hikcamera::SyncMode::NONE);
+    // capture_running_ = true;
+    // capture_thread_ =
+    //     std::make_unique<std::thread>(&WustVision::captureLoop, this);
+    startTimer();
+    robot_cmd_plot_thread_ = std::thread(&robotCmdLoggerThread);
+  } else {
+    WUST_INFO(vision_logger) << "only nav mode";
+  }
+
+  initSerial();
   is_inited_ = true;
-  robot_cmd_plot_thread_ = std::thread(&robotCmdLoggerThread);
 }
 // void WustVision::captureLoop() {
 //   while (capture_running_ && is_inited_) {
@@ -266,7 +269,8 @@ void WustVision::initSerial() {
   serial_.alpha_pitch = config["control"]["alpha_pitch"].as<double>();
   serial_.max_yaw_change = config["control"]["max_yaw_change"].as<double>();
   serial_.max_pitch_change = config["control"]["max_pitch_change"].as<double>();
-  serial_.startThread();
+  bool if_use_nav = config["control"]["use_nav"].as<bool>(false);
+  serial_.startThread(use_serial, if_use_nav);
 }
 void WustVision::initTracker(const YAML::Node &config) {
   // 目标参考坐标系

@@ -9,13 +9,13 @@
 #include <chrono>
 #include <cstddef>
 #include <fstream>
+#include <nlohmann/json.hpp>
 #include <opencv2/core/mat.hpp>
 #include <opencv2/core/types.hpp>
 #include <opencv2/opencv.hpp>
 #include <optional>
 #include <string>
 #include <vector>
-#include <nlohmann/json.hpp>
 void drawGimbalDirection(cv::Mat &debug_img, const GimbalCmd &gimbal_cmd) {
   // 1. 云台坐标系下的方向向量（右手系：Z 前，X 右，Y 下）
   Eigen::Vector3f dir_gimbal;
@@ -1106,7 +1106,6 @@ void draw_debug_overlaywrite(const imgframe &src_img, const Armors *armors,
                              const std::optional<GimbalCmd> &gimbal_cmd) {
   static auto last_show_time = std::chrono::steady_clock::now();
   // static bool window_initialized = false;
- 
 
   if (src_img.img.empty())
     return;
@@ -1824,20 +1823,17 @@ void write_target_log_to_json(const Target &target) {
 
   auto now = std::chrono::steady_clock::now();
   auto age_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-      now - target.timestamp).count();
+                    now - target.timestamp)
+                    .count();
   j["timestamp_age_ms"] = age_ms;
 
-  j["position"] = {
-    {"x", target.position_.x},
-    {"y", target.position_.y},
-    {"z", target.position_.z}
-  };
+  j["position"] = {{"x", target.position_.x},
+                   {"y", target.position_.y},
+                   {"z", target.position_.z}};
 
-  j["velocity"] = {
-    {"x", target.velocity_.x},
-    {"y", target.velocity_.y},
-    {"z", target.velocity_.z}
-  };
+  j["velocity"] = {{"x", target.velocity_.x},
+                   {"y", target.velocity_.y},
+                   {"z", target.velocity_.z}};
 
   j["yaw"] = target.yaw;
   j["v_yaw"] = target.v_yaw;

@@ -15,7 +15,7 @@ public:
   ~Serial();
   void init(std::string device_name, SerialPortConfig config);
   void serialPortProtect();
-  void startThread();
+  void startThread(bool if_use_serial, bool if_use_nav);
   void stopThread();
   void receiveData();
   void imu_cbk(ReceiveImuData &imu_data);
@@ -23,6 +23,8 @@ public:
   bool usbOk() const { return is_usb_ok_; }
   void sendData();
   void transformGimbalCmd(GimbalCmd &gimbal_cmd, bool appear);
+
+  void shmTheard();
   double lastyaw_;
   double lastpitch_;
   std::string device_name_;
@@ -32,6 +34,7 @@ public:
   std::thread protect_thread_;
   std::thread receive_thread_;
   std::thread send_thread_;
+  std::thread shm_thread_;
   SerialDriver driver_;
   std::string serial_logger = "serial";
   SendRobotCmdData send_robot_cmd_data_;

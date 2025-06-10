@@ -4,6 +4,9 @@
 #include <nlohmann/json.hpp>
 #include <vector>
 void plotYawThread() {
+  while (!is_inited_) {
+    usleep(10000);
+  }
   try {
     matplotlibcpp::ion();
   } catch (const std::exception &e) {
@@ -82,12 +85,18 @@ void write_cmd_log_to_json() {
   }
 }
 void robotCmdLoggerThread() {
+  while (!is_inited_) {
+    usleep(10000);
+  }
   while (is_inited_) {
     write_cmd_log_to_json();
     std::this_thread::sleep_for(std::chrono::milliseconds(50)); // 20Hz
   }
 }
 void plotRobotCmdThread() {
+  while (!is_inited_) {
+    usleep(10000);
+  }
 
   matplotlibcpp::ion();
   bool figureClosed = false;
@@ -157,6 +166,9 @@ void plotRobotCmdThread() {
 }
 
 void plotAllThread() {
+  while (!is_inited_) {
+    usleep(10000);
+  }
   try {
     matplotlibcpp::ion(); // 启用交互模式
   } catch (const std::exception &e) {
