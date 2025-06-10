@@ -21,8 +21,7 @@
 #include "common/logger.hpp"
 #include "cuda_runtime_api.h"
 #include <opencv2/core.hpp>
-#include <opencv2/cudaimgproc.hpp>
-#include <opencv2/cudawarping.hpp>
+
 
 // #include <logger.h>
 #define TRT_ASSERT(expr)                                                       \

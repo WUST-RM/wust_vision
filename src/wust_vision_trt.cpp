@@ -54,7 +54,7 @@ void WustVision::stopTimer() {
 }
 
 void WustVision::init() {
-  config = YAML::LoadFile("/home/nvidia/wust_vision/config/config_trt.yaml");
+  config = YAML::LoadFile("/home/nvidiaa/wust_vision/config/config_trt.yaml");
   debug_mode_ = config["debug"]["debug_mode"].as<bool>();
   debug_w = config["debug"]["debug_w"].as<int>(640);
   debug_h = config["debug"]["debug_h"].as<int>(480);
@@ -715,7 +715,7 @@ void WustVision::timerCallback() {
 
     if (!measure_tool_->reprojectArmorsCorners(armor_data, target_info))
       return;
-    dumpTargetToFile(target, "/tmp/target_status.txt");
+    write_target_log_to_json(target);
     Tracker::State state = tracker_->tracker_state;
     cv::Mat src;
     {

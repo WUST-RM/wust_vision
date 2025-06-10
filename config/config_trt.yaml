@@ -1,13 +1,13 @@
 camera:
-  acquisition_frame_rate: 160
+  acquisition_frame_rate: 120
   adc_bit_depth: Bits_8
-  camera_info_path: /home/nvidia/wust_vision/config/camera_info.yaml
+  camera_info_path: /home/nvidiaa/wust_vision/config/camera_info.yaml
   exposure_time: 3500
   gain: 10
   pixel_format: BayerRG8
   serial: ''
-classify_label_path: /home/nvidia/wust_vision/model/label.txt
-classify_model_path: /home/nvidia/wust_vision/model/lenet.onnx
+classify_label_path: /home/nvidiaa/wust_vision/model/label.txt
+classify_model_path: /home/nvidiaa/wust_vision/model/lenet.onnx
 control:
   alpha_pitch: 0.9
   alpha_yaw: 0.9
@@ -31,7 +31,7 @@ light:
   min_ratio: 0.02
 logger:
   log_level: INFO
-  log_path: /home/nvidia/wust_log
+  log_path: /home/nvidiaa/wust_log
   use_logcli: true
   use_logfile: false
   use_simplelog: true
@@ -44,7 +44,7 @@ model:
   num_classes: 8
   num_colors: 4
   top_k: 128
-model_path: /home/nvidia/wust_vision/model/opt-1208-001.onnx
+model_path: /home/nvidiaa/wust_vision/model/opt-1208-001.onnx
 solver:
   bullet_speed: 20
   compenstator_type: ideal

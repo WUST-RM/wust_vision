@@ -29,12 +29,14 @@
             overflow-x: auto;
             font-family: monospace;
             line-height: 1.4;
-
         }
         fieldset {
             margin: 10px;
             border: 1px solid #999;
             padding: 10px;
+            text-align: left;
+            display: inline-block;
+            max-width: 100%;
         }
         label {
             display: inline-block;
@@ -42,6 +44,101 @@
             text-align: right;
             margin-right: 10px;
             vertical-align: top;
+        }
+
+        /* JSON 显示区域样式 */
+        .json-container {
+            margin-top: 20px;
+            background-color: #fff;
+            border: 3px solid #333;
+            padding: 15px;
+            display: inline-block;
+            vertical-align: top;
+            text-align: left;
+            width: 600px;
+            box-sizing: border-box;
+            font-size: 14px;
+            height: 450px;
+            border-radius: 6px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            overflow-y: auto;
+            transition: opacity 0.2s ease;
+        }
+
+        .json-updating {
+            opacity: 0.7;
+        }
+
+        #json-aim {
+            color: #b22222;
+            background-color: #fff5f5;
+            border: 1px solid #f4cccc;
+            padding: 12px;
+            border-radius: 4px;
+        }
+
+        #json-target {
+            color: #2e8b57;
+            background-color: #f5fff5;
+            border: 1px solid #c6ecc6;
+            padding: 12px;
+            border-radius: 4px;
+        }
+
+        /* 容器行内排版 */
+        #json-row {
+            margin-top: 20px;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        /* 树形视图样式 */
+        .json-tree {
+            list-style-type: none;
+            padding-left: 10px;
+        }
+        .json-tree details {
+            margin: 5px 0;
+        }
+        .json-tree summary {
+            cursor: pointer;
+            font-weight: bold;
+            outline: none;
+        }
+        .json-tree ul {
+            margin-left: 20px;
+            padding-left: 15px;
+            border-left: 1px dashed #ccc;
+        }
+
+        /* ---- 以下为参数配置页布局优化 ---- */
+
+        /* 让配置表单整体居中，并限制最大宽度 */
+        #config-form {
+            display: block;
+            max-width: 800px;
+            margin: 0 auto;
+            text-align: left;
+        }
+
+        /* 配置区块竖向排列 */
+        #config-tab fieldset {
+            display: block;
+            width: 100%;
+            box-sizing: border-box;
+            margin-bottom: 16px;
+        }
+
+        /* 保存按钮居中 */
+        #config-tab button {
+            display: block;
+            margin: 16px auto 0;
+            padding: 8px 16px;
+            font-size: 16px;
+            cursor: pointer;
         }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -75,16 +172,29 @@
         <div class="chart-container">
             <canvas id="armorChart" width="640" height="300"></canvas>
         </div>
+
+        <!-- Aim 和 Target JSON 显示区域 -->
+        <div id="json-row">
+            <div class="json-container" id="json-aim-container">
+                <h3>Aim_info</h3>
+                <div id="json-aim"></div>
+            </div>
+            <div class="json-container" id="json-target-container">
+                <h3>Target_info</h3>
+                <div id="json-target"></div>
+            </div>
+        </div>
     </div>
 
     <!-- 参数配置页 -->
     <div id="config-tab" style="display: none; margin-top: 40px;">
-        <form id="config-form" style="text-align: left; display: inline-block;"></form>
+        <form id="config-form"></form>
         <br>
-        <button onclick="submitConfig()">保存参数</button>
+        <button onclick="submitConfig()" type="button">保存参数</button>
     </div>
 
     <script>
+        // 初始化图表
         const yawPitchCtx = document.getElementById('waveformChart').getContext('2d');
         const armorCtx = document.getElementById('armorChart').getContext('2d');
 
@@ -123,6 +233,10 @@
             }
         });
 
+        // 数据缓存用于差异比较
+        let lastAimData = null;
+        let lastTargetData = null;
+
         async function fetchDataAndUpdateCharts() {
             try {
                 const response = await fetch('/data');
@@ -142,7 +256,90 @@
             }
         }
 
-        setInterval(fetchDataAndUpdateCharts, 20);
+        function jsonToHtml(data, container) {
+            // 清除容器内容但保留标题
+            const title = container.querySelector('h3');
+            container.innerHTML = '';
+            if (title) container.appendChild(title);
+
+            const contentDiv = document.createElement('div');
+            contentDiv.id = container.id + '-content';
+            container.appendChild(contentDiv);
+
+            function buildTree(data, parentElement) {
+                if (typeof data !== 'object' || data === null) {
+                    parentElement.textContent = String(data);
+                    return;
+                }
+
+                const ul = document.createElement('ul');
+                ul.className = 'json-tree';
+
+                const entries = Array.isArray(data) ?
+                    data.map((item, idx) => [idx, item]) :
+                    Object.entries(data);
+
+                entries.forEach(([key, value]) => {
+                    const li = document.createElement('li');
+
+                    if (typeof value === 'object' && value !== null) {
+                        const details = document.createElement('details');
+                        details.open = true;
+
+                        const summary = document.createElement('summary');
+                        summary.textContent = key;
+                        details.appendChild(summary);
+
+                        const childUl = document.createElement('ul');
+                        childUl.className = 'json-tree';
+                        buildTree(value, childUl);
+
+                        details.appendChild(childUl);
+                        li.appendChild(details);
+                    } else {
+                        li.textContent = `${key}: ${value}`;
+                    }
+
+                    ul.appendChild(li);
+                });
+
+                parentElement.appendChild(ul);
+            }
+
+            buildTree(data, contentDiv);
+        }
+
+        async function fetchAndDisplayJsonWithTree(id, url) {
+            const container = document.getElementById(id);
+            const containerParent = document.getElementById(id + '-container');
+
+            try {
+                containerParent.classList.add('json-updating');
+                const res = await fetch(url);
+
+                if (res.ok) {
+                    const newData = await res.json();
+
+                    // 只在数据变化时更新
+                    const lastData = id === 'json-aim' ? lastAimData : lastTargetData;
+                    if (JSON.stringify(newData) !== JSON.stringify(lastData)) {
+                        jsonToHtml(newData, container);
+
+                        // 更新缓存
+                        if (id === 'json-aim') {
+                            lastAimData = newData;
+                        } else {
+                            lastTargetData = newData;
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error(`Error fetching ${url}:`, err);
+                container.textContent = `请求错误: ${err.message}`;
+            } finally {
+                containerParent.classList.remove('json-updating');
+            }
+        }
 
         function showTab(tab) {
             document.getElementById('video-tab').style.display = tab === 'video' ? 'block' : 'none';
@@ -163,135 +360,136 @@
         }
 
         function renderForm(obj, container, prefix = '') {
-    container.innerHTML = '';
-    for (let key in obj) {
-        const value = obj[key];
-        const path = prefix ? `${prefix}.${key}` : key;
+            container.innerHTML = '';
+            for (let key in obj) {
+                const value = obj[key];
+                const path = prefix ? `${prefix}.${key}` : key;
 
-        if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object') {
-            const fieldset = document.createElement('fieldset');
-            const legend = document.createElement('legend');
-            legend.innerText = path;
-            fieldset.appendChild(legend);
+                if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object') {
+                    const fieldset = document.createElement('fieldset');
+                    const legend = document.createElement('legend');
+                    legend.innerText = path;
+                    fieldset.appendChild(legend);
 
-            value.forEach((item, index) => {
-                const subfieldset = document.createElement('fieldset');
-                const sublegend = document.createElement('legend');
-                sublegend.innerText = `${key}[${index}]`;
-                subfieldset.appendChild(sublegend);
+                    value.forEach((item, index) => {
+                        const subfieldset = document.createElement('fieldset');
+                        const sublegend = document.createElement('legend');
+                        sublegend.innerText = `${key}[${index}]`;
+                        subfieldset.appendChild(sublegend);
 
-                for (let subkey in item) {
+                        for (let subkey in item) {
+                            const label = document.createElement('label');
+                            label.innerText = `${key}[${index}].${subkey}`;
+
+                            const input = document.createElement('input');
+                            input.value = item[subkey];
+                            input.onchange = () => updateValue(`${path}[${index}].${subkey}`, input.value);
+
+                            subfieldset.appendChild(label);
+                            subfieldset.appendChild(input);
+                            subfieldset.appendChild(document.createElement('br'));
+                        }
+
+                        const deleteBtn = document.createElement('button');
+                        deleteBtn.innerText = '删除该项';
+                        deleteBtn.type = 'button';
+                        deleteBtn.onclick = () => {
+                            value.splice(index, 1);
+                            renderForm(configData, container);
+                        };
+                        subfieldset.appendChild(deleteBtn);
+
+                        fieldset.appendChild(subfieldset);
+                    });
+
+                    const addBtn = document.createElement('button');
+                    addBtn.innerText = '新增一项';
+                    addBtn.type = 'button';
+                    addBtn.onclick = () => {
+                        const template = Object.assign({}, value[0]);
+                        for (let k in template) template[k] = 0; // 初始化为 0
+                        value.push(template);
+                        renderForm(configData, container);
+                    };
+                    fieldset.appendChild(addBtn);
+
+                    container.appendChild(fieldset);
+
+                } else if (typeof value === 'object' && value !== null) {
+                    const fieldset = document.createElement('fieldset');
+                    const legend = document.createElement('legend');
+                    legend.innerText = path;
+                    fieldset.appendChild(legend);
+                    renderForm(value, fieldset, path);
+                    container.appendChild(fieldset);
+
+                } else {
                     const label = document.createElement('label');
-                    label.innerText = `${key}[${index}].${subkey}`;
+                    label.innerText = path;
 
-                    const input = document.createElement('input');
-                    input.value = item[subkey];
-                    input.onchange = () => updateValue(`${path}[${index}].${subkey}`, input.value);
-
-                    subfieldset.appendChild(label);
-                    subfieldset.appendChild(input);
-                    subfieldset.appendChild(document.createElement('br'));
-                }
-
-                const deleteBtn = document.createElement('button');
-                deleteBtn.innerText = '删除该项';
-                deleteBtn.type = 'button';
-                deleteBtn.onclick = () => {
-                    value.splice(index, 1);
-                    renderForm(configData, container);
-                };
-                subfieldset.appendChild(deleteBtn);
-
-                fieldset.appendChild(subfieldset);
-            });
-
-            const addBtn = document.createElement('button');
-            addBtn.innerText = '新增一项';
-            addBtn.type = 'button';
-            addBtn.onclick = () => {
-                const template = Object.assign({}, value[0]);
-                for (let k in template) template[k] = 0; // 初始化为 0
-                value.push(template);
-                renderForm(configData, container);
-            };
-            fieldset.appendChild(addBtn);
-
-            container.appendChild(fieldset);
-
-        } else if (typeof value === 'object' && value !== null) {
-            const fieldset = document.createElement('fieldset');
-            const legend = document.createElement('legend');
-            legend.innerText = path;
-            fieldset.appendChild(legend);
-            renderForm(value, fieldset, path);
-            container.appendChild(fieldset);
-
-        } else {
-            const label = document.createElement('label');
-            label.innerText = path;
-
-            let input;
-            if (typeof value === 'boolean') {
-                input = document.createElement('input');
-                input.type = 'checkbox';
-                input.checked = value;
-                input.onchange = () => updateValue(path, input.checked);
-            } else {
-                input = document.createElement('input');
-                input.value = value;
-                input.onchange = () => {
-                    const v = input.value;
-                    if (v === "true" || v === "false") {
-                        updateValue(path, v === "true");
-                    } else if (!isNaN(v) && v.trim() !== "") {
-                        updateValue(path, parseFloat(v));
+                    let input;
+                    if (typeof value === 'boolean') {
+                        input = document.createElement('input');
+                        input.type = 'checkbox';
+                        input.checked = value;
+                        input.onchange = () => updateValue(path, input.checked);
                     } else {
-                        updateValue(path, v);
+                        input = document.createElement('input');
+                        input.value = value;
+                        input.onchange = () => {
+                            const v = input.value;
+                            if (v === "true" || v === "false") {
+                                updateValue(path, v === "true");
+                            } else if (!isNaN(v) && v.trim() !== "") {
+                                updateValue(path, parseFloat(v));
+                            } else {
+                                updateValue(path, v);
+                            }
+                        };
                     }
-                };
-            }
 
-            container.appendChild(label);
-            container.appendChild(input);
-            container.appendChild(document.createElement('br'));
-        }
-    }
-}
-
-        function updateValue(path, value) {
-            const match = path.match(/^(.+)\[(\d+)\]\.(.+)$/);
-            if (match) {
-                const [, arrPath, idxStr, subKey] = match;
-                const keys = arrPath.split('.');
-                let obj = configData;
-                for (let k of keys) obj = obj[k];
-                obj[parseInt(idxStr)][subKey] = isNaN(value) ? value : parseFloat(value);
-            } else {
-                const keys = path.split('.');
-                let obj = configData;
-                for (let i = 0; i < keys.length - 1; i++) {
-                    obj = obj[keys[i]];
+                    container.appendChild(label);
+                    container.appendChild(input);
+                    container.appendChild(document.createElement('br'));
                 }
-                obj[keys[keys.length - 1]] = value;
             }
         }
 
+        function updateValue(path, val) {
+            const keys = path.replace(/\[(\d+)\]/g, '.$1').split('.');
+            let obj = configData;
+            for (let i = 0; i < keys.length - 1; i++) {
+                obj = obj[keys[i]];
+            }
+            obj[keys[keys.length - 1]] = val;
+        }
 
         async function submitConfig() {
             try {
-                await fetch('/config', {
+                const res = await fetch('/config', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(configData)
                 });
-                alert('配置已保存！');
+                if (res.ok) {
+                    alert('参数保存成功！');
+                } else {
+                    alert('保存失败: ' + res.status);
+                }
             } catch (err) {
-                alert('保存失败！');
-                console.error(err);
+                alert('保存异常: ' + err);
             }
         }
 
-        document.addEventListener('DOMContentLoaded', loadConfig);
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchAndDisplayJsonWithTree('json-aim', '/aim_log');
+            fetchAndDisplayJsonWithTree('json-target', '/target_log');
+            setInterval(() => {
+                fetchDataAndUpdateCharts();
+                fetchAndDisplayJsonWithTree('json-aim', '/aim_log');
+                fetchAndDisplayJsonWithTree('json-target', '/target_log');
+            }, 200);
+        });
     </script>
 </body>
 </html>

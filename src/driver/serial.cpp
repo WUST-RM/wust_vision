@@ -257,7 +257,7 @@ void Serial::aim_cbk(ReceiveAimINFO &aim_data) {
   velocity = aim_data.bullet_speed;
 
   if (debug_mode_) {
-    dumpAimToFile(aim_data, "/tmp/aim_status.txt");
+    write_aim_log_to_json(aim_data);
   }
 }
 

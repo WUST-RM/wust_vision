@@ -5,10 +5,9 @@ import logging
 
 app = Flask(__name__)
 
+# 配置路径和视频帧共享路径
 shared_frame_path = '/dev/shm/debug_frame.jpg'
-
-# 动态配置路径，初始值
-CONFIG_PATH = '/home/nvidia/wust_vision/config/config_trt.yaml'
+CONFIG_PATH = '/home/nvidiaa/wust_vision/config/config_trt.yaml'
 
 # 视频流生成器（MJPEG）
 def mjpeg_stream():
@@ -19,15 +18,16 @@ def mjpeg_stream():
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + jpg_bytes + b'\r\n')
         except FileNotFoundError:
-            time.sleep(0.01)
-        time.sleep(0.03)
+            time.sleep(0.01)  # 若帧文件未生成
+        time.sleep(0.03)  # 控制帧率 ~30fps
 
+# 首页：渲染带 server_url 的模板
 @app.route('/')
 def index():
     def get_local_ip():
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         try:
-            s.connect(('10.255.255.255', 1))
+            s.connect(('10.255.255.255', 1))  # broadcast dummy
             IP = s.getsockname()[0]
         except:
             IP = '127.0.0.1'
@@ -39,11 +39,13 @@ def index():
     url = f"http://{ip}:5000"
     return render_template('index.html', server_url=url)
 
+# 视频流路由
 @app.route('/video')
 def video_feed():
     return Response(mjpeg_stream(),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
+# 实时波形数据：读取 JSON
 @app.route('/data')
 def get_data():
     try:
@@ -52,40 +54,41 @@ def get_data():
         return jsonify(data)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+@app.route('/aim_log')
+def aim_log():
+    try:
+        with open('/dev/shm/aim_log.json', 'r') as f:
+            data = json.load(f)
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
-# 动态修改配置文件路径接口
-@app.route('/config_path', methods=['GET', 'POST'])
-def config_path_handler():
-    global CONFIG_PATH
-    if request.method == 'POST':
-        try:
-            data = request.get_json(force=True)
-            new_path = data.get('config_path', '').strip()
-            if not new_path:
-                return jsonify({'error': 'config_path 不能为空'}), 400
-            if not os.path.isfile(new_path):
-                return jsonify({'error': f'{new_path} 文件不存在'}), 404
-            CONFIG_PATH = new_path
-            return jsonify({'message': f'配置路径已更新为: {CONFIG_PATH}'})
-        except Exception as e:
-            return jsonify({'error': str(e)}), 500
-    else:
-        return jsonify({'config_path': CONFIG_PATH})
+@app.route('/target_log')
+def target_log():
+    try:
+        with open('/dev/shm/target_log.json', 'r') as f:
+            data = json.load(f)
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
-# 配置数据读取和保存，使用当前 CONFIG_PATH
+# 配置数据（YAML）：读取和保存
 @app.route('/config', methods=['GET', 'POST'])
 def config_handler():
-    global CONFIG_PATH
     if not os.path.exists(CONFIG_PATH):
         return jsonify({"error": f"{CONFIG_PATH} 不存在"}), 404
 
     if request.method == 'POST':
         try:
             data = request.get_json(force=True)
+            #app.logger.info("接收到配置数据: %s", json.dumps(data, ensure_ascii=False, indent=2))
+
             with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
                 yaml.dump(data, f, allow_unicode=True, sort_keys=False)
+
             return jsonify({"message": "配置保存成功"})
         except Exception as e:
+            #app.logger.error("保存配置失败: %s", e, exc_info=True)
             return jsonify({"error": f"保存配置失败: {str(e)}"}), 500
     else:
         try:
@@ -95,6 +98,7 @@ def config_handler():
         except Exception as e:
             return jsonify({"error": str(e)}), 500
 
+# 启动服务
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
     logging.getLogger('werkzeug').setLevel(logging.ERROR)

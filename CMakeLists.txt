@@ -57,7 +57,7 @@ link_directories(
 )
 
 # 查找依赖
-find_package(OpenCV 4.11 REQUIRED)
+find_package(OpenCV  REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(CUDAToolkit REQUIRED)
 find_package(fmt REQUIRED)

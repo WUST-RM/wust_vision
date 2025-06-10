@@ -47,3 +47,5 @@ void draw_debug_overlaywrite(const imgframe &src_img, const Armors *armors,
                              const Target *target,
                              const std::optional<Tracker::State> &state,
                              const std::optional<GimbalCmd> &gimbal_cmd);
+void write_target_log_to_json(const Target &target);
+void write_aim_log_to_json(const ReceiveAimINFO &aim);
