@@ -30,6 +30,9 @@ add_executable(${PROJECT_NAME}_openvino
   src/common/matplottools.cpp
   src/driver/hik.cpp
   src/common/toolsgobal.cpp
+  src/control/rune_solver.cpp
+  src/tracker/curve_fitter.cpp
+  src/detect/rune_detector.cpp
 )
 add_executable(${PROJECT_NAME}_trt
 
@@ -84,7 +87,7 @@ find_package(fmt REQUIRED)
 find_package(yaml-cpp REQUIRED)
 find_package(G2O REQUIRED)
 find_package(OpenGL REQUIRED)
-
+find_package(Ceres REQUIRED)
 
 # 包含路径
 target_include_directories(${PROJECT_NAME}_openvino PUBLIC
@@ -95,7 +98,7 @@ target_include_directories(${PROJECT_NAME}_openvino PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/hikSDK/include
   ${G2O_INCLUDE_DIRS}
   ${Python3_INCLUDE_DIRS}
-  
+  ${CERES_INCLUDE_DIRS}
 
 
 
@@ -161,6 +164,7 @@ target_link_libraries(${PROJECT_NAME}_openvino
   g2o_types_slam3d
   g2o_solver_dense
   ${OPENGL_gl_LIBRARY}
+  ${CERES_LIBRARIES}
 
   
 

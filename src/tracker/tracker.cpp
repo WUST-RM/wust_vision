@@ -255,7 +255,7 @@ void Tracker::initEKF(const Armor &a) noexcept {
   last_yaw_ = 0;
   double yaw = orientationToYaw(a.target_ori);
 
-  target_state = Eigen::VectorXd::Zero(X_N);
+  target_state = Eigen::VectorXd::Zero(armor_motion_model::X_N);
   double r = 0.24;
   double xc = xa + r * cos(yaw);
   double yc = ya + r * sin(yaw);

@@ -1,6 +1,7 @@
 
 #pragma once
 
+#include "common/common.hpp"
 #include "common/tf.hpp"
 #include "opencv2/opencv.hpp"
 #include <fmt/core.h>
@@ -82,6 +83,26 @@ enum class ArmorNumber {
   BASE,
   UNKNOWN
 };
+enum class AttackMode {
+  ARMOR = 0,
+  SMALL_RUNE,
+  BIG_RUNE,
+  UNKNOWN
+
+};
+inline AttackMode toAttackMode(int value) {
+  switch (value) {
+  case 0:
+    return AttackMode::ARMOR;
+  case 1:
+    return AttackMode::SMALL_RUNE;
+  case 2:
+    return AttackMode::BIG_RUNE;
+  default:
+    return AttackMode::UNKNOWN;
+  }
+}
+
 inline int retypetotracker(ArmorNumber a) {
   switch (a) {
   case ArmorNumber::SENTRY:
@@ -251,3 +272,108 @@ struct GimbalCmd {
   bool fire_advice = false;
   int select_id = -1;
 };
+enum class RuneType { INACTIVATED = 0, ACTIVATED };
+
+struct FeaturePoints {
+  FeaturePoints() {
+    r_center = cv::Point2f(-1, -1);
+    bottom_right = cv::Point2f(-1, -1);
+    top_right = cv::Point2f(-1, -1);
+    top_left = cv::Point2f(-1, -1);
+    bottom_left = cv::Point2f(-1, -1);
+  }
+
+  void reset() {
+    r_center = cv::Point2f(-1, -1);
+    bottom_right = cv::Point2f(-1, -1);
+    top_right = cv::Point2f(-1, -1);
+    top_left = cv::Point2f(-1, -1);
+    bottom_left = cv::Point2f(-1, -1);
+  }
+
+  FeaturePoints operator+(const FeaturePoints &other) {
+    FeaturePoints res;
+    res.r_center = r_center + other.r_center;
+    res.bottom_right = bottom_right + other.bottom_right;
+    res.top_right = top_right + other.top_right;
+    res.top_left = top_left + other.top_left;
+    res.bottom_left = bottom_left + other.bottom_left;
+    return res;
+  }
+
+  FeaturePoints operator/(const float &other) {
+    FeaturePoints res;
+    res.r_center = r_center / other;
+    res.bottom_right = bottom_right / other;
+    res.top_right = top_right / other;
+    res.top_left = top_left / other;
+    res.bottom_left = bottom_left / other;
+    return res;
+  }
+
+  std::vector<cv::Point2f> toVector2f() const {
+    return {r_center, bottom_left, top_left, top_right, bottom_right};
+  }
+  std::vector<cv::Point> toVector2i() const {
+    return {r_center, bottom_left, top_left, top_right, bottom_right};
+  }
+
+  cv::Point2f r_center;
+  cv::Point2f bottom_right;
+  cv::Point2f top_right;
+  cv::Point2f top_left;
+  cv::Point2f bottom_left;
+
+  std::vector<FeaturePoints> children;
+};
+
+struct RuneObject {
+  EnemyColor color;
+  RuneType type;
+  float prob;
+  FeaturePoints pts;
+  cv::Rect box;
+};
+struct RunePoint {
+  float x;
+  float y;
+};
+struct Rune {
+  std::string frame_id;
+  std::chrono::steady_clock::time_point timestamp;
+  std::array<RunePoint, 5> pts;
+  bool is_lost;
+  bool is_big_rune;
+};
+
+constexpr double DEG_72 = 0.4 * CV_PI;
+constexpr int ARMOR_KEYPOINTS_NUM = 4;
+constexpr int KEYPOINTS_NUM = 5;
+
+// Motion type
+enum class MotionType { SMALL, BIG, UNKNOWN };
+
+// Moving direction
+enum Direction { CLOCKWISE = -1, ANTI_CLOCKWISE = 1, UNKNOWN = 0 };
+
+// Rune arm length, Unit: m
+constexpr double ARM_LENGTH = 0.700;
+
+// Acceptable distance between robot and rune, Unit: m
+// True value = 6.436 m
+constexpr double MIN_RUNE_DISTANCE = 4.0;
+constexpr double MAX_RUNE_DISTANCE = 9.0;
+
+// Rune object points
+// r_tag, bottom_left, top_left, top_right, bottom_right
+const std::vector<cv::Point3f> RUNE_OBJECT_POINTS = {
+    cv::Point3f(0, 0, 0) / 1000, cv::Point3f(0, -541.5, 186) / 1000,
+    cv::Point3f(0, -858.5, 160) / 1000, cv::Point3f(0, -858.5, -160) / 1000,
+    cv::Point3f(0, -541.5, -186) / 1000};
+
+#define BIG_RUNE_CURVE(x, a, omega, b, c, d, sign)                             \
+  ((-((a) / (omega)*ceres::cos((omega) * ((x) + (d)))) + (b) * ((x) + (d)) +   \
+    (c)) *                                                                     \
+   (sign))
+
+#define SMALL_RUNE_CURVE(x, a, b, c, sign) (((a) * ((x) + (b)) + (c)) * (sign))

@@ -1,7 +1,9 @@
 #include "common/gobal.hpp"
 #include "control/armor_solver.hpp"
+#include "control/rune_solver.hpp"
 #include "detect/armor_pose_estimator.hpp"
 #include "detect/openvino.hpp"
+#include "detect/rune_detector.hpp"
 #include "driver/hik.hpp"
 #include "driver/image_capturer.hpp"
 #include "driver/serial.hpp"
@@ -23,16 +25,23 @@ public:
   void DetectCallback(const std::vector<ArmorObject> &objs,
                       std::chrono::steady_clock::time_point timestamp,
                       const cv::Mat &src_img);
+  void
+  inferResultCallback(std::vector<RuneObject> &rune_objects,
+                      std::chrono::steady_clock::time_point timestamp,
+                      const cv::Mat &img);
   void stop();
   void armorsCallback(Armors armors_, const cv::Mat &src_img);
   void initTF();
   void initSerial();
   void initTracker(const YAML::Node &config);
+  std::unique_ptr<RuneDetector> initRuneDetector();
   void timerCallback();
   void startTimer();
   void stopTimer();
   void transformArmorData(Armors &armors);
+  void runeTargetCallback(const Rune rune_target);
   void update();
+  void initRune(const std::string &camera_info_path);
   Armors visualizeTargetProjection(Target armor_target_);
 
   std::thread image_thread_;
@@ -68,4 +77,12 @@ public:
   std::mutex armor_target_mutex_;
   Armors armors_gobal;
   std::mutex armors_gobal_mutex_;
+  Rune rune_gobal;
+  std::mutex rune_gobal_mutex_;
+
+  std::unique_ptr<RuneDetector> rune_detector_;
+  std::unique_ptr<RuneSolver> rune_solver_;
+  bool detect_r_tag_;
+  int rune_binary_thresh_;
+  Rune last_rune_target_;
 };

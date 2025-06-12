@@ -3,6 +3,7 @@
 #include "common/tf.hpp"
 #include "detect/mono_measure_tool.hpp"
 #include "yaml-cpp/yaml.h"
+
 extern TfTree tf_tree_;
 extern std::unique_ptr<MonoMeasureTool> measure_tool_;
 extern int detect_color_;
@@ -23,3 +24,4 @@ extern std::atomic<bool> exit_flag;
 extern YAML::Node config;
 extern bool use_calculation_;
 extern bool use_serial;
+extern int attack_mode;

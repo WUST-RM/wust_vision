@@ -30,7 +30,7 @@
 
 // project
 #include "tracker/extended_kalman_filter.hpp"
-#include "tracker/motion_model.hpp"
+#include "tracker/motion_modela.hpp"
 #include "type/type.hpp"
 enum class ArmorsNum { NORMAL_4 = 4, OUTPOST_3 = 3 };
 inline double normalizeAngle(double angle) {
@@ -56,7 +56,7 @@ public:
     TEMP_LOST,
   } tracker_state;
 
-  std::unique_ptr<RobotStateEKF> ekf;
+  std::unique_ptr<armor_motion_model::RobotStateEKF> ekf;
 
   int tracking_thres;
   int lost_thres;

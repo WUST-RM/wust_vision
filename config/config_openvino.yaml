@@ -1,4 +1,5 @@
-only_nav_enable: true
+only_nav_enable: false
+init_attack_mode: 1
 camera:
   acquisition_frame_rate: 200
   adc_bit_depth: Bits_8
@@ -17,7 +18,7 @@ control:
   max_pitch_change: 5
   max_yaw_change: 10
   use_serial: false
-  use_nav:  true
+  use_nav:  false
 debug:
   debug_h: 1080
   debug_mode: true
@@ -147,3 +148,24 @@ tracker:
   target_frame: odom
   tracking_thres: 5
 use_calculation: false
+
+
+rune_detector:
+  detect_r_tag: true
+  min_lightness: 100
+  model: "/home/hy/wust_vision/model/yolox_rune_3.6m.onnx"
+  device_type: "GPU"
+  confidence_threshold: 0.5
+  top_k: 128
+  nms_threshold: 0.3
+rune_solver:
+  auto_type_determined: true 
+  predict_time: 0.0
+  compensator_type: resistance
+  gravity: 9.8
+  bullet_speet: 28.0
+  lost_time_thres: 0.5
+  predict_offset: 0.1
+  ekf:
+    q: [4e-4, 1e-4, 1e-4, 1e-4]
+    r: [4e-2, 1e-2, 1e-2, 1e-2]

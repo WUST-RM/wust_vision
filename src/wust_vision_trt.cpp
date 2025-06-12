@@ -313,14 +313,14 @@ void WustVision::initTracker(const YAML::Node &config) {
   r_yaw_ = config["ekf"]["r_yaw"].as<double>(0.02);
 
   // EKF 状态预测函数
-  auto f = Predict(0.005); // dt 固定为 5ms
+  auto f = armor_motion_model::Predict(0.005); // dt 固定为 5ms
 
   // EKF 观测函数
-  auto h = Measure();
+  auto h = armor_motion_model::Measure();
 
   // EKF 过程噪声协方差 Q
   auto u_q = [this]() {
-    Eigen::Matrix<double, X_N, X_N> q;
+    Eigen::Matrix<double, armor_motion_model::X_N, armor_motion_model::X_N> q;
     double t = dt_, x = s2qx_, y = s2qy_, z = s2qz_, yaw = s2qyaw_, r = s2qr_,
            d_zc = s2qd_zc_;
     double q_x_x = pow(t, 4) / 4 * x, q_x_vx = pow(t, 3) / 2 * x,
@@ -351,8 +351,9 @@ void WustVision::initTracker(const YAML::Node &config) {
   };
 
   // EKF 观测噪声协方差 R（基于测量值调整）
-  auto u_r = [this](const Eigen::Matrix<double, Z_N, 1> &z) {
-    Eigen::Matrix<double, Z_N, Z_N> r;
+  auto u_r = [this](
+                 const Eigen::Matrix<double, armor_motion_model::Z_N, 1> &z) {
+    Eigen::Matrix<double, armor_motion_model::Z_N, armor_motion_model::Z_N> r;
     // clang-format off
         r << r_x_ * std::abs(z[0]), 0, 0, 0,
              0, r_y_ * std::abs(z[1]), 0, 0,
@@ -363,11 +364,12 @@ void WustVision::initTracker(const YAML::Node &config) {
   };
 
   // 初始协方差
-  Eigen::DiagonalMatrix<double, X_N> p0;
+  Eigen::DiagonalMatrix<double, armor_motion_model::X_N> p0;
   p0.setIdentity();
 
   // 初始化 EKF 滤波器
-  tracker_->ekf = std::make_unique<RobotStateEKF>(f, h, u_q, u_r, p0);
+  tracker_->ekf =
+      std::make_unique<armor_motion_model::RobotStateEKF>(f, h, u_q, u_r, p0);
 }
 void WustVision::armorsCallback(Armors armors_, const cv::Mat &src_img) {
   transformArmorData(armors_);
@@ -402,11 +404,11 @@ void WustVision::armorsCallback(Armors armors_, const cv::Mat &src_img) {
     dt_ = std::chrono::duration<double>(time - last_time_).count();
     tracker_->lost_thres = std::abs(static_cast<int>(lost_time_thres_ / dt_));
     if (tracker_->tracked_id == ArmorNumber::OUTPOST) {
-      tracker_->ekf->setPredictFunc(
-          Predict{dt_, MotionModel::CONSTANT_ROTATION});
+      tracker_->ekf->setPredictFunc(armor_motion_model::Predict{
+          dt_, armor_motion_model::MotionModel::CONSTANT_ROTATION});
     } else {
-      tracker_->ekf->setPredictFunc(
-          Predict{dt_, MotionModel::CONSTANT_VEL_ROT});
+      tracker_->ekf->setPredictFunc(armor_motion_model::Predict{
+          dt_, armor_motion_model::MotionModel::CONSTANT_VEL_ROT});
     }
     tracker_->update(armors_);
 
@@ -777,7 +779,7 @@ int main() {
     while (!exit_flag.load(std::memory_order_acquire)) {
       std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
-    c.notify_one(); // 可以安全使用 condition_variable
+    c.notify_one();
   });
 
   {
@@ -785,7 +787,7 @@ int main() {
     c.wait(lk, [] { return exit_flag.load(std::memory_order_acquire); });
   }
 
-  wait_thread.join(); // 确保线程安全退出
+  wait_thread.join();
   vision.stop();
   return 0;
 }

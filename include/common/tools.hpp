@@ -49,3 +49,5 @@ void draw_debug_overlaywrite(const imgframe &src_img, const Armors *armors,
                              const std::optional<GimbalCmd> &gimbal_cmd);
 void write_target_log_to_json(const Target &target);
 void write_aim_log_to_json(const ReceiveAimINFO &aim);
+void drawRune(cv::Mat &src_img, const std::vector<RuneObject> &objs,
+              std::chrono::steady_clock::time_point timestamp);

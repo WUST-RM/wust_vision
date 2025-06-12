@@ -1851,3 +1851,60 @@ void write_target_log_to_json(const Target &target) {
     file << j.dump(2);
   }
 }
+void drawRune(cv::Mat &src_img, const std::vector<RuneObject> &objs,
+              std::chrono::steady_clock::time_point timestamp) {
+
+  static auto last_show_time = std::chrono::steady_clock::now();
+  static bool window_initialized;
+  auto now = std::chrono::steady_clock::now();
+  constexpr double min_interval_ms = 1000.0 / 60.0;
+  double elapsed_ms =
+      std::chrono::duration<double, std::milli>(now - last_show_time).count();
+  if (elapsed_ms < min_interval_ms)
+  {
+    return;
+  }
+
+
+  if (!window_initialized) {
+      cv::namedWindow("debug_rune", cv::WINDOW_NORMAL);
+      cv::resizeWindow("debug_rune", debug_w, debug_h);
+  
+      window_initialized = true;
+    }
+  last_show_time = now;
+  cv::Mat debug_img;
+  src_img.convertTo(debug_img, -1, 1, 0);
+  cv::cvtColor(debug_img, debug_img, cv::COLOR_BGR2RGB);
+  
+  for (const auto &obj : objs) {
+    auto pts = obj.pts.toVector2f();
+    // 计算中心点，这里你原代码是从 pts.begin()+1 到 pts.end()
+    // 累加后除以4，感觉更合理的是平均所有点或明确写个除数
+    cv::Point2f aim_point =
+        std::accumulate(pts.begin() + 1, pts.end(), cv::Point2f(0, 0)) / 4.0f;
+
+    cv::Scalar line_color = obj.type == RuneType::INACTIVATED
+                                ? cv::Scalar(50, 255, 50)
+                                : cv::Scalar(255, 50, 255);
+
+    cv::putText(debug_img, fmt::format("{:.2f}", obj.prob), cv::Point2i(pts[1]),
+                cv::FONT_HERSHEY_SIMPLEX, 0.8, line_color, 2);
+    cv::polylines(debug_img, obj.pts.toVector2i(), true, line_color, 2);
+    cv::circle(debug_img, aim_point, 5, line_color, -1);
+
+    std::string rune_type = obj.type == RuneType::INACTIVATED ? "_HIT" : "_OK";
+    std::string rune_color = enemyColorToString(obj.color);
+    cv::putText(debug_img, rune_color + rune_type, cv::Point2i(pts[2]),
+                cv::FONT_HERSHEY_SIMPLEX, 0.8, line_color, 2);
+  }
+
+  double latency =
+      std::chrono::duration<double, std::milli>(now - timestamp).count();
+  std::string latency_str = fmt::format("Latency: {:.2f}ms", latency);
+  cv::putText(debug_img, latency_str, cv::Point2i(10, 30),
+              cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(0, 255, 255), 2);
+
+  cv::imshow("debug_rune", debug_img);
+  cv::waitKey(1);
+}
