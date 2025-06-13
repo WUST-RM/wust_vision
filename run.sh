@@ -46,7 +46,11 @@ total=$(find .. \
         -name "*.cpp" -o \
         -name "*.hpp" -o \
         -name "*.c" -o \
-        -name "*.h" \
+        -name "*.h" -o \
+        -name "*.py" -o \
+        -name "*.html" -o \
+        -name "*.sh" -o \
+        -name "*.md" \
     \) -exec wc -l {} + | awk 'END{print $1}')
 echo -e "${blue}        $total${reset}"
 
