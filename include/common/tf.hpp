@@ -3,6 +3,7 @@
 
 #include "Eigen/Dense"
 #include "fmt/format.h"
+#include "opencv2/opencv.hpp"
 #include <chrono>
 #include <cmath>
 #include <iostream>
@@ -727,4 +728,25 @@ private:
     return Transform::fromEigen(iso.inverse());
   }
 };
+
+inline void quatPosToRTvec(const tf2::Quaternion &q, const Position &pos,
+                           cv::Mat &rvec, cv::Mat &tvec) {
+  // 1. 得到旋转矩阵 (cv::Matx33d)
+  cv::Matx33d R = q.toRotationMatrix();
+
+  // 2. 转成 cv::Mat (3x3, CV_64F)
+  cv::Mat R_mat(3, 3, CV_64F);
+  for (int i = 0; i < 3; ++i)
+    for (int j = 0; j < 3; ++j)
+      R_mat.at<double>(i, j) = R(i, j);
+
+  // 3. Rodrigues 转换，得到旋转向量 rvec (3x1)
+  cv::Rodrigues(R_mat, rvec);
+
+  // 4. 平移向量 tvec (3x1)
+  tvec = cv::Mat(3, 1, CV_64F);
+  tvec.at<double>(0, 0) = pos.x;
+  tvec.at<double>(1, 0) = pos.y;
+  tvec.at<double>(2, 0) = pos.z;
+}
 #endif // TF2_HPP

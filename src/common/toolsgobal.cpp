@@ -17,7 +17,5 @@ size_t fire_count_ = 0;
 std::chrono::steady_clock::time_point last_stat_time_steady_;
 double latency_ms;
 double debug_show_dt_;
-imgframe imgframe_;
-std::mutex img_mutex_;
 GimbalCmd last_cmd_;
 double last_distance;

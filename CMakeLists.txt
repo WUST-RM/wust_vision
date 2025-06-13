@@ -5,6 +5,8 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_BUILD_TYPE "Release")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
+
 add_executable(${PROJECT_NAME}_openvino
 
   src/wust_vision_openvino.cpp
@@ -33,6 +35,9 @@ add_executable(${PROJECT_NAME}_openvino
   src/control/rune_solver.cpp
   src/tracker/curve_fitter.cpp
   src/detect/rune_detector.cpp
+  src/driver/recorder.cpp
+  src/driver/labeler.cpp
+  src/driver/video_player.cpp
 )
 add_executable(${PROJECT_NAME}_trt
 
@@ -59,7 +64,9 @@ add_executable(${PROJECT_NAME}_trt
   src/driver/hik.cpp
   src/common/matplottools.cpp
   src/common/toolsgobal.cpp
-
+  src/driver/recorder.cpp
+  src/driver/labeler.cpp
+  src/driver/video_player.cpp
 
 )
 include_directories(

@@ -5,7 +5,9 @@
 #include "detect/trt.hpp"
 #include "driver/hik.hpp"
 #include "driver/image_capturer.hpp"
+#include "driver/labeler.hpp"
 #include "driver/serial.hpp"
+#include "driver/video_player.hpp"
 #include "tracker/tracker.hpp"
 #include "type/type.hpp"
 #include "yaml-cpp/yaml.h"
@@ -36,7 +38,7 @@ public:
   std::unique_ptr<HikCamera> camera_;
   std::unique_ptr<AdaptedTRTModule> detector_;
   std::unique_ptr<ThreadPool> thread_pool_;
-
+  std::unique_ptr<VideoPlayer> video_player_;
   int max_infer_running_;
   std::atomic<int> infer_running_count_{0};
   std::mutex callback_mutex_;
@@ -49,9 +51,8 @@ public:
   std::thread timer_thread_;
   std::unique_ptr<Tracker> tracker_;
   Target armor_target;
-  std::mutex armor_target_mutex_;
   Armors armors_gobal;
-  std::mutex armors_gobal_mutex_;
+  imgframe imgframe_;
   double s2qx_, s2qy_, s2qz_, s2qyaw_, s2qr_, s2qd_zc_;
   double r_x_, r_y_, r_z_, r_yaw_;
   double lost_time_thres_;
@@ -70,4 +71,7 @@ public:
   // std::unique_ptr<hikcamera::ImageCapturer> capturer_;
   // std::unique_ptr<std::thread> capture_thread_;
   // std::atomic<bool> capture_running_;
+  std::unique_ptr<Labeler> auto_labeler_;
+  bool use_auto_labeler;
+  bool use_video;
 };

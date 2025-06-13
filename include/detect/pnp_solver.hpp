@@ -65,6 +65,20 @@ public:
       return false;
     }
   }
+  std::vector<cv::Point2f> getImagePoints(const cv::Mat &rvec,
+                                          const cv::Mat &tvec,
+                                          const std::string &coord_frame_name) {
+    std::vector<cv::Point2f> image_points;
+    if (object_points_map_.find(coord_frame_name) == object_points_map_.end()) {
+      throw std::runtime_error("Unknown coord_frame_name");
+    }
+    const auto &object_points = object_points_map_[coord_frame_name];
+
+    cv::projectPoints(object_points, rvec, tvec, camera_matrix_,
+                      distortion_coefficients_, image_points);
+
+    return image_points;
+  }
 
   // Calculate the distance between armor center and image center
   float

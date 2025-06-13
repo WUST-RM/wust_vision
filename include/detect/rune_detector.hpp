@@ -32,8 +32,8 @@
 #include <opencv2/opencv.hpp>
 #include <openvino/openvino.hpp>
 // project
-#include "type/type.hpp"
 #include "common/ThreadPool.h"
+#include "type/type.hpp"
 class RuneDetector {
 public:
   using CallbackType = std::function<void(std::vector<RuneObject> &,

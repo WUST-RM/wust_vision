@@ -83,6 +83,40 @@ enum class ArmorNumber {
   BASE,
   UNKNOWN
 };
+inline int formArmorColor(ArmorColor color) {
+  switch (color) {
+  case ArmorColor::RED:
+    return 0;
+  case ArmorColor::BLUE:
+    return 1;
+  case ArmorColor::NONE:
+    return 2;
+  case ArmorColor::PURPLE:
+    return 3;
+  }
+}
+inline int formArmorNumber(ArmorNumber number) {
+  switch (number) {
+  case ArmorNumber::SENTRY:
+    return 0;
+  case ArmorNumber::NO1:
+    return 1;
+  case ArmorNumber::NO2:
+    return 2;
+  case ArmorNumber::NO3:
+    return 3;
+  case ArmorNumber::NO4:
+    return 4;
+  case ArmorNumber::NO5:
+    return 5;
+  case ArmorNumber::OUTPOST:
+    return 6;
+  case ArmorNumber::BASE:
+    return 7;
+  case ArmorNumber::UNKNOWN:
+    return 8;
+  }
+}
 enum class AttackMode {
   ARMOR = 0,
   SMALL_RUNE,

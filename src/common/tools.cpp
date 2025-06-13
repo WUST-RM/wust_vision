@@ -1856,27 +1856,28 @@ void drawRune(cv::Mat &src_img, const std::vector<RuneObject> &objs,
 
   static auto last_show_time = std::chrono::steady_clock::now();
   static bool window_initialized;
+  if (objs.empty()) {
+    return;
+  }
   auto now = std::chrono::steady_clock::now();
   constexpr double min_interval_ms = 1000.0 / 60.0;
   double elapsed_ms =
       std::chrono::duration<double, std::milli>(now - last_show_time).count();
-  if (elapsed_ms < min_interval_ms)
-  {
+  if (elapsed_ms < min_interval_ms) {
     return;
   }
 
-
   if (!window_initialized) {
-      cv::namedWindow("debug_rune", cv::WINDOW_NORMAL);
-      cv::resizeWindow("debug_rune", debug_w, debug_h);
-  
-      window_initialized = true;
-    }
+    cv::namedWindow("debug_rune", cv::WINDOW_NORMAL);
+    cv::resizeWindow("debug_rune", debug_w, debug_h);
+
+    window_initialized = true;
+  }
   last_show_time = now;
   cv::Mat debug_img;
   src_img.convertTo(debug_img, -1, 1, 0);
   cv::cvtColor(debug_img, debug_img, cv::COLOR_BGR2RGB);
-  
+
   for (const auto &obj : objs) {
     auto pts = obj.pts.toVector2f();
     // 计算中心点，这里你原代码是从 pts.begin()+1 到 pts.end()
@@ -1907,4 +1908,219 @@ void drawRune(cv::Mat &src_img, const std::vector<RuneObject> &objs,
 
   cv::imshow("debug_rune", debug_img);
   cv::waitKey(1);
+}
+
+void drawRuneandpre(cv::Mat &src_img, const std::vector<RuneObject> &objs,
+                    std::chrono::steady_clock::time_point timestamp,
+                    double predict_angle) {
+
+  static auto last_show_time = std::chrono::steady_clock::now();
+  static bool window_initialized;
+  if (src_img.empty()) {
+    return;
+  }
+  auto now = std::chrono::steady_clock::now();
+
+  constexpr double min_interval_ms = 1000.0 / 60.0;
+  double elapsed_ms =
+      std::chrono::duration<double, std::milli>(now - last_show_time).count();
+  if (elapsed_ms < min_interval_ms) {
+    return;
+  }
+
+  if (!window_initialized) {
+    cv::namedWindow("debug_rune", cv::WINDOW_NORMAL);
+    cv::resizeWindow("debug_rune", debug_w, debug_h);
+
+    window_initialized = true;
+  }
+  last_show_time = now;
+  cv::Mat debug_img;
+  src_img.convertTo(debug_img, -1, 1, 0);
+  cv::cvtColor(debug_img, debug_img, cv::COLOR_BGR2RGB);
+  for (const auto &obj : objs) {
+    if (obj.type == RuneType::INACTIVATED) {
+      const auto pts = obj.pts.toVector2f();
+      if (pts.size() < 3)
+        break; // 至少需要3个点才能计算夹角
+
+      int sharpest_idx = 0;
+      float min_angle = std::numeric_limits<float>::max();
+
+      // 遍历每个点，计算与前后点的夹角
+      for (size_t i = 0; i < pts.size(); ++i) {
+        const cv::Point2f &prev = pts[(i + pts.size() - 1) % pts.size()];
+        const cv::Point2f &curr = pts[i];
+        const cv::Point2f &next = pts[(i + 1) % pts.size()];
+
+        cv::Point2f v1 = normalize(prev - curr);
+        cv::Point2f v2 = normalize(next - curr);
+
+        float dot = v1.dot(v2);
+        float angle = std::acos(std::clamp(dot, -1.0f, 1.0f)); // 弧度
+
+        if (angle < min_angle) {
+          min_angle = angle;
+          sharpest_idx = i;
+        }
+      }
+
+      const cv::Point2f &center = pts[sharpest_idx];
+
+      // 使用预测角度画线
+      float angle_rad = -predict_angle;
+      float length = 1000.0f;
+      cv::Point2f end_point =
+          center +
+          cv::Point2f(std::cos(angle_rad), std::sin(angle_rad)) * length;
+
+      cv::arrowedLine(debug_img, center, end_point, cv::Scalar(0, 255, 0), 2);
+
+      break; // 只绘制第一个 INACTIVATED 的 obj
+    }
+  }
+
+  for (const auto &obj : objs) {
+    auto pts = obj.pts.toVector2f();
+    // 计算中心点，这里你原代码是从 pts.begin()+1 到 pts.end()
+    // 累加后除以4，感觉更合理的是平均所有点或明确写个除数
+    cv::Point2f aim_point =
+        std::accumulate(pts.begin() + 1, pts.end(), cv::Point2f(0, 0)) / 4.0f;
+
+    cv::Scalar line_color = obj.type == RuneType::INACTIVATED
+                                ? cv::Scalar(50, 255, 50)
+                                : cv::Scalar(255, 50, 255);
+
+    cv::putText(debug_img, fmt::format("{:.2f}", obj.prob), cv::Point2i(pts[1]),
+                cv::FONT_HERSHEY_SIMPLEX, 0.8, line_color, 2);
+    cv::polylines(debug_img, obj.pts.toVector2i(), true, line_color, 2);
+    cv::circle(debug_img, aim_point, 5, line_color, -1);
+
+    std::string rune_type = obj.type == RuneType::INACTIVATED ? "_HIT" : "_OK";
+    std::string rune_color = enemyColorToString(obj.color);
+    cv::putText(debug_img, rune_color + rune_type, cv::Point2i(pts[2]),
+                cv::FONT_HERSHEY_SIMPLEX, 0.8, line_color, 2);
+  }
+
+  double latency =
+      std::chrono::duration<double, std::milli>(now - timestamp).count();
+  std::string latency_str = fmt::format("Latency: {:.2f}ms", latency);
+  cv::putText(debug_img, latency_str, cv::Point2i(10, 30),
+              cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(255, 255, 255), 2);
+
+  cv::imshow("debug_rune", debug_img);
+  cv::waitKey(1);
+}
+void drawRuneandprewrite(cv::Mat &src_img, const std::vector<RuneObject> &objs,
+                         std::chrono::steady_clock::time_point timestamp,
+                         double predict_angle) {
+
+  static auto last_show_time = std::chrono::steady_clock::now();
+  if (src_img.empty()) {
+    return;
+  }
+
+  auto now = std::chrono::steady_clock::now();
+
+  constexpr double min_interval_ms = 1000.0 / 60.0;
+  double elapsed_ms =
+      std::chrono::duration<double, std::milli>(now - last_show_time).count();
+  if (elapsed_ms < min_interval_ms) {
+    return;
+  }
+
+  last_show_time = now;
+  cv::Mat debug_img;
+  src_img.convertTo(debug_img, -1, 1, 0);
+  cv::cvtColor(debug_img, debug_img, cv::COLOR_BGR2RGB);
+  for (const auto &obj : objs) {
+    if (obj.type == RuneType::INACTIVATED) {
+      const auto pts = obj.pts.toVector2f();
+      if (pts.size() < 3)
+        break;
+
+      int sharpest_idx = 0;
+      float min_angle = std::numeric_limits<float>::max();
+
+      for (size_t i = 0; i < pts.size(); ++i) {
+        const cv::Point2f &prev = pts[(i + pts.size() - 1) % pts.size()];
+        const cv::Point2f &curr = pts[i];
+        const cv::Point2f &next = pts[(i + 1) % pts.size()];
+
+        cv::Point2f v1 = normalize(prev - curr);
+        cv::Point2f v2 = normalize(next - curr);
+
+        float dot = v1.dot(v2);
+        float angle = std::acos(std::clamp(dot, -1.0f, 1.0f)); // 弧度
+
+        if (angle < min_angle) {
+          min_angle = angle;
+          sharpest_idx = i;
+        }
+      }
+
+      const cv::Point2f &center = pts[sharpest_idx];
+
+      float angle_rad = -predict_angle;
+      float length = 1000.0f;
+      cv::Point2f end_point =
+          center +
+          cv::Point2f(std::cos(angle_rad), std::sin(angle_rad)) * length;
+
+      cv::arrowedLine(debug_img, center, end_point, cv::Scalar(0, 255, 0), 2);
+
+      break;
+    }
+  }
+
+  for (const auto &obj : objs) {
+    auto pts = obj.pts.toVector2f();
+    cv::Point2f aim_point =
+        std::accumulate(pts.begin() + 1, pts.end(), cv::Point2f(0, 0)) / 4.0f;
+
+    cv::Scalar line_color = obj.type == RuneType::INACTIVATED
+                                ? cv::Scalar(50, 255, 50)
+                                : cv::Scalar(255, 50, 255);
+
+    cv::putText(debug_img, fmt::format("{:.2f}", obj.prob), cv::Point2i(pts[1]),
+                cv::FONT_HERSHEY_SIMPLEX, 0.8, line_color, 2);
+    cv::polylines(debug_img, obj.pts.toVector2i(), true, line_color, 2);
+    cv::circle(debug_img, aim_point, 5, line_color, -1);
+
+    std::string rune_type = obj.type == RuneType::INACTIVATED ? "_HIT" : "_OK";
+    std::string rune_color = enemyColorToString(obj.color);
+    cv::putText(debug_img, rune_color + rune_type, cv::Point2i(pts[2]),
+                cv::FONT_HERSHEY_SIMPLEX, 0.8, line_color, 2);
+  }
+
+  double latency =
+      std::chrono::duration<double, std::milli>(now - timestamp).count();
+  std::string latency_str = fmt::format("Latency: {:.2f}ms", latency);
+  cv::putText(debug_img, latency_str, cv::Point2i(10, 30),
+              cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(255, 255, 255), 2);
+
+  std::vector<uchar> buf;
+  cv::imencode(".jpg", debug_img, buf);
+  std::ofstream ofs("/dev/shm/debug_frame.jpg.tmp", std::ios::binary);
+  ofs.write(reinterpret_cast<const char *>(buf.data()), buf.size());
+  ofs.close();
+  std::rename("/dev/shm/debug_frame.jpg.tmp", "/dev/shm/debug_frame.jpg");
+}
+std::string GetUniqueVideoFilename(const std::string &folder,
+                                   const std::string &prefix) {
+  auto now = std::chrono::system_clock::now();
+  std::time_t now_c = std::chrono::system_clock::to_time_t(now);
+  std::tm *tm_ptr = std::localtime(&now_c);
+
+  std::ostringstream oss;
+  oss << folder << "/" << prefix << "_"
+      << std::put_time(tm_ptr, "%Y%m%d_%H%M%S") << ".avi";
+  return oss.str();
+}
+cv::Point2f normalize(const cv::Point2f &v) {
+  float norm = std::sqrt(v.x * v.x + v.y * v.y);
+  if (norm > 1e-6f)
+    return v / norm;
+  else
+    return cv::Point2f(0, 0);
 }

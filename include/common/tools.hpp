@@ -51,3 +51,12 @@ void write_target_log_to_json(const Target &target);
 void write_aim_log_to_json(const ReceiveAimINFO &aim);
 void drawRune(cv::Mat &src_img, const std::vector<RuneObject> &objs,
               std::chrono::steady_clock::time_point timestamp);
+void drawRuneandpre(cv::Mat &src_img, const std::vector<RuneObject> &objs,
+                    std::chrono::steady_clock::time_point timestamp,
+                    double predict_angle);
+void drawRuneandprewrite(cv::Mat &src_img, const std::vector<RuneObject> &objs,
+                         std::chrono::steady_clock::time_point timestamp,
+                         double predict_angle);
+std::string GetUniqueVideoFilename(const std::string &folder,
+                                   const std::string &prefix = "output");
+cv::Point2f normalize(const cv::Point2f &v);

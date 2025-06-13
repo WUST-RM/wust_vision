@@ -23,7 +23,6 @@ extern std::chrono::steady_clock::time_point last_stat_time_steady_;
 extern double latency_ms;
 
 extern double debug_show_dt_;
-extern imgframe imgframe_;
-extern std::mutex img_mutex_;
+
 extern GimbalCmd last_cmd_;
 extern double last_distance;

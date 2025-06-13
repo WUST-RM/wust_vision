@@ -30,6 +30,24 @@ inline cv::Mat convertToMat(const ImageFrame &frame) {
   memcpy(rgb.data, frame.data.data(), frame.height * frame.step);
   return rgb;
 }
+inline cv::Mat convertToMatrgb(const ImageFrame &frame) {
+  if (frame.data.empty()) {
+    return cv::Mat();
+  }
+  cv::Mat img(frame.height, frame.width, CV_8UC3);
+  memcpy(img.data, frame.data.data(), frame.height * frame.step);
+  return img;
+}
+inline cv::Mat convertToMatbgr(const ImageFrame &frame) {
+  if (frame.data.empty()) {
+    return cv::Mat();
+  }
+  cv::Mat img(frame.height, frame.width, CV_8UC3);
+  memcpy(img.data, frame.data.data(), frame.height * frame.step);
+
+  cv::cvtColor(img, img, cv::COLOR_RGB2BGR);
+  return img;
+}
 // inline cv::Mat convertToMat(const ImageFrame& frame) {
 //     if (frame.data.empty()) {
 //         return cv::Mat();

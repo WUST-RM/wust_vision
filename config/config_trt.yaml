@@ -1,4 +1,5 @@
-only_nav_enable: true
+only_nav_enable: false
+use_auto_labeler: false
 camera:
   acquisition_frame_rate: 200
   adc_bit_depth: Bits_8
@@ -6,7 +7,13 @@ camera:
   exposure_time: 3500
   gain: 10
   pixel_format: BayerRG8
-  serial: ''
+  recorder: false
+  video_player:
+    use: false
+    path: /home/hy/wust_vision/video/2022-05-05-09-05-05.avi
+    loop: true
+    fps : 30
+    start_frame: 0
 classify_label_path: /home/hy/wust_vision/model/label.txt
 classify_model_path: /home/hy/wust_vision/model/lenet.onnx
 control:
@@ -17,7 +24,7 @@ control:
   max_pitch_change: 5
   max_yaw_change: 10
   use_serial: false
-  use_nav:  true
+  use_nav:  false
 debug:
   debug_h: 1080
   debug_mode: true
@@ -147,6 +154,6 @@ tracker:
   obs_yaw_stationary_thresh: 1
   pred_yaw_stationary_thresh: 0.5
   rotation_inconsistent_cooldown_limit: 5
-  target_frame: odom
+  target_frame: gimbal_odom
   tracking_thres: 5
 use_calculation: false

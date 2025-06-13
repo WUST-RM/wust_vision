@@ -266,12 +266,11 @@ void RuneDetector::init() {
   strides_ = {8, 16, 32};
   generateGridsAndStride(INPUT_W, INPUT_H, strides_, grid_strides_);
   thread_pool_ =
-        std::make_unique<ThreadPool>(std::thread::hardware_concurrency(), 100);
+      std::make_unique<ThreadPool>(std::thread::hardware_concurrency(), 100);
 }
 
-void RuneDetector::pushInput(
-    const cv::Mat &rgb_img,
-    std::chrono::steady_clock::time_point timestamp) {
+void RuneDetector::pushInput(const cv::Mat &rgb_img,
+                             std::chrono::steady_clock::time_point timestamp) {
 
   // Reprocess
   Eigen::Matrix3f
@@ -279,7 +278,7 @@ void RuneDetector::pushInput(
   cv::Mat resized_img = letterbox(rgb_img, transform_matrix);
   // processCallback(resized_img, transform_matrix, timestamp, rgb_img);
   thread_pool_->enqueue([this, resized_img, transform_matrix, timestamp,
-  rgb_img]() {
+                         rgb_img]() {
     this->processCallback(resized_img, transform_matrix, timestamp, rgb_img);
   });
 }
@@ -290,8 +289,7 @@ void RuneDetector::setCallback(CallbackType callback) {
 
 bool RuneDetector::processCallback(
     const cv::Mat resized_img, Eigen::Matrix3f transform_matrix,
-    std::chrono::steady_clock::time_point timestamp,
-    const cv::Mat &src_img) {
+    std::chrono::steady_clock::time_point timestamp, const cv::Mat &src_img) {
   // BGR->RGB, u8(0-255)->f32(0.0-1.0), HWC->NCHW
   // note: TUP's model no need to normalize
   cv::Mat blob = cv::dnn::blobFromImage(

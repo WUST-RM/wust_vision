@@ -95,6 +95,7 @@ public:
 
   RuneSolverParams rune_solver_params;
   double predict_offset_;
+  double last_pre_angle;
 
 private:
   double getNormalAngle(const Rune received_target);

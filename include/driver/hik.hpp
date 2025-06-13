@@ -3,6 +3,7 @@
 
 #include "MvCameraControl.h"
 #include "common/ThreadPool.h"
+#include "driver/recorder.hpp"
 #include "type/image.hpp"
 #include <chrono>
 #include <condition_variable>
@@ -15,7 +16,6 @@
 #include <string>
 #include <thread>
 #include <vector>
-
 class HikCamera {
 public:
   HikCamera();
@@ -24,17 +24,16 @@ public:
     on_frame_callback_ = std::move(cb);
   }
 
-  bool initializeCamera(const std::string &video_path);
+  bool initializeCamera();
   void setParameters(double acquisition_frame_rate, double exposure_time,
                      double gain, const std::string &adc_bit_depth,
                      const std::string &pixel_format);
-  void startCamera();
+  void startCamera(bool if_recorder);
   bool restartCamera();
   void stopCamera();
 
 private:
   void hikCaptureLoop();
-  void videoCaptureLoop();
 
   void *camera_handle_;
   int fail_count_;
@@ -47,12 +46,11 @@ private:
   bool in_low_frame_rate_state_;
   std::chrono::steady_clock::time_point low_frame_rate_start_time_;
   std::atomic<bool> stop_signal_{false};
-  bool is_video_mode_;
-  cv::VideoCapture video_cap_;
   int video_fps_;
   int expected_width_ = 0;
   int expected_height_ = 0;
   std::function<void(const ImageFrame &)> on_frame_callback_;
+  std::unique_ptr<Recorder> recorder_;
 };
 
 #endif // HIK_HPP

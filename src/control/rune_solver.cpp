@@ -418,6 +418,8 @@ GimbalCmd RuneSolver::solve() {
   if (tracker_state == RuneSolver::TRACKING) {
     // Predict target
     predict_angle = predictTarget(pred_pos, predict_time);
+
+    last_pre_angle = predict_angle;
     try {
       gimbal_control_cmd = solveGimbalCmd(pred_pos);
     } catch (...) {

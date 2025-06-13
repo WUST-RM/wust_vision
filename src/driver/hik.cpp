@@ -1,15 +1,23 @@
 #include "driver/hik.hpp"
 #include "common/logger.hpp"
 #include <chrono>
+#include <filesystem>
 #include <iostream>
 #include <opencv2/highgui.hpp>
+#include <pwd.h>
+#include <regex>
 #include <stdexcept>
+#include <unistd.h>
 
-HikCamera::HikCamera()
-    : camera_handle_(nullptr), fail_count_(0), is_video_mode_(false) {}
+HikCamera::HikCamera() : camera_handle_(nullptr), fail_count_(0) {}
 
 HikCamera::~HikCamera() {
   stopCamera();
+  if (recorder_ != nullptr) {
+    recorder_->stop();
+    WUST_INFO(hik_logger) << "Recorder stopped! Video file "
+                          << recorder_->path.string() << " has been saved";
+  }
   if (capture_thread_.joinable()) {
     capture_thread_.join();
   }
@@ -18,36 +26,13 @@ HikCamera::~HikCamera() {
     MV_CC_CloseDevice(camera_handle_);
     MV_CC_DestroyHandle(&camera_handle_);
   }
-  if (video_cap_.isOpened()) {
-    video_cap_.release();
-  }
+
   WUST_INFO(hik_logger) << "Camera destroyed!";
 }
 
 // 初始化相机：枚举设备、创建句柄、打开设备、获取图像信息等
-bool HikCamera::initializeCamera(const std::string &video_path) {
-  if (!video_path.empty()) {
-    // 视频模式初始化
-    is_video_mode_ = true;
-    video_cap_.open(video_path);
-    if (!video_cap_.isOpened()) {
-      WUST_ERROR(hik_logger) << "Failed to open video file: " << video_path;
-      return false;
-    }
-    // 获取视频基本信息
-    img_info_.nWidthValue =
-        static_cast<int>(video_cap_.get(cv::CAP_PROP_FRAME_WIDTH));
-    img_info_.nHeightValue =
-        static_cast<int>(video_cap_.get(cv::CAP_PROP_FRAME_HEIGHT));
-    video_fps_ = video_cap_.get(cv::CAP_PROP_FPS);
-    if (video_fps_ <= 0)
-      video_fps_ = 30;
+bool HikCamera::initializeCamera() {
 
-    WUST_INFO(hik_logger) << "Video mode initialized: " << img_info_.nWidthValue
-                          << "x" << img_info_.nHeightValue << " @" << video_fps_
-                          << "fps";
-    return true;
-  }
   MV_CC_DEVICE_INFO_LIST device_list;
   while (true) {
     int n_ret = MV_CC_EnumDevices(MV_USB_DEVICE, &device_list);
@@ -95,10 +80,7 @@ void HikCamera::setParameters(double acquisition_frame_rate,
                               double exposure_time, double gain,
                               const std::string &adc_bit_depth,
                               const std::string &pixel_format) {
-  if (is_video_mode_) {
-    WUST_WARN(hik_logger) << "Video mode ignores parameter settings";
-    return;
-  }
+
   MVCC_FLOATVALUE f_value;
 
   // 设置采集帧率
@@ -143,70 +125,60 @@ void HikCamera::setParameters(double acquisition_frame_rate,
 }
 
 // 启动图像采集，采集线程不断获取图像帧并推入队列
-void HikCamera::startCamera() {
-  if (is_video_mode_) {
-    WUST_INFO(hik_logger) << "Starting video capture loop";
-    capture_thread_ = std::thread(&HikCamera::videoCaptureLoop, this);
-  } else {
-    int n_ret = MV_CC_StartGrabbing(camera_handle_);
-    if (n_ret != MV_OK) {
-      WUST_ERROR(hik_logger) << "Failed to start camera grabbing!";
-    }
-    MVCC_INTVALUE stParam = {0};
-    if (MV_CC_GetIntValue(camera_handle_, "Width", &stParam) == MV_OK) {
-      expected_width_ = stParam.nCurValue;
-    }
-    if (MV_CC_GetIntValue(camera_handle_, "Height", &stParam) == MV_OK) {
-      expected_height_ = stParam.nCurValue;
-    }
-    capture_thread_ = std::thread(&HikCamera::hikCaptureLoop, this);
+void HikCamera::startCamera(bool if_recorder) {
+
+  int n_ret = MV_CC_StartGrabbing(camera_handle_);
+  if (n_ret != MV_OK) {
+    WUST_ERROR(hik_logger) << "Failed to start camera grabbing!";
   }
-}
-void HikCamera::videoCaptureLoop() {
-  WUST_INFO(hik_logger) << "Starting video capture loop!";
-  cv::Mat frame;
-  auto frame_interval = std::chrono::milliseconds(
-      static_cast<int>(1000 / (video_fps_ > 0 ? video_fps_ : 30)));
+  MVCC_INTVALUE stParam = {0};
+  if (MV_CC_GetIntValue(camera_handle_, "Width", &stParam) == MV_OK) {
+    expected_width_ = stParam.nCurValue;
+  }
+  if (MV_CC_GetIntValue(camera_handle_, "Height", &stParam) == MV_OK) {
+    expected_height_ = stParam.nCurValue;
+  }
+  capture_thread_ = std::thread(&HikCamera::hikCaptureLoop, this);
 
-  while (!stop_signal_) {
-    auto start_time = std::chrono::steady_clock::now();
+  if (if_recorder) {
 
-    if (!video_cap_.read(frame)) {
-      // 循环播放
-      video_cap_.set(cv::CAP_PROP_POS_FRAMES, 0);
-      continue;
+    const char *home = nullptr;
+
+    // 尝试从 SUDO_USER 获取真实用户 home
+    const char *sudo_user = std::getenv("SUDO_USER");
+    if (sudo_user) {
+      struct passwd *pw = getpwnam(sudo_user);
+      if (pw) {
+        home = pw->pw_dir;
+      }
     }
 
-    // 转换OpenCV Mat到ImageFrame
-    ImageFrame img_frame;
-    img_frame.timestamp = std::chrono::steady_clock::now();
-    img_frame.width = frame.cols;
-    img_frame.height = frame.rows;
-    img_frame.step = frame.step;
-
-    // 转换BGR到RGB格式
-    cv::cvtColor(frame, frame, cv::COLOR_BGR2RGB);
-    img_frame.data.assign(frame.data,
-                          frame.data + frame.total() * frame.elemSize());
-
-    if (on_frame_callback_) {
-      // on_frame_callback_(frame);
+    // 如果不是 sudo，使用 getuid 获取 home
+    if (!home) {
+      struct passwd *pw = getpwuid(getuid());
+      if (pw) {
+        home = pw->pw_dir;
+      }
     }
 
-    // 控制帧率
-    auto process_time = std::chrono::steady_clock::now() - start_time;
-    if (process_time < frame_interval) {
-      std::this_thread::sleep_for(frame_interval - process_time);
+    if (!home) {
+      throw std::runtime_error("HOME environment variable not set.");
     }
+
+    namespace fs = std::filesystem;
+    std::filesystem::path video_path_ =
+        fs::path(home) / "wust_data/video/" /
+        std::string(std::to_string(std::time(nullptr)) + ".avi");
+
+    recorder_ =
+        std::make_unique<Recorder>(video_path_, last_frame_rate_,
+                                   cv::Size(expected_width_, expected_height_));
+    recorder_->start();
   }
 }
 
 bool HikCamera::restartCamera() {
-  if (is_video_mode_) {
-    WUST_INFO(hik_logger) << "Restarting video playback...";
-    video_cap_.set(cv::CAP_PROP_POS_FRAMES, 0);
-    return true;
-  }
+
   WUST_WARN(hik_logger) << "Restarting camera from scratch...";
 
   MV_CC_StopGrabbing(camera_handle_);
@@ -216,7 +188,7 @@ bool HikCamera::restartCamera() {
 
   std::this_thread::sleep_for(std::chrono::seconds(1));
 
-  if (!initializeCamera("")) {
+  if (!initializeCamera()) {
     WUST_ERROR(hik_logger) << "Failed to re-initialize camera.";
     return false;
   }
@@ -271,6 +243,9 @@ void HikCamera::hikCaptureLoop() {
 
         if (on_frame_callback_) {
           on_frame_callback_(frame);
+        }
+        if (recorder_ != nullptr) {
+          recorder_->addFrame(frame.data);
         }
 
         MV_CC_FreeImageBuffer(camera_handle_, &out_frame);

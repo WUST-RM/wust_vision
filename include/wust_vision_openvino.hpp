@@ -6,7 +6,10 @@
 #include "detect/rune_detector.hpp"
 #include "driver/hik.hpp"
 #include "driver/image_capturer.hpp"
+#include "driver/labeler.hpp"
+#include "driver/recorder.hpp"
 #include "driver/serial.hpp"
+#include "driver/video_player.hpp"
 #include "type/type.hpp"
 #include "yaml-cpp/yaml.h"
 #include <opencv2/core/mat.hpp>
@@ -25,10 +28,9 @@ public:
   void DetectCallback(const std::vector<ArmorObject> &objs,
                       std::chrono::steady_clock::time_point timestamp,
                       const cv::Mat &src_img);
-  void
-  inferResultCallback(std::vector<RuneObject> &rune_objects,
-                      std::chrono::steady_clock::time_point timestamp,
-                      const cv::Mat &img);
+  void inferResultCallback(std::vector<RuneObject> &rune_objects,
+                           std::chrono::steady_clock::time_point timestamp,
+                           const cv::Mat &img);
   void stop();
   void armorsCallback(Armors armors_, const cv::Mat &src_img);
   void initTF();
@@ -43,11 +45,13 @@ public:
   void update();
   void initRune(const std::string &camera_info_path);
   Armors visualizeTargetProjection(Target armor_target_);
+  void StartNewVideo(std::string path, int width, int height, double fps);
 
   std::thread image_thread_;
   std::unique_ptr<ThreadPool> thread_pool_;
   std::unique_ptr<OpenVino> detector_;
   std::unique_ptr<HikCamera> camera_;
+  std::unique_ptr<VideoPlayer> video_player_;
   int max_infer_running_;
   std::mutex callback_mutex_;
   std::atomic<int> infer_running_count_{0};
@@ -74,15 +78,16 @@ public:
   std::unique_ptr<std::thread> capture_thread_;
   std::atomic<bool> capture_running_;
   Target armor_target;
-  std::mutex armor_target_mutex_;
   Armors armors_gobal;
-  std::mutex armors_gobal_mutex_;
   Rune rune_gobal;
-  std::mutex rune_gobal_mutex_;
-
+  imgframe imgframe_;
   std::unique_ptr<RuneDetector> rune_detector_;
   std::unique_ptr<RuneSolver> rune_solver_;
   bool detect_r_tag_;
   int rune_binary_thresh_;
   Rune last_rune_target_;
+  std::unique_ptr<Labeler> auto_labeler_;
+  bool use_auto_labeler;
+  bool use_video;
+  std::vector<RuneObject> rune_objects_;
 };

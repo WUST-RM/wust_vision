@@ -16,9 +16,25 @@ WustVision::WustVision() { init(); }
 WustVision::~WustVision() {}
 void WustVision::stop() {
   is_inited_ = false;
+
   if (!only_nav_enable) {
+    auto_labeler_.reset();
+    if (use_video) {
+      video_player_->stop();
+    } else {
+      // capture_running_ = false;
+      // if (capture_thread_ && capture_thread_->joinable()) {
+      //   capture_thread_->join();
+      // }
+      camera_->stopCamera();
+      camera_.reset();
+    }
+
     stopTimer();
-    camera_->stopCamera();
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+
+    detector_.reset();
+    measure_tool_.reset();
 
     if (thread_pool_) {
       thread_pool_->waitUntilEmpty();
@@ -27,13 +43,10 @@ void WustVision::stop() {
     if (robot_cmd_plot_thread_.joinable()) {
       robot_cmd_plot_thread_.join();
     }
-
-    camera_.reset();
-    detector_.reset();
-
-    measure_tool_.reset();
+    if (thread_pool_) {
+      thread_pool_->waitUntilEmpty();
+    }
   }
-
   serial_.stopThread();
 
   WUST_INFO(vision_logger) << "WustVision shutdown complete.";
@@ -113,7 +126,10 @@ void WustVision::init() {
       WUST_ERROR(vision_logger) << "Model path is empty.";
       return;
     }
-
+    use_auto_labeler = config["use_auto_labeler"].as<bool>(false);
+    if (use_auto_labeler) {
+      auto_labeler_ = std::make_unique<Labeler>();
+    }
     detector_ = std::make_unique<AdaptedTRTModule>(
         model_path, params, expand_ratio_h, expand_ratio_w, binary_thres,
         l_params, classify_model_path, classify_label_path);
@@ -125,48 +141,71 @@ void WustVision::init() {
         std::make_unique<ThreadPool>(std::thread::hardware_concurrency(), 100);
 
     solver_ = std::make_unique<Solver>(config);
-    std::string camera_serial = config["camera"]["serial"].as<std::string>("");
-    camera_ = std::make_unique<HikCamera>();
-    if (!camera_->initializeCamera(camera_serial)) {
-      WUST_ERROR(vision_logger) << "Camera initialization failed.";
-      return;
-    }
+    use_video = config["camera"]["video_player"]["use"].as<bool>(false);
+    if (use_video) {
+      std::string video_play_path =
+          config["camera"]["video_player"]["path"].as<std::string>("");
+      int video_play_fps = config["camera"]["video_player"]["fps"].as<int>(30);
+      int start_frame =
+          config["camera"]["video_player"]["start_frame"].as<int>(0);
+      bool loop = config["camera"]["video_player"]["loop"].as<bool>(false);
+      video_player_ = std::make_unique<VideoPlayer>(
+          video_play_path, video_play_fps, start_frame, loop);
+      video_player_->setCallback([this](const ImageFrame &frame) {
+        static bool first_is_inited = false;
 
-    camera_->setParameters(config["camera"]["acquisition_frame_rate"].as<int>(),
-                           config["camera"]["exposure_time"].as<int>(),
-                           config["camera"]["gain"].as<double>(),
-                           config["camera"]["adc_bit_depth"].as<std::string>(),
-                           config["camera"]["pixel_format"].as<std::string>());
-    camera_->setFrameCallback([this](const ImageFrame &frame) {
-      static bool first_is_inited = false;
-
-      if (is_inited_) {
-        thread_pool_->enqueue(
-            [frame = std::move(frame), this]() { processImage(frame); });
-      } else {
+        if (is_inited_) {
+          thread_pool_->enqueue(
+              [frame = std::move(frame), this]() { processImage(frame); });
+        } else {
+          return;
+        }
+      });
+      video_player_->start();
+    } else {
+      camera_ = std::make_unique<HikCamera>();
+      if (!camera_->initializeCamera()) {
+        WUST_ERROR(vision_logger) << "Camera initialization failed.";
         return;
       }
-    });
 
-    camera_->startCamera();
+      camera_->setParameters(
+          config["camera"]["acquisition_frame_rate"].as<int>(),
+          config["camera"]["exposure_time"].as<int>(),
+          config["camera"]["gain"].as<double>(),
+          config["camera"]["adc_bit_depth"].as<std::string>(),
+          config["camera"]["pixel_format"].as<std::string>());
+      camera_->setFrameCallback([this](const ImageFrame &frame) {
+        static bool first_is_inited = false;
 
-    // bool trigger_mode = config["camera"]["trigger_mode"].as<bool>(false);
-    // bool invert_image = config["camera"]["invert_image"].as<bool>(false);
-    // int exposure_time_us =
-    // config["camera"]["exposure_time_us"].as<int>(3500); float gain =
-    // config["camera"]["gain"].as<float>(7.0f);
+        if (is_inited_) {
+          thread_pool_->enqueue(
+              [frame = std::move(frame), this]() { processImage(frame); });
+        } else {
+          return;
+        }
+      });
+      bool if_recorder = config["camera"]["recorder"].as<bool>(false);
 
-    // hikcamera::ImageCapturer::CameraProfile profile;
-    // profile.trigger_mode = trigger_mode;
-    // profile.invert_image = invert_image;
-    // profile.exposure_time = std::chrono::microseconds(exposure_time_us);
-    // profile.gain = gain;
+      camera_->startCamera(if_recorder);
+      // bool trigger_mode = config["camera"]["trigger_mode"].as<bool>(false);
+      // bool invert_image = config["camera"]["invert_image"].as<bool>(false);
+      // int exposure_time_us =
+      // config["camera"]["exposure_time"].as<int>(3500); float gain =
+      // config["camera"]["gain"].as<float>(7.0f);
 
-    // capturer_ = std::make_unique<hikcamera::ImageCapturer>(
-    //     profile, nullptr, hikcamera::SyncMode::NONE);
-    // capture_running_ = true;
-    // capture_thread_ =
-    //     std::make_unique<std::thread>(&WustVision::captureLoop, this);
+      // hikcamera::ImageCapturer::CameraProfile profile;
+      // profile.trigger_mode = trigger_mode;
+      // profile.invert_image = invert_image;
+      // profile.exposure_time = std::chrono::microseconds(exposure_time_us);
+      // profile.gain = gain;
+
+      // capturer_ = std::make_unique<hikcamera::ImageCapturer>(
+      //     profile, nullptr, hikcamera::SyncMode::NONE);
+      // capture_running_ = true;
+      // capture_thread_ =
+      //     std::make_unique<std::thread>(&WustVision::captureLoop, this);
+    }
     startTimer();
     robot_cmd_plot_thread_ = std::thread(&robotCmdLoggerThread);
   } else {
@@ -379,10 +418,8 @@ void WustVision::armorsCallback(Armors armors_, const cv::Mat &src_img) {
     return;
   }
   if (debug_mode_) {
-    std::lock_guard<std::mutex> target_lock(img_mutex_);
     imgframe_.img = src_img.clone();
     imgframe_.timestamp = armors_.timestamp;
-    std::lock_guard<std::mutex> armor_gobal_lock(armors_gobal_mutex_);
     armors_gobal = armors_;
   }
   if (use_calculation_) {
@@ -439,10 +476,8 @@ void WustVision::armorsCallback(Armors armors_, const cv::Mat &src_img) {
 
   target_.yaw_diff = tracker_->yaw_diff_;
   target_.position_diff = tracker_->position_diff_;
-  {
-    std::lock_guard<std::mutex> target_lock(armor_target_mutex_);
-    armor_target = target_;
-  }
+
+  armor_target = target_;
 
   last_time_ = time;
 }
@@ -550,6 +585,33 @@ void WustVision::DetectCallback(const std::vector<ArmorObject> &objs,
   // measure_tool_->processDetectedArmors(objs, detect_color_, armors);
 
   infer_running_count_--;
+  if (use_auto_labeler) {
+    static int save_counter = 0; // 静态计数器记录保存次数
+
+    for (const auto &obj : objs) {
+      std::vector<float> csv_data;
+
+      int number_ = formArmorNumber(obj.number);
+      int color_ = formArmorColor(obj.color);
+
+      const auto &pts = obj.is_ok ? obj.pts_binary : obj.pts;
+
+      for (int i = 0; i < 4; ++i) {
+        csv_data.push_back(pts[i].x);
+        csv_data.push_back(pts[i].y);
+      }
+
+      csv_data.push_back(number_);
+      csv_data.push_back(color_);
+
+      save_counter++; // 每次处理一个对象后计数器加一
+      if (save_counter % 10 == 0) { // 每10次执行一次保存
+        cv::Mat img_save;
+        cv::cvtColor(src_img, img_save, cv::COLOR_RGB2BGR);
+        auto_labeler_->save(img_save, csv_data);
+      }
+    }
+  }
   armorsCallback(armors, src_img);
 }
 
@@ -581,10 +643,7 @@ void WustVision::timerCallback() {
     return;
 
   Target target;
-  {
-    std::lock_guard<std::mutex> lock(armor_target_mutex_);
-    target = armor_target;
-  }
+  target = armor_target;
   bool appear;
   if (tracker_->tracker_state == Tracker::LOST) {
     appear = false;
@@ -647,16 +706,12 @@ void WustVision::timerCallback() {
     write_target_log_to_json(target);
     Tracker::State state = tracker_->tracker_state;
     cv::Mat src;
-    {
-      std::lock_guard<std::mutex> lock(img_mutex_);
-      src = imgframe_.img.clone();
-    }
+
+    src = imgframe_.img.clone();
 
     Armors armors;
-    {
-      std::lock_guard<std::mutex> lock(armors_gobal_mutex_);
-      armors = armors_gobal;
-    }
+
+    armors = armors_gobal;
 
     draw_debug_overlaywrite(imgframe_, &armors, &target_info, &target, state,
                             gimbal_cmd);
@@ -725,7 +780,12 @@ void WustVision::processImage(const ImageFrame &frame) {
     return;
   }
 
-  cv::Mat img = convertToMat(frame);
+  cv::Mat img;
+  if (!use_video) {
+    img = convertToMatrgb(frame);
+  } else {
+    img = convertToMatbgr(frame);
+  }
   infer_running_count_++;
   printStats();
   // auto timestamp_nanosec =
